@@ -1,4 +1,5 @@
 import Quill from 'quill';
+import { deletionRange } from './editor-delete.js';
 import { createImageLoader } from './image-loader.js';
 import { installLinkEditor } from './link-editor.js';
 import 'quill/dist/quill.snow.css';
@@ -54,7 +55,7 @@ $('app').innerHTML = `<header><div class="brand-icon">✦</div><div><h1>活动�
 <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
 <section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>发布机器人 Token<input id="token" type="password" autocomplete="off" placeholder="仅在首次配置或更换时填写"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">入口机器人只负责打开后台；发布机器人负责发消息。更换发布身份会暂停旧身份的定时任务。此服务不接管发布机器人的 webhook。</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 Railway 的 ADMIN_TG_IDS（兼容 ADMIN_TG_ID）。所有接口均验证 Telegram 签名。</p></div></section>
 </main><div id="toast" class="toast" role="status" hidden></div>
-<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select><p id="packTitle" class="hint">支持使用其他作者公开的表情包。</p><div id="emojiGrid"></div><button id="moreEmoji" class="quiet" hidden>加载更多</button></dialog>`;
+<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select><p id="packTitle" class="hint">支持使用其他作者公开的表情包。</p><div id="emojiGrid"></div></dialog>`;
 
 const Embed = Quill.import('blots/embed');
 class CustomEmoji extends Embed {
@@ -127,6 +128,7 @@ function hydrateEmojiImages(container) {
   }
 }
 function closePicker() {
+  stopDeleting();
   $('emojiDialog').close();
   document.body.classList.remove('emoji-open', 'emoji-body-open');
   quill.root.removeAttribute('inputmode');
@@ -134,7 +136,9 @@ function closePicker() {
 }
 function openPicker(target) {
   if ($('emojiDialog').open && pickerTarget === target) { closePicker(); return; }
+  stopDeleting();
   pickerTarget = target;
+  $('emojiBackspace').hidden = target !== 'body';
   document.body.classList.add('emoji-open');
   document.body.classList.toggle('emoji-body-open', target === 'body');
   quill.root.setAttribute('inputmode', 'none');
@@ -143,13 +147,43 @@ function openPicker(target) {
   if (target === 'body') {
     // Opening the non-modal dialog may focus its controls; restore the caret.
     const at = Math.min(savedRange?.index ?? quill.getLength()-1, quill.getLength()-1);
-    quill.setSelection(at, 0, 'silent'); savedRange = { index:at, length:0 };
+    const length = Math.min(savedRange?.length || 0, quill.getLength()-1-at);
+    quill.setSelection(at, length, 'silent'); savedRange = { index:at, length };
   }
 }
 $('bodyEmoji').onclick = () => openPicker('body'); $('closeEmoji').onclick = closePicker;
 $('emojiDialog').addEventListener('keydown', event => { if (event.key === 'Escape') closePicker(); });
 // Keep clicking an emoji from stealing the editor selection; scrolling stays native.
 $('emojiGrid').addEventListener('mousedown', event => { if (event.target.closest('.emoji-choice')) event.preventDefault(); });
+let deleteTimer, deletePointer = null;
+function deleteAtCaret() {
+  if (!$('emojiDialog').open || pickerTarget !== 'body') return;
+  const range = quill.getSelection() || savedRange;
+  if (!range) return;
+  const remove = deletionRange(quill.getContents().ops, range);
+  if (!remove.length) return;
+  quill.deleteText(remove.index, remove.length, 'user');
+  quill.setSelection(remove.index, 0, 'silent'); savedRange = { index:remove.index, length:0 };
+}
+function stopDeleting() {
+  clearTimeout(deleteTimer);
+  if (deletePointer !== null) quill.history.cutoff();
+  deletePointer = null;
+}
+const backspace = $('emojiBackspace');
+backspace.addEventListener('pointerdown', event => {
+  if (event.button !== 0) return;
+  event.preventDefault(); stopDeleting(); quill.history.cutoff();
+  deletePointer = event.pointerId; backspace.setPointerCapture(event.pointerId);
+  deleteAtCaret();
+  const repeat = () => { if (deletePointer === null) return; deleteAtCaret(); deleteTimer = setTimeout(repeat, 90); };
+  deleteTimer = setTimeout(repeat, 450);
+});
+for (const name of ['pointerup','pointercancel','lostpointercapture']) backspace.addEventListener(name, stopDeleting);
+backspace.addEventListener('click', event => { if (event.detail === 0) { quill.history.cutoff(); deleteAtCaret(); quill.history.cutoff(); } });
+backspace.addEventListener('contextmenu', event => event.preventDefault());
+window.addEventListener('blur', stopDeleting);
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopDeleting(); });
 const stickers = new Map();
 let visibleStickers = 0;
 function appendEmojiBatch() {
@@ -173,12 +207,23 @@ function appendEmojiBatch() {
       .then(url => displayImage(button, url, sticker.alt)).catch(() => {});
   }
   visibleStickers += batch.length;
-  $('moreEmoji').hidden = visibleStickers >= stickers.size;
+  queueMoreEmoji();
 }
-$('moreEmoji').onclick = appendEmojiBatch;
+let emojiScrollFrame;
+function queueMoreEmoji() {
+  cancelAnimationFrame(emojiScrollFrame);
+  emojiScrollFrame = requestAnimationFrame(() => {
+    const grid = $('emojiGrid');
+    if ($('emojiDialog').open && grid.clientHeight > 0 && visibleStickers < stickers.size
+        && grid.scrollHeight - grid.scrollTop - grid.clientHeight < 80) appendEmojiBatch();
+  });
+}
+$('emojiGrid').addEventListener('scroll', queueMoreEmoji, { passive:true });
+new ResizeObserver(queueMoreEmoji).observe($('emojiGrid'));
 const loadedPacks = new Map();
 function displayPack(pack) {
-  stickers.clear(); visibleStickers = 0; $('emojiGrid').replaceChildren();
+  cancelAnimationFrame(emojiScrollFrame);
+  stickers.clear(); visibleStickers = 0; $('emojiGrid').replaceChildren(); $('emojiGrid').scrollTop = 0;
   for (const sticker of pack.stickers) stickers.set(sticker.id, sticker);
   $('packTitle').textContent = pack.title + ' · ' + stickers.size + ' 个';
   appendEmojiBatch();

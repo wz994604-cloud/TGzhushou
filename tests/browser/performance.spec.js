@@ -55,7 +55,7 @@ test('emoji picker loads 24 at a time and reuses image blobs', async ({ page, re
   await expect(page.locator('.emoji-choice')).toHaveCount(24);
   await expect.poll(() => requests.length).toBe(24);
   await expect(page.locator('.emoji-choice img')).toHaveCount(24);
-  await page.locator('#moreEmoji').click(); await expect(page.locator('.emoji-choice')).toHaveCount(48);
+  await page.locator('#emojiGrid').evaluate(node => { node.scrollTop = node.scrollHeight; }); await expect(page.locator('.emoji-choice')).toHaveCount(48);
   await expect(page.locator('.emoji-choice img')).toHaveCount(48);
   const before = requests.length;
   await page.locator('.emoji-choice').first().click(); await page.locator('#closeEmoji').click();
@@ -152,4 +152,49 @@ test('storage failure is visible and never mislabels a successful server save', 
   await expect(page.locator('#saveStatus')).toContainText('本机暂存失败');
   await page.locator('#save').click();
   await expect(page.locator('#saveStatus')).toHaveText('服务器已保存 · 本机暂存失败');
+});
+
+
+test('emoji keyboard backspace supports selection, graphemes, embeds, undo and hold release', async ({ page, request }) => {
+  await open(page, request);
+  const editor = page.locator('.ql-editor'), key = page.locator('#emojiBackspace');
+  await editor.fill('甲乙'); await editor.press('End');
+  await page.locator('#bodyEmoji').click(); await key.click();
+  await expect(editor).toHaveText('甲'); await expect(page.locator('#emojiDialog')).toBeVisible();
+  await editor.press('Control+z'); await expect(editor).toHaveText('甲乙');
+  await editor.fill('前👨‍👩‍👧‍👦'); await editor.press('End'); await key.click();
+  await expect(editor).toHaveText('前');
+  await editor.fill('第一行\n第二行');
+  await editor.locator('p').nth(1).click(); await editor.press('Home'); await key.click();
+  await expect(editor.locator('p')).toHaveCount(1); await expect(editor).toHaveText('第一行第二行');
+  await editor.press('Home'); await key.click(); await expect(editor).toHaveText('第一行第二行');
+  // The selection survives opening the panel, rather than collapsing to its start.
+  await page.locator('#closeEmoji').click(); await editor.fill('选中文字'); await editor.press('Control+a');
+  await page.locator('#bodyEmoji').click(); await key.click();
+  await expect(editor).toHaveText(''); await editor.press('Control+z'); await expect(editor).toHaveText('选中文字');
+  await editor.press('End'); await page.locator('#pack').fill('test_pack'); await page.locator('#loadPack').click();
+  await page.locator('.emoji-choice').first().click(); await expect(editor.locator('.custom-emoji')).toHaveCount(1);
+  await key.click(); await expect(editor.locator('.custom-emoji')).toHaveCount(0);
+  await expect(editor).toHaveText('选中文字');
+  await editor.fill('ABCDEFGHIJKLMNO'); await editor.press('End');
+  const box = await key.boundingBox(); await page.mouse.move(box.x+box.width/2, box.y+box.height/2); await page.mouse.down();
+  await page.waitForTimeout(760); await page.mouse.up();
+  const remaining = await editor.innerText(); expect(remaining.trim().length).toBeLessThan(14); expect(remaining.trim().length).toBeGreaterThan(0);
+  await page.waitForTimeout(300); await expect(editor).toHaveText(remaining.trim());
+  await editor.press('Control+z'); await expect(editor).toHaveText('ABCDEFGHIJKLMNO');
+  await page.screenshot({path:'test-results/emoji-delete-scroll.png'});
+  await page.locator('#closeEmoji').click(); await page.locator('#addButton').click(); await page.locator('[data-emoji="0"]').click();
+  await expect(key).toBeHidden(); await expect(editor).toHaveText('ABCDEFGHIJKLMNO');
+});
+
+test('emoji list scrolls to the last item without a load-more button', async ({ page, request }) => {
+  await open(page, request); await page.locator('#bodyEmoji').click();
+  await page.locator('#pack').fill('batch_pack'); await page.locator('#loadPack').click();
+  await expect(page.locator('.emoji-choice')).toHaveCount(24);
+  await expect(page.locator('#moreEmoji')).toHaveCount(0);
+  for (const count of [48,60]) {
+    await page.locator('#emojiGrid').evaluate(node => {node.scrollTop=node.scrollHeight;});
+    await expect(page.locator('.emoji-choice')).toHaveCount(count);
+  }
+  await page.locator('.emoji-choice').last().click(); await expect(page.locator('.ql-editor .custom-emoji')).toHaveCount(1);
 });
