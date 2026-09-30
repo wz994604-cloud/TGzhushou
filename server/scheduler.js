@@ -1,0 +1,118 @@
+import { getSetting, decryptToken } from './db.js';
+import { botCall, sendPhoto, safeTelegramError } from './telegram.js';
+import { renderDelta, keyboard } from './format.js';
+import { nextSlot } from './schedule.js';
+
+export function createScheduler(db, config, api = { botCall, sendPhoto }) {
+  let running = false, timer = null;
+  const publisher = () => {
+    const encrypted = getSetting(db, 'publisher_token');
+    return encrypted ? { token: decryptToken(encrypted, config.configKey), id: getSetting(db, 'publisher_id') } : null;
+  };
+
+  const createRun = db.transaction((task, source, slotAt, key) => {
+    const existing = db.prepare('SELECT id FROM runs WHERE run_key=?').get(key);
+    if (existing) return existing.id;
+    const result = db.prepare(`INSERT INTO runs(task_id,run_key,source,slot_at,status,bot_id,delta_json,buttons_json,media_id,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(task.id, key, source, slotAt, 'PENDING', task.bot_id, task.delta_json, task.buttons_json, task.media_id, Date.now());
+    const targetIds = JSON.parse(task.target_ids_json);
+    const add = db.prepare(`INSERT INTO deliveries(run_id,target_id,chat_id,title,status) VALUES(?,?,?,?,'PENDING')`);
+    for (const id of targetIds) {
+      const target = db.prepare('SELECT * FROM targets WHERE id=? AND bot_id=?').get(id, task.bot_id);
+      if (target) add.run(result.lastInsertRowid, target.id, target.chat_id, target.title);
+      else db.prepare("INSERT INTO deliveries(run_id,target_id,chat_id,title,status,error_text,completed_at) VALUES(?,?,?,?,?,?,?)")
+        .run(result.lastInsertRowid, id, '', `已删除目标 #${id}`, 'FAILED', '目标已删除，未发送', Date.now());
+    }
+    return Number(result.lastInsertRowid);
+  });
+
+  function queueNow(taskId, requestKey) {
+    const key = String(requestKey || '');
+    if (!/^[0-9a-f-]{36}$/i.test(key)) throw new Error('立即发布请求标识无效');
+    const task = db.prepare('SELECT * FROM tasks WHERE id=?').get(taskId);
+    if (!task || task.status === 'STOPPED') throw new Error('任务不存在或已停止');
+    const bot = publisher();
+    if (!bot || task.bot_id !== bot.id) throw new Error('任务所属发布机器人已变化');
+    return createRun(task, 'IMMEDIATE', Date.now(), `now:${task.id}:${key}`);
+  }
+
+  function queueDue(now) {
+    const tasks = db.prepare("SELECT * FROM tasks WHERE status='ACTIVE' AND next_at<=? ORDER BY next_at LIMIT 30").all(now);
+    for (const task of tasks) {
+      const schedule = JSON.parse(task.schedule_json);
+      const next = schedule.kind === 'ONCE' ? null : nextSlot(schedule, Math.max(task.next_at + 1, now + 1));
+      db.transaction(() => {
+        const fresh = db.prepare("SELECT * FROM tasks WHERE id=? AND status='ACTIVE' AND next_at=?").get(task.id, task.next_at);
+        if (!fresh) return;
+        if (schedule.kind === 'DAILY' && now - task.next_at > 60_000) {
+          const runId = createRun(fresh, 'SCHEDULED', task.next_at, `slot:${task.id}:${task.next_at}`);
+          db.prepare("UPDATE deliveries SET status='SKIPPED',error_text='服务错过时段，未补发；从下一个时间点继续',completed_at=? WHERE run_id=? AND status='PENDING'").run(now, runId);
+          db.prepare("UPDATE tasks SET next_at=?,updated_at=? WHERE id=?").run(next, now, task.id);
+          return;
+        }
+        createRun(fresh, 'SCHEDULED', task.next_at, `slot:${task.id}:${task.next_at}`);
+        db.prepare('UPDATE tasks SET next_at=?,status=?,updated_at=? WHERE id=?').run(next, next ? 'ACTIVE' : 'COMPLETED', now, task.id);
+      })();
+    }
+  }
+
+  async function sendOne(row, now) {
+    const claimed = db.prepare("UPDATE deliveries SET status='SENDING',started_at=? WHERE id=? AND status='PENDING'").run(now, row.id);
+    if (!claimed.changes) return;
+    let attempted = false;
+    try {
+      const bot = publisher();
+      if (!bot || bot.id !== row.bot_id) throw new Error('发布机器人身份已变更');
+      const target = db.prepare('SELECT * FROM targets WHERE id=? AND bot_id=?').get(row.target_id, bot.id);
+      if (!target || !target.can_publish) throw new Error('目标未登记或无发布权限');
+      const member = await api.botCall(bot.token, 'getChatMember', { chat_id: row.chat_id, user_id: Number(bot.id) });
+      if (!['administrator', 'creator'].includes(member.status) || target.chat_type === 'channel' && member.status !== 'creator' && !member.can_post_messages) throw new Error('目标管理员或发布权限不足');
+      const formatted = renderDelta(JSON.parse(row.delta_json));
+      const buttons = keyboard(JSON.parse(row.buttons_json));
+      const media = row.media_id ? db.prepare('SELECT * FROM media WHERE id=?').get(row.media_id) : null;
+      if (row.media_id && !media) throw new Error('图片不存在');
+      if (media && formatted.text.length > 1024) throw new Error('图片说明文字超过 1024 字符');
+      attempted = true;
+      const sent = media
+        ? await api.sendPhoto(bot.token, row.chat_id, media.file_path, media.mime, formatted.text, formatted.entities, buttons)
+        : await api.botCall(bot.token, 'sendMessage', { chat_id: row.chat_id, text: formatted.text, entities: formatted.entities, ...(buttons ? { reply_markup: buttons } : {}) });
+      const returned = sent.entities || sent.caption_entities || [];
+      const shown = returned.filter(entity => entity.type === 'custom_emoji').length;
+      const notes = [];
+      if (shown < formatted.customCount) notes.push(`正文专属表情返回 ${shown}/${formatted.customCount}，请核对目标实际显示`);
+      const expectedIcons = buttons?.inline_keyboard?.flat().filter(button => button.icon_custom_emoji_id).map(button => button.icon_custom_emoji_id) || [];
+      const returnedIcons = sent.reply_markup?.inline_keyboard?.flat().filter(button => button.icon_custom_emoji_id).map(button => button.icon_custom_emoji_id) || [];
+      if (expectedIcons.some((id, index) => id !== returnedIcons[index])) notes.push('Telegram 返回的按钮专属表情与配置不一致，请核对目标实际显示');
+      db.prepare("UPDATE deliveries SET status='SUCCESS',telegram_message_id=?,error_text=?,completed_at=? WHERE id=?")
+        .run(String(sent.message_id), notes.join('；') || null, Date.now(), row.id);
+    } catch (error) {
+      const status = !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
+      db.prepare('UPDATE deliveries SET status=?,error_text=?,completed_at=? WHERE id=?').run(status, safeTelegramError(error), Date.now(), row.id);
+    }
+  }
+
+  async function tick() {
+    if (running) return;
+    running = true;
+    try {
+      const now = Date.now();
+      db.prepare("UPDATE deliveries SET status='UNKNOWN',error_text='发送过程被中断，请到 Telegram 核实；未自动重发',completed_at=? WHERE status='SENDING' AND started_at<?")
+        .run(now, now - 300_000);
+      queueDue(now);
+      const rows = db.prepare(`SELECT d.*,r.bot_id,r.delta_json,r.buttons_json,r.media_id FROM deliveries d
+        JOIN runs r ON r.id=d.run_id WHERE d.status='PENDING' ORDER BY d.id LIMIT 20`).all();
+      for (const row of rows) await sendOne(row, now);
+      db.prepare(`UPDATE runs SET status='COMPLETED' WHERE status='PENDING' AND NOT EXISTS
+        (SELECT 1 FROM deliveries d WHERE d.run_id=runs.id AND d.status IN ('PENDING','SENDING'))`).run();
+    } finally { running = false; }
+  }
+
+  function start() {
+    if (timer) return;
+    timer = setInterval(() => tick().catch(error => console.error('Activity tick:', safeTelegramError(error))), 5000);
+    timer.unref?.();
+    tick().catch(error => console.error('Activity tick:', safeTelegramError(error)));
+  }
+  function stop() { if (timer) clearInterval(timer); timer = null; }
+  return { start, stop, tick, queueNow, queueDue, publisher };
+}
