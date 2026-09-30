@@ -55,7 +55,7 @@ $('app').innerHTML = `<header><div class="brand-icon">✦</div><div><h1>活动�
 <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
 <section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>发布机器人 Token<input id="token" type="password" autocomplete="off" placeholder="仅在首次配置或更换时填写"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">入口机器人只负责打开后台；发布机器人负责发消息。更换发布身份会暂停旧身份的定时任务。此服务不接管发布机器人的 webhook。</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 Railway 的 ADMIN_TG_IDS（兼容 ADMIN_TG_ID）。所有接口均验证 Telegram 签名。</p></div></section>
 </main><div id="toast" class="toast" role="status" hidden></div>
-<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select><p id="packTitle" class="hint">支持使用其他作者公开的表情包。</p><div id="emojiGrid"></div></dialog>`;
+<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><div id="emojiGrid"></div></dialog>`;
 
 const Embed = Quill.import('blots/embed');
 class CustomEmoji extends Embed {
@@ -226,6 +226,7 @@ function displayPack(pack) {
   stickers.clear(); visibleStickers = 0; $('emojiGrid').replaceChildren(); $('emojiGrid').scrollTop = 0;
   for (const sticker of pack.stickers) stickers.set(sticker.id, sticker);
   $('packTitle').textContent = pack.title + ' · ' + stickers.size + ' 个';
+  $('packSettings').open = false;
   appendEmojiBatch();
 }
 $('packHistory').onchange = () => displayPack(loadedPacks.get($('packHistory').value));

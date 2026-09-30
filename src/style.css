@@ -26,3 +26,5 @@ body.emoji-body-open .editor-footer{flex:none;margin-top:6px}body.emoji-body-ope
 @media(max-height:520px){body.emoji-body-open #composeArea>label{display:none}#emojiDialog h3{font-size:13px}#emojiDialog{padding:6px 10px}#emojiDialog .section-title button{min-height:30px;padding:5px 10px}#emojiDialog input{min-height:32px;padding:6px}body.emoji-body-open #toolbar{padding:4px}}
 
 .emoji-key-actions{display:flex;gap:6px;flex:none}#emojiBackspace{font-size:23px;min-width:48px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+
+#packSettings{flex:none;min-width:0}#packSettings summary{font-size:13px;min-height:32px;line-height:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#emojiDialog #packTitle{margin-left:8px;font-weight:400}#packSettings .pack-controls{display:flex;flex-direction:column;gap:6px;padding:4px 0}#packSettings[open]{max-height:48%;overflow-y:auto}

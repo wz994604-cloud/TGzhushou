@@ -51,7 +51,7 @@ test('debounced draft, closed preview, reload flush and truthful server save sta
 test('emoji picker loads 24 at a time and reuses image blobs', async ({ page, request }) => {
   await open(page, request);
   const requests = []; page.on('request', r => { if (r.url().includes('/sticker-image?')) requests.push(r.url()); });
-  await page.locator('#bodyEmoji').click(); await page.locator('#pack').fill('batch_pack'); await page.locator('#loadPack').click();
+  await page.locator('#bodyEmoji').click(); await expandPack(page); await page.locator('#pack').fill('batch_pack'); await expandPack(page); await page.locator('#loadPack').click();
   await expect(page.locator('.emoji-choice')).toHaveCount(24);
   await expect.poll(() => requests.length).toBe(24);
   await expect(page.locator('.emoji-choice img')).toHaveCount(24);
@@ -60,7 +60,7 @@ test('emoji picker loads 24 at a time and reuses image blobs', async ({ page, re
   const before = requests.length;
   await page.locator('.emoji-choice').first().click(); await page.locator('#closeEmoji').click();
   await expect(page.locator('.ql-editor .custom-emoji img')).toHaveCount(1);
-  await page.locator('#bodyEmoji').click(); await page.locator('#loadPack').click();
+  await page.locator('#bodyEmoji').click(); await expandPack(page); await page.locator('#loadPack').click();
   await expect(page.locator('.emoji-choice img')).toHaveCount(24);
   expect(requests.length).toBe(before);
   await page.locator('#closeEmoji').click();
@@ -84,7 +84,7 @@ test('emoji keyboard keeps long text editable and inserts at different caret pos
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(panelBounds.y);
   await expect(editor).toHaveAttribute('inputmode', 'none');
-  await page.locator('#pack').fill('batch_pack'); await page.locator('#loadPack').click();
+  await expandPack(page); await page.locator('#pack').fill('batch_pack'); await expandPack(page); await page.locator('#loadPack').click();
   const first = editor.locator('p').first(); await first.click(); await editor.press('Home');
   await page.locator('.emoji-choice').first().click(); await page.locator('.emoji-choice').first().click();
   await expect(first.locator('.custom-emoji')).toHaveCount(2);
@@ -95,8 +95,8 @@ test('emoji keyboard keeps long text editable and inserts at different caret pos
   await expect(first.locator('.custom-emoji')).toHaveCount(2);
   await expect(panel).toBeVisible();
   await page.screenshot({path:'test-results/emoji-keyboard-mobile.png'});
-  await page.locator('#pack').fill('test_pack'); await page.locator('#loadPack').click();
-  await page.locator('#packHistory').selectOption('batch_pack');
+  await expandPack(page); await page.locator('#pack').fill('test_pack'); await expandPack(page); await page.locator('#loadPack').click();
+  await expandPack(page); await page.locator('#packHistory').selectOption('batch_pack');
   await expect(page.locator('.emoji-choice')).toHaveCount(24);
   await page.locator('#closeEmoji').click(); await expect(panel).toBeHidden();
   await expect(editor).not.toHaveAttribute('inputmode', 'none');
@@ -108,7 +108,7 @@ test('emoji keyboard keeps long text editable and inserts at different caret pos
   await page.screenshot({path:'test-results/emoji-keyboard-desktop.png'});
   await page.locator('#bodyEmoji').click(); await expect(panel).toBeHidden();
   await page.locator('#addButton').click(); await page.locator('[data-emoji="0"]').click();
-  await page.locator('#pack').fill('test_pack'); await page.locator('#loadPack').click();
+  await expandPack(page); await page.locator('#pack').fill('test_pack'); await expandPack(page); await page.locator('#loadPack').click();
   await page.locator('.emoji-choice').first().click();
   await expect(editor.locator('.custom-emoji')).toHaveCount(3);
   await expect(page.locator('[data-emoji="0"]')).toContainText('更换专属表情');
@@ -172,7 +172,7 @@ test('emoji keyboard backspace supports selection, graphemes, embeds, undo and h
   await page.locator('#closeEmoji').click(); await editor.fill('选中文字'); await editor.press('Control+a');
   await page.locator('#bodyEmoji').click(); await key.click();
   await expect(editor).toHaveText(''); await editor.press('Control+z'); await expect(editor).toHaveText('选中文字');
-  await editor.press('End'); await page.locator('#pack').fill('test_pack'); await page.locator('#loadPack').click();
+  await editor.press('End'); await expandPack(page); await page.locator('#pack').fill('test_pack'); await expandPack(page); await page.locator('#loadPack').click();
   await page.locator('.emoji-choice').first().click(); await expect(editor.locator('.custom-emoji')).toHaveCount(1);
   await key.click(); await expect(editor.locator('.custom-emoji')).toHaveCount(0);
   await expect(editor).toHaveText('选中文字');
@@ -189,7 +189,7 @@ test('emoji keyboard backspace supports selection, graphemes, embeds, undo and h
 
 test('emoji list scrolls to the last item without a load-more button', async ({ page, request }) => {
   await open(page, request); await page.locator('#bodyEmoji').click();
-  await page.locator('#pack').fill('batch_pack'); await page.locator('#loadPack').click();
+  await expandPack(page); await page.locator('#pack').fill('batch_pack'); await expandPack(page); await page.locator('#loadPack').click();
   await expect(page.locator('.emoji-choice')).toHaveCount(24);
   await expect(page.locator('#moreEmoji')).toHaveCount(0);
   for (const count of [48,60]) {
@@ -197,4 +197,22 @@ test('emoji list scrolls to the last item without a load-more button', async ({ 
     await expect(page.locator('.emoji-choice')).toHaveCount(count);
   }
   await page.locator('.emoji-choice').last().click(); await expect(page.locator('.ql-editor .custom-emoji')).toHaveCount(1);
+});
+
+async function expandPack(page) { if (!await page.locator('#packSettings').evaluate(n => n.open)) await page.locator('#packSettings summary').click(); }
+
+test('pack controls collapse by default and after loading or switching', async ({page,request}) => {
+  await open(page,request); await page.locator('#bodyEmoji').click();
+  await expect(page.locator('#pack')).toBeHidden();
+  const collapsedHeight = await page.locator('#emojiGrid').evaluate(n=>n.clientHeight);
+  await expandPack(page); await expect(page.locator('#pack')).toBeVisible();
+  expect(await page.locator('#emojiGrid').evaluate(n=>n.clientHeight)).toBeLessThan(collapsedHeight);
+  await page.locator('#pack').fill('batch_pack'); await page.locator('#loadPack').click();
+  await expect(page.locator('#pack')).toBeHidden(); await expect(page.locator('#packTitle')).toContainText('60');
+  await expandPack(page); await page.locator('#pack').fill('test_pack'); await page.locator('#loadPack').click();
+  await expect(page.locator('#pack')).toBeHidden(); await expandPack(page);
+  await page.locator('#packHistory').selectOption('batch_pack'); await expect(page.locator('#packHistory')).toBeHidden();
+  await expect(page.locator('.emoji-choice')).toHaveCount(24);
+  await page.locator('.emoji-choice').first().click(); await expect(page.locator('.ql-editor .custom-emoji')).toHaveCount(1);
+  await page.screenshot({path:'test-results/emoji-pack-collapsed.png'});
 });
