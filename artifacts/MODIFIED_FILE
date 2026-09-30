@@ -1,6 +1,2 @@
-MODIFIED_FILE=server/index.js
-DIFF_FILE=artifacts/DIFF_FILE
-VERIFICATION_FILE=artifacts/VERIFICATION.txt
-ROLLBACK_FILE=artifacts/ROLLBACK.sh
-changed_branch=independent Railway Telegram activity Mini App
-changed_fields=Mini App static shell route, Telegram initData validation, SQLite scheduler idempotency, custom-emoji/button rendering, target delivery logs
+Changed branch: custom emoji visual preview
+Changed fields: editor blot thumbId; body preview image hydration; button preview image hydration; button iconThumbId persistence

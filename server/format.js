@@ -18,7 +18,7 @@ export function normalizeButtons(value) {
     if (!Number.isInteger(row) || row < 0 || row > 11) throw new Error('按钮排列无效');
     const iconId = raw.iconId ? String(raw.iconId) : '';
     if (iconId && !emojiId.test(iconId)) throw new Error('按钮专属表情 ID 无效');
-    return { text, url: linkUrl(raw.url), style, row, iconId, iconAlt: String(raw.iconAlt || '').slice(0, 8) };
+    return { text, url: linkUrl(raw.url), style, row, iconId, iconAlt: String(raw.iconAlt || '').slice(0, 8), iconThumbId: String(raw.iconThumbId || '').slice(0, 300) };
   });
 }
 

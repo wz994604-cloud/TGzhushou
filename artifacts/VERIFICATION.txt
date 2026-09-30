@@ -25,3 +25,9 @@ Runtime probe command: GET http://127.0.0.1:8098/healthz
 Runtime probe result: {"ok":true,"database":true}
 Runtime probe exit status: 0
 Browser test: bypassed on user instruction after local browser harness returned Not Found/locked-page fixture errors; it did not connect to Telegram or Railway.
+
+PREVIEW_FIX command: npm run check; npm test; npm run build
+PREVIEW_FIX input: custom emoji selected from sticker pack with thumbnailId, body and button preview.
+PREVIEW_FIX literal result: node checks passed; 12 tests passed; Vite build passed; preview now hydrates Telegram sticker thumbnails while retaining custom emoji IDs.
+PREVIEW_FIX exit status: 0
+
