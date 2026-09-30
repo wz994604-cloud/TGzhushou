@@ -9,4 +9,18 @@
 
 #linkDialog #linkText{color:var(--accent);}
 
-@media(max-width:480px){#emojiDialog{position:fixed;left:0;right:0;bottom:0;margin:0;width:100%;max-width:none;height:min(60dvh,560px);max-height:min(60dvh,560px);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));overflow:auto}#emojiDialog .section-title{position:sticky;top:-16px;padding-top:4px;background:var(--bg);z-index:1}}
+
+/* The keyboard reserves a separate editing area instead of covering the caret. */
+:root{--emoji-height:min(44dvh,440px)}
+body.emoji-open{--emoji-height:min(calc(var(--visible-height,100dvh) * .44),440px)}
+#emojiDialog{position:fixed;z-index:20;inset:auto 0 var(--keyboard-inset,0px);margin:0 auto;width:100%;max-width:820px;height:var(--emoji-height);max-height:none;border-radius:16px 16px 0 0;padding:12px 12px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -4px 20px #0002;overflow:hidden}
+#emojiDialog[open]{display:flex;flex-direction:column;gap:6px}
+#emojiDialog .section-title{margin:0;flex:none}#emojiDialog h3{font-size:15px}#emojiDialog .inline{flex:none}#emojiDialog #packTitle{margin:0;flex:none;font-size:11px}#emojiDialog #packHistory{padding:5px;min-height:32px;flex:none}
+#emojiGrid{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;margin-top:0;align-content:start;touch-action:pan-y;padding:4px}
+#emojiDialog #moreEmoji{margin:0;min-height:34px;padding:5px;flex:none}
+body.emoji-open .actions{visibility:hidden}
+body.emoji-open main{padding-bottom:calc(var(--emoji-height) + 120px)}
+body.emoji-body-open #composeArea{position:fixed;z-index:19;top:calc(var(--visible-top,0px) + 6px);left:0;right:0;margin:auto;max-width:820px;height:calc(var(--visible-height,100dvh) - var(--emoji-height) - 12px);padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column}
+body.emoji-body-open #composeArea>label{margin:0 0 6px}body.emoji-body-open #toolbar{flex:none}body.emoji-body-open #message{flex:1;min-height:0}body.emoji-body-open .ql-editor{min-height:0;max-height:none;height:100%;overscroll-behavior:contain}
+body.emoji-body-open .editor-footer{flex:none;margin-top:6px}body.emoji-body-open #bodyEmoji{background:var(--accent);color:var(--bg)}
+@media(max-height:520px){body.emoji-body-open #composeArea>label{display:none}#emojiDialog h3{font-size:13px}#emojiDialog{padding:6px 10px}#emojiDialog .section-title button{min-height:30px;padding:5px 10px}#emojiDialog input{min-height:32px;padding:6px}body.emoji-body-open #toolbar{padding:4px}}

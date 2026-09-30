@@ -44,7 +44,7 @@ $('app').innerHTML = `<header><div class="brand-icon">✦</div><div><h1>活动�
 <nav aria-label="功能导航"><button data-tab="editor" class="active">编写</button><button data-tab="tasks">任务</button><button data-tab="logs">记录</button><button data-tab="settings">设置</button></nav>
 <section id="editor" class="page">
 <div class="section-title"><div><h2 id="editorTitle">新建活动</h2><p id="saveStatus" role="status">内容尚未保存到服务器</p></div><button id="reset" class="quiet">新建</button></div>
-<div class="card"><label>活动名称<input id="name" maxlength="100" placeholder="例如：每日活动介绍"></label><label>消息内容</label><div id="toolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="message"></div><div class="editor-footer"><button id="bodyEmoji" class="quiet">✦ 专属表情</button><button id="editLink" class="quiet">添加链接</button><span id="textCount" class="muted">0 / 4096</span></div><details class="editor-help"><summary>编辑说明</summary><p class="hint">点击「添加链接」填写显示文字和地址；点击已有链接可修改或移除链接。跨应用粘贴可能丢失专属表情身份，请从表情包选择器添加。</p></details>
+<div class="card"><label>活动名称<input id="name" maxlength="100" placeholder="例如：每日活动介绍"></label><div id="composeArea"><label>消息内容</label><div id="toolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="message"></div><div class="editor-footer"><button id="bodyEmoji" class="quiet">✦ 专属表情</button><button id="editLink" class="quiet">添加链接</button><span id="textCount" class="muted">0 / 4096</span></div></div><details class="editor-help"><summary>编辑说明</summary><p class="hint">点击「添加链接」填写显示文字和地址；点击已有链接可修改或移除链接。跨应用粘贴可能丢失专属表情身份，请从表情包选择器添加。</p></details>
 <label class="file-label">附带图片 <span class="muted">JPEG / PNG / WebP，最多 5 MB</span><input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="photoBox" hidden><img id="photoPreview" alt="活动图片"><button id="removePhoto" class="quiet">移除图片</button></div></div>
 <div class="card"><div class="section-title"><h3>跳转按钮</h3><button id="addButton" class="quiet">＋ 添加按钮</button></div><div id="buttons"></div><p class="hint">同一行号的按钮并排显示。专属表情和颜色以 Telegram 客户端实际支持为准。</p></div>
 <div class="card"><h3>发布目标</h3><div id="targetChecks" class="check-list"></div><h3>发布方式</h3><select id="kind"><option value="MANUAL">手动立即发布</option><option value="ONCE">指定时间发布</option><option value="DAILY">每天按时段重复发布</option></select><div id="onceFields" hidden><label>指定时间（北京时间）<input id="at" type="datetime-local"></label></div><div id="dailyFields" hidden><div class="grid"><label>开始时间<input id="start" type="time" value="01:00"></label><label>结束时间<input id="end" type="time" value="05:00"></label></div><div class="grid"><label>发送间隔<input id="interval" type="number" min="1" value="30"></label><label>单位<select id="unit"><option value="1">分钟</option><option value="60">小时</option></select></label></div><p class="hint">支持跨午夜；起点发送，终点恰好落在间隔上时发送。暂停恢复后从下一个时间点继续，不补发过去时段。</p></div></div>
@@ -54,7 +54,7 @@ $('app').innerHTML = `<header><div class="brand-icon">✦</div><div><h1>活动�
 <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
 <section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>发布机器人 Token<input id="token" type="password" autocomplete="off" placeholder="仅在首次配置或更换时填写"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">入口机器人只负责打开后台；发布机器人负责发消息。更换发布身份会暂停旧身份的定时任务。此服务不接管发布机器人的 webhook。</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 Railway 的 ADMIN_TG_IDS（兼容 ADMIN_TG_ID）。所有接口均验证 Telegram 签名。</p></div></section>
 </main><div id="toast" class="toast" role="status" hidden></div>
-<dialog id="emojiDialog"><div class="section-title"><h3>选择 Telegram 专属表情</h3><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button></div><p id="packTitle" class="hint">支持使用其他作者公开的表情包。</p><div id="emojiGrid"></div><button id="moreEmoji" class="quiet" hidden>加载更多</button></dialog>`;
+<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select><p id="packTitle" class="hint">支持使用其他作者公开的表情包。</p><div id="emojiGrid"></div><button id="moreEmoji" class="quiet" hidden>加载更多</button></dialog>`;
 
 const Embed = Quill.import('blots/embed');
 class CustomEmoji extends Embed {
@@ -71,7 +71,7 @@ quill.root.addEventListener('paste', event => {
   const html = event.clipboardData?.getData('text/html') || '';
   if (/custom_emoji|tg-emoji|data-document-id/.test(html)) toast('粘贴内容中的专属表情可能需要从选择器重新添加。');
 });
-function changeTab(id) { document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); document.querySelectorAll('nav button').forEach(button => button.classList.toggle('active', button.dataset.tab === id)); if (id === 'logs') action(loadRuns); }
+function changeTab(id) { closePicker(); document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); document.querySelectorAll('nav button').forEach(button => button.classList.toggle('active', button.dataset.tab === id)); if (id === 'logs') action(loadRuns); }
 document.querySelector('nav').addEventListener('click', event => { if (event.target.dataset.tab) changeTab(event.target.dataset.tab); });
 function scheduleFields() { const kind = $('kind').value; $('onceFields').hidden = kind !== 'ONCE'; $('dailyFields').hidden = kind !== 'DAILY'; $('activate').hidden = kind === 'MANUAL'; }
 function collect() { return { name:$('name').value, delta:quill.getContents(), buttons, mediaId, targetIds:[...document.querySelectorAll('[name=target]:checked')].map(x => Number(x.value)), schedule: $('kind').value === 'DAILY' ? { kind:'DAILY', start:$('start').value, end:$('end').value, interval:Number($('interval').value)*Number($('unit').value) } : $('kind').value === 'ONCE' ? { kind:'ONCE', at:Date.parse(`${$('at').value}:00+08:00`) } : { kind:'MANUAL' } }; }
@@ -126,8 +126,30 @@ function hydrateEmojiImages(container) {
     }).catch(() => { delete node.dataset.loaded; });
   }
 }
-function openPicker(target) { pickerTarget=target; $('emojiDialog').showModal(); }
-$('bodyEmoji').onclick = () => openPicker('body'); $('closeEmoji').onclick = () => $('emojiDialog').close();
+function closePicker() {
+  $('emojiDialog').close();
+  document.body.classList.remove('emoji-open', 'emoji-body-open');
+  quill.root.removeAttribute('inputmode');
+  $('bodyEmoji').setAttribute('aria-expanded', 'false');
+}
+function openPicker(target) {
+  if ($('emojiDialog').open && pickerTarget === target) { closePicker(); return; }
+  pickerTarget = target;
+  document.body.classList.add('emoji-open');
+  document.body.classList.toggle('emoji-body-open', target === 'body');
+  quill.root.setAttribute('inputmode', 'none');
+  if (!$('emojiDialog').open) $('emojiDialog').show();
+  $('bodyEmoji').setAttribute('aria-expanded', String(target === 'body'));
+  if (target === 'body') {
+    // Opening the non-modal dialog may focus its controls; restore the caret.
+    const at = Math.min(savedRange?.index ?? quill.getLength()-1, quill.getLength()-1);
+    quill.setSelection(at, 0, 'silent'); savedRange = { index:at, length:0 };
+  }
+}
+$('bodyEmoji').onclick = () => openPicker('body'); $('closeEmoji').onclick = closePicker;
+$('emojiDialog').addEventListener('keydown', event => { if (event.key === 'Escape') closePicker(); });
+// Keep clicking an emoji from stealing the editor selection; scrolling stays native.
+$('emojiGrid').addEventListener('mousedown', event => { if (event.target.closest('.emoji-choice')) event.preventDefault(); });
 const stickers = new Map();
 let visibleStickers = 0;
 function appendEmojiBatch() {
@@ -140,7 +162,7 @@ function appendEmojiBatch() {
       if (pickerTarget === 'body') {
         const at = Math.min(savedRange?.index ?? quill.getLength()-1, quill.getLength()-1);
         quill.insertEmbed(at, 'customEmoji', { id:sticker.id, alt:sticker.alt, thumbId:sticker.thumbnailId || '' }, 'user');
-        quill.setSelection(at+1, 0); hydrateEmojiImages(quill.root);
+        quill.setSelection(at+1, 0); savedRange = { index:at+1, length:0 }; hydrateEmojiImages(quill.root);
       } else if (buttons[pickerTarget]) {
         Object.assign(buttons[pickerTarget], { iconId:sticker.id, iconAlt:sticker.alt, iconThumbId:sticker.thumbnailId || '' });
         showButtons(); remember();
@@ -154,13 +176,22 @@ function appendEmojiBatch() {
   $('moreEmoji').hidden = visibleStickers >= stickers.size;
 }
 $('moreEmoji').onclick = appendEmojiBatch;
-$('loadPack').onclick = event => action(async () => {
-  const pack = await api('/sticker-packs', 'POST', { pack:$('pack').value });
-  // A new pack replaces the previous grid; re-opening the picker retains this pack.
+const loadedPacks = new Map();
+function displayPack(pack) {
   stickers.clear(); visibleStickers = 0; $('emojiGrid').replaceChildren();
   for (const sticker of pack.stickers) stickers.set(sticker.id, sticker);
-  $('packTitle').textContent = pack.title + ' · ' + stickers.size + ' 个（每批显示 24 个）';
+  $('packTitle').textContent = pack.title + ' · ' + stickers.size + ' 个';
   appendEmojiBatch();
+}
+$('packHistory').onchange = () => displayPack(loadedPacks.get($('packHistory').value));
+$('loadPack').onclick = event => action(async () => {
+  const key = $('pack').value.trim();
+  const pack = loadedPacks.get(key) || await api('/sticker-packs', 'POST', { pack:key });
+  loadedPacks.delete(key); loadedPacks.set(key, pack);
+  if (loadedPacks.size > 8) loadedPacks.delete(loadedPacks.keys().next().value);
+  $('packHistory').replaceChildren(...[...loadedPacks].map(([value, item]) => new Option(item.title, value)));
+  $('packHistory').value = key; $('packHistory').hidden = loadedPacks.size < 2;
+  displayPack(pack); $('pack').blur();
 }, event.currentTarget);
 $('photo').onchange = event => action(async () => { const file=event.target.files[0]; if(!file)return; const form=new FormData(); form.set('image',file); const media=await api('/media','POST',form); mediaId=media.id; replacePhoto(await authenticatedImage(`/media/${mediaId}?preview=1`).catch(() => { toast('图片已上传，缩略图暂不可用', true); return ''; })); showPhoto(); remember(); },event.currentTarget);
 function showPhoto() { $('photoBox').hidden=!mediaId; $('photoPreview').src=imageUrl; $('textCount').textContent=`${quill.getText().trimEnd().length} / ${mediaId?1024:4096}`; preview(); }
@@ -176,7 +207,7 @@ function showTasks() {
     return `<article class="card"><div class="section-title"><h3>${esc(t.name)}</h3><span class="status ${t.status}">${labels[t.status]}</span></div><p class="muted">下次：${fmt(t.next_at)}</p><div class="wrap-actions"><button class="quiet" data-edit="${t.id}">编辑</button>${controls}<button class="quiet danger-text" data-delete-task="${t.id}">删除</button></div></article>`;
   }).join('') || '<div class="card center muted">还没有发布任务</div>';
 }
-async function fill(item) { clearTimeout(draftTimer); draftDirty=false; serverSnapshot=null; ready=false; taskId=item.taskId || null; $('name').value=item.name||''; quill.setContents(item.delta || {ops:[{insert:'\n'}]}); hydrateEmojiImages(quill.root); buttons=item.buttons||[];mediaId=item.mediaId||null; replacePhoto();if(mediaId)replacePhoto(await authenticatedImage(`/media/${mediaId}?preview=1`).catch(()=> '')); const s=item.schedule||{kind:'MANUAL'}; $('kind').value=s.kind;$('start').value=s.start||'01:00';$('end').value=s.end||'05:00';$('interval').value=s.interval||30;$('unit').value='1';$('at').value=s.at?new Date(s.at+8*3600000).toISOString().slice(0,16):'';populateTargets(item.targetIds||[]);$('editorTitle').textContent=taskId?`编辑活动 #${taskId}`:'新建活动';showButtons();showPhoto();scheduleFields();ready=true; $('saveStatus').textContent=item.taskId || item.name ? '已恢复本机草稿 · 请保存到服务器' : '内容尚未保存到服务器'; }
+async function fill(item) { closePicker(); clearTimeout(draftTimer); draftDirty=false; serverSnapshot=null; ready=false; taskId=item.taskId || null; $('name').value=item.name||''; quill.setContents(item.delta || {ops:[{insert:'\n'}]}); hydrateEmojiImages(quill.root); buttons=item.buttons||[];mediaId=item.mediaId||null; replacePhoto();if(mediaId)replacePhoto(await authenticatedImage(`/media/${mediaId}?preview=1`).catch(()=> '')); const s=item.schedule||{kind:'MANUAL'}; $('kind').value=s.kind;$('start').value=s.start||'01:00';$('end').value=s.end||'05:00';$('interval').value=s.interval||30;$('unit').value='1';$('at').value=s.at?new Date(s.at+8*3600000).toISOString().slice(0,16):'';populateTargets(item.targetIds||[]);$('editorTitle').textContent=taskId?`编辑活动 #${taskId}`:'新建活动';showButtons();showPhoto();scheduleFields();ready=true; $('saveStatus').textContent=item.taskId || item.name ? '已恢复本机草稿 · 请保存到服务器' : '内容尚未保存到服务器'; }
 let savePromise;
 function save() {
   if (savePromise) return savePromise;
@@ -240,6 +271,7 @@ function updateViewport() {
     const viewport = window.visualViewport;
     const inset = viewport && viewport.scale === 1 ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
     document.documentElement.style.setProperty('--keyboard-inset', inset + 'px');
+    document.documentElement.style.setProperty('--visible-top', (viewport?.offsetTop || 0) + 'px');
     document.documentElement.style.setProperty('--visible-height', (viewport?.height || window.innerHeight) + 'px');
   });
 }

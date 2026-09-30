@@ -72,6 +72,49 @@ test('emoji picker loads 24 at a time and reuses image blobs', async ({ page, re
   await page.locator('[data-clear="0"]').click(); await expect(page.locator('.preview-button img')).toHaveCount(0);
 });
 
+test('emoji keyboard keeps long text editable and inserts at different caret positions', async ({ page, request }) => {
+  await open(page, request);
+  const editor = page.locator('.ql-editor');
+  await editor.fill(Array.from({length:30}, (_,i) => '第' + (i+1) + '行活动文案').join('\n'));
+  await page.locator('#bodyEmoji').click();
+  const panel = page.locator('#emojiDialog');
+  await expect(panel).toBeVisible();
+  expect(await panel.evaluate(node => node.matches(':modal'))).toBe(false);
+  const bounds = await editor.boundingBox(), panelBounds = await panel.boundingBox();
+  expect(bounds.y).toBeGreaterThanOrEqual(0);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(panelBounds.y);
+  await expect(editor).toHaveAttribute('inputmode', 'none');
+  await page.locator('#pack').fill('batch_pack'); await page.locator('#loadPack').click();
+  const first = editor.locator('p').first(); await first.click(); await editor.press('Home');
+  await page.locator('.emoji-choice').first().click(); await page.locator('.emoji-choice').first().click();
+  await expect(first.locator('.custom-emoji')).toHaveCount(2);
+  expect(await first.evaluate(node => node.children[0].classList.contains('custom-emoji'))).toBe(true);
+  const line20 = editor.locator('p').nth(19); await line20.scrollIntoViewIfNeeded(); await line20.click(); await editor.press('End');
+  await page.locator('.emoji-choice').nth(1).click();
+  await expect(line20.locator('.custom-emoji')).toHaveCount(1);
+  await expect(first.locator('.custom-emoji')).toHaveCount(2);
+  await expect(panel).toBeVisible();
+  await page.screenshot({path:'test-results/emoji-keyboard-mobile.png'});
+  await page.locator('#pack').fill('test_pack'); await page.locator('#loadPack').click();
+  await page.locator('#packHistory').selectOption('batch_pack');
+  await expect(page.locator('.emoji-choice')).toHaveCount(24);
+  await page.locator('#closeEmoji').click(); await expect(panel).toBeHidden();
+  await expect(editor).not.toHaveAttribute('inputmode', 'none');
+  await page.reload(); await expect(editor.locator('.custom-emoji')).toHaveCount(3);
+  // Same keyboard behavior in the wider Telegram desktop window shown by the user.
+  await page.setViewportSize({width:530,height:760}); await page.locator('#bodyEmoji').click();
+  const wide = await editor.boundingBox(), widePanel = await panel.boundingBox();
+  expect(wide.y + wide.height).toBeLessThanOrEqual(widePanel.y);
+  await page.screenshot({path:'test-results/emoji-keyboard-desktop.png'});
+  await page.locator('#bodyEmoji').click(); await expect(panel).toBeHidden();
+  await page.locator('#addButton').click(); await page.locator('[data-emoji="0"]').click();
+  await page.locator('#pack').fill('test_pack'); await page.locator('#loadPack').click();
+  await page.locator('.emoji-choice').first().click();
+  await expect(editor.locator('.custom-emoji')).toHaveCount(3);
+  await expect(page.locator('[data-emoji="0"]')).toContainText('更换专属表情');
+  await page.locator('#closeEmoji').click();
+});
+
 test('thumbnail leaves original intact; private image auth and hashed asset caching', async ({ page, request }) => {
   const headers = await open(page, request);
   const original = await sharp({ create:{ width:1800, height:1200, channels:3, background:'#456abc' } }).png().toBuffer();
