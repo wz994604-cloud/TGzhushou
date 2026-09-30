@@ -1,0 +1,27 @@
+TGzhushou verification record
+Changed branch: independent Railway Telegram activity Mini App
+Changed fields: Mini App static shell route; Telegram initData validation; SQLite scheduler idempotency; custom-emoji/button rendering; target delivery logs.
+MODIFIED_FILE: artifacts/MODIFIED_FILE
+DIFF_FILE: artifacts/DIFF_FILE
+VERIFICATION.txt: artifacts/VERIFICATION.txt
+ROLLBACK.sh: artifacts/ROLLBACK.sh
+
+BASELINE command: node --test --test-reporter=spec tests/auth.test.js
+BASELINE input: server/auth.js before the Bot-token HMAC fix, signed initData with a signature field.
+BASELINE literal result: valid Mini App HMAC includes signature field and accepts bound account ... Error: 身份签名无效
+BASELINE exit status: 1
+
+MODIFIED command: npm test; npm run check; npm run build
+MODIFIED input: repository at commit 2194ed3 plus the static route fix (working tree).
+MODIFIED literal result: 12 tests passed; node syntax checks passed; Vite build passed (dist/index.html and assets emitted).
+MODIFIED exit status: 0
+
+ROLLBACK command: powershell -ExecutionPolicy Bypass -File artifacts/ROLLBACK.sh artifacts/rollback-copy
+ROLLBACK input: a copy of server/auth.js and artifacts/MODIFIED_FILE.
+ROLLBACK literal result: copy restored from artifacts/ROLLBACK.sh baseline snapshot; original repository remains changed.
+ROLLBACK exit status: 0
+
+Runtime probe command: GET http://127.0.0.1:8098/healthz
+Runtime probe result: {"ok":true,"database":true}
+Runtime probe exit status: 0
+Browser test: bypassed on user instruction after local browser harness returned Not Found/locked-page fixture errors; it did not connect to Telegram or Railway.
