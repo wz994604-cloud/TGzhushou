@@ -35,7 +35,7 @@ app.post('/tg/entry', async (req, res) => {
   if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return res.sendStatus(403);
   res.sendStatus(200);
   const chat = req.body?.message?.chat;
-  if (chat?.type === 'private' && String(req.body.message.from?.id) === process.env.ADMIN_TG_ID && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+  if (chat?.type === 'private' && adminIds.includes(String(req.body.message.from?.id)) && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
     const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
     if (base) botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } })
       .catch(error => console.error('Entry bot:', safeTelegramError(error)));
