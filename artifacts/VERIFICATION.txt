@@ -31,3 +31,5 @@ PREVIEW_FIX input: custom emoji selected from sticker pack with thumbnailId, bod
 PREVIEW_FIX literal result: node checks passed; 12 tests passed; Vite build passed; preview now hydrates Telegram sticker thumbnails while retaining custom emoji IDs.
 PREVIEW_FIX exit status: 0
 
+MULTI_ADMIN_FIX command: npm run check; npm test; npm run build
+MULTI_ADMIN_FIX result: ADMIN_TG_IDS comma-separated accounts accepted; 12 tests passed; build passed; exit status 0

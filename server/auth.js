@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 
 export function verifyInitData(raw, botToken, adminId, now = Date.now()) {
-  if (!raw || raw.length > 8192 || !botToken || !/^\d+$/.test(String(adminId || ''))) throw new Error('未授权');
+  const allowedIds = (Array.isArray(adminId) ? adminId : String(adminId || '').split(','))
+    .map(value => String(value).trim()).filter(Boolean);
+  if (!raw || raw.length > 8192 || !botToken || !allowedIds.length || allowedIds.some(value => !/^\d+$/.test(value))) throw new Error('未授权');
   const params = new URLSearchParams(raw);
   if ([...params.keys()].some((key, index, keys) => keys.indexOf(key) !== index)) throw new Error('身份数据无效');
   const hash = params.get('hash');
@@ -16,6 +18,6 @@ export function verifyInitData(raw, botToken, adminId, now = Date.now()) {
   if (!crypto.timingSafeEqual(expected, Buffer.from(hash, 'hex'))) throw new Error('身份签名无效');
   let user;
   try { user = JSON.parse(params.get('user') || '{}'); } catch { throw new Error('身份数据无效'); }
-  if (String(user.id) !== String(adminId)) throw new Error('当前 Telegram 账号没有管理权限');
+  if (!allowedIds.includes(String(user.id))) throw new Error('当前 Telegram 账号没有管理权限');
   return { id: String(user.id), name: [user.first_name, user.last_name].filter(Boolean).join(' ') };
 }

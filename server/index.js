@@ -11,9 +11,10 @@ import { renderDelta, normalizeButtons } from './format.js';
 import { normalizeSchedule, nextSlot } from './schedule.js';
 import { createScheduler } from './scheduler.js';
 
-const required = ['ENTRY_BOT_TOKEN', 'ADMIN_TG_ID', 'CONFIG_KEY'];
+const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
 for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
-if (!/^\d+$/.test(process.env.ADMIN_TG_ID)) throw new Error('ADMIN_TG_ID 必须是 Telegram 数字用户 ID');
+const adminIds = String(process.env.ADMIN_TG_IDS || process.env.ADMIN_TG_ID || '').split(',').map(value => value.trim()).filter(Boolean);
+if (!adminIds.length || adminIds.some(value => !/^\d+$/.test(value))) throw new Error('ADMIN_TG_IDS 必须是逗号分隔的 Telegram 数字用户 ID');
 if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
 if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
 const dataDir = path.resolve(process.env.DATA_DIR || './data');
@@ -43,7 +44,7 @@ app.post('/tg/entry', async (req, res) => {
 });
 
 app.use('/api', (req, res, next) => {
-  try { req.admin = verifyInitData(String(req.get('x-telegram-init-data') || ''), process.env.ENTRY_BOT_TOKEN, process.env.ADMIN_TG_ID); next(); }
+  try { req.admin = verifyInitData(String(req.get('x-telegram-init-data') || ''), process.env.ENTRY_BOT_TOKEN, adminIds); next(); }
   catch (error) { res.status(401).json({ error: error.message }); }
 });
 

@@ -5,6 +5,7 @@ import { signedData, entryToken } from './helpers.js';
 
 test('valid Mini App HMAC includes signature field and accepts bound account', () => {
   assert.equal(verifyInitData(signedData(), entryToken, '123456').id, '123456');
+  assert.equal(verifyInitData(signedData(999999), entryToken, '123456,999999').id, '999999');
 });
 test('rejects tampering, a different account, expired auth and duplicate fields', () => {
   const raw = signedData();
