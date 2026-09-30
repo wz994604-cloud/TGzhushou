@@ -40,6 +40,9 @@ test('native button colors and custom emoji field; unsafe URLs rejected', () => 
   assert.deepEqual(keyboard(b).inline_keyboard[0][0],{text:'进入',url:'https://t.me/example',style:'success',icon_custom_emoji_id:'5432101234567890123'});
   assert.throws(()=>normalizeButtons([{text:'进入',url:'javascript:alert(1)'}]));
   assert.throws(()=>normalizeButtons([{text:'进入',url:'https://example.com',style:'pink'}]));
+  const emojiOnly=normalizeButtons([{text:'',url:'https://t.me/example',iconId:'5432101234567890123',iconAlt:'🔥'}]);
+  assert.equal(keyboard(emojiOnly).inline_keyboard[0][0].text, '\u2800');
+  assert.throws(()=>normalizeButtons([{text:'',url:'https://t.me/example'}]));
 });
 test('encrypted publisher credential and wrong-key rejection', () => {
   const value=encryptToken(publisherToken,configKey);assert.notEqual(value,publisherToken);assert.equal(decryptToken(value,configKey),publisherToken);

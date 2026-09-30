@@ -11,13 +11,13 @@ export function normalizeButtons(value) {
   if (!Array.isArray(value) || value.length > 12) throw new Error('最多设置 12 个按钮');
   return value.map((raw, index) => {
     const text = String(raw.text || '').trim();
-    if (!text || text.length > 64) throw new Error(`按钮 ${index + 1} 文字长度应为 1–64`);
     const style = raw.style || 'default';
     if (!styles.has(style)) throw new Error('按钮样式无效');
     const row = Number(raw.row ?? index);
     if (!Number.isInteger(row) || row < 0 || row > 11) throw new Error('按钮排列无效');
     const iconId = raw.iconId ? String(raw.iconId) : '';
     if (iconId && !emojiId.test(iconId)) throw new Error('按钮专属表情 ID 无效');
+    if ((!text && !iconId) || text.length > 64) throw new Error(`按钮 ${index + 1} 需要文字，或选择一个专属表情`);
     return { text, url: linkUrl(raw.url), style, row, iconId, iconAlt: String(raw.iconAlt || '').slice(0, 8), iconThumbId: String(raw.iconThumbId || '').slice(0, 300) };
   });
 }
@@ -26,7 +26,9 @@ export function keyboard(buttons) {
   if (!buttons.length) return null;
   const rows = [];
   for (const button of buttons) {
-    const item = { text: button.text, url: button.url };
+    // Telegram requires a non-empty text field. Braille blank keeps the
+    // visual label empty while icon_custom_emoji_id supplies the icon.
+    const item = { text: button.text || '\u2800', url: button.url };
     if (button.style !== 'default') item.style = button.style;
     if (button.iconId) item.icon_custom_emoji_id = button.iconId;
     (rows[button.row] ||= []).push(item);
