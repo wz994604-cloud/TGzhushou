@@ -6,3 +6,5 @@
 
 .editor-help{margin-top:12px;color:var(--muted);font-size:12px}.editor-help .hint{margin-top:6px}#moreEmoji{margin-top:14px;width:100%}dialog{max-height:calc(var(--visible-height, 100dvh) - 32px);overflow:auto}#saveStatus{min-height:22px}
 @media(max-width:480px){main{padding-bottom:calc(120px + env(safe-area-inset-bottom))}input,select,.ql-editor{font-size:16px}.actions{position:fixed;left:12px;right:12px;bottom:calc(var(--keyboard-inset, 0px) + env(safe-area-inset-bottom) + 8px);z-index:6;gap:6px;border:1px solid var(--line)}.actions button{min-width:0;padding:10px 7px}.toast{bottom:calc(var(--keyboard-inset, 0px) + env(safe-area-inset-bottom) + 80px)}html{scroll-padding-bottom:100px}.ql-editor{max-height: min(420px, 50dvh)}}
+
+#linkDialog #linkText{color:var(--accent);}
