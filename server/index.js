@@ -172,12 +172,12 @@ app.post('/api/tasks', route(async (req, res) => {
 app.put('/api/tasks/:id', route(async (req, res) => {
   const bot = currentBot(), id = Number(req.params.id);
   const old = db.prepare('SELECT * FROM tasks WHERE id=?').get(id);
-  if (!old || old.bot_id !== bot?.id || old.status === 'STOPPED') throw new Error('任务不存在、已停止或属于旧机器人');
+  if (!old || old.bot_id !== bot?.id) throw new Error('任务不存在或属于旧机器人');
   const item = taskPayload(req.body, bot), now = Date.now();
   const schedule = JSON.parse(item.schedule);
   const active = old.status === 'ACTIVE' && schedule.kind !== 'MANUAL';
   db.prepare(`UPDATE tasks SET name=?,delta_json=?,buttons_json=?,target_ids_json=?,schedule_json=?,media_id=?,status=?,next_at=?,updated_at=? WHERE id=?`)
-    .run(item.name,item.delta,item.buttons,item.ids,item.schedule,item.mediaId,active?'ACTIVE':old.status==='PAUSED'?'PAUSED':'DRAFT',active?nextSlot(schedule,now):null,now,id);
+    .run(item.name,item.delta,item.buttons,item.ids,item.schedule,item.mediaId,active?'ACTIVE':['PAUSED','STOPPED'].includes(old.status)?old.status:'DRAFT',active?nextSlot(schedule,now):null,now,id);
   res.json(db.prepare('SELECT * FROM tasks WHERE id=?').get(id));
 }));
 
@@ -204,16 +204,19 @@ app.post('/api/tasks/:id/status', route(async (req, res) => {
   if (!task || task.bot_id !== currentBot()?.id) throw new Error('任务不存在或属于旧机器人');
   const action = String(req.body?.action || '');
   if (!['activate','pause','stop'].includes(action)) throw new Error('操作无效');
-  if (task.status === 'STOPPED') throw new Error('任务已停止');
   const schedule = JSON.parse(task.schedule_json);
-  if (action === 'activate' && schedule.kind === 'MANUAL') throw new Error('手动任务无需启用定时');
+  if (action === 'activate' && task.status === 'ACTIVE') return res.json(task);
+  if (action === 'pause' && task.status === 'STOPPED') throw new Error('任务已停止，请先重新开始');
   if (action === 'activate' && task.status === 'COMPLETED') throw new Error('单次任务已经完成');
-  const next = action === 'activate' ? nextSlot(schedule, Date.now()) : null;
-  if (action === 'activate' && !next) throw new Error('没有未来发布时间');
-  const status = action === 'activate' ? 'ACTIVE' : action === 'pause' ? 'PAUSED' : 'STOPPED';
-  db.prepare('UPDATE tasks SET status=?,next_at=?,updated_at=? WHERE id=?').run(status,next,Date.now(),task.id);
-  if (action !== 'activate') db.prepare(`UPDATE deliveries SET status='CANCELLED',error_text='任务已暂停或停止',completed_at=? WHERE status='PENDING' AND run_id IN
-    (SELECT id FROM runs WHERE task_id=? AND source='SCHEDULED')`).run(Date.now(), task.id);
+  const timed = schedule.kind !== 'MANUAL';
+  const next = action === 'activate' && timed ? nextSlot(schedule, Date.now()) : null;
+  if (action === 'activate' && timed && !next) throw new Error('没有未来发布时间，请编辑任务设置新的发布时间');
+  const status = action === 'activate' ? (timed ? 'ACTIVE' : 'DRAFT') : action === 'pause' ? 'PAUSED' : 'STOPPED';
+  db.transaction(() => {
+    db.prepare('UPDATE tasks SET status=?,next_at=?,updated_at=? WHERE id=?').run(status,next,Date.now(),task.id);
+    if (action !== 'activate') db.prepare(`UPDATE deliveries SET status='CANCELLED',error_text='任务已暂停或停止',completed_at=? WHERE status='PENDING' AND run_id IN
+      (SELECT id FROM runs WHERE task_id=? AND (?='stop' OR source='SCHEDULED'))`).run(Date.now(), task.id, action);
+  })();
   res.json(db.prepare('SELECT * FROM tasks WHERE id=?').get(task.id));
 }));
 

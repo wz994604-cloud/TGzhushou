@@ -1,4 +1,5 @@
 import Quill from 'quill';
+import { installLinkEditor } from './link-editor.js';
 import 'quill/dist/quill.snow.css';
 import './style.css';
 
@@ -35,7 +36,7 @@ $('app').innerHTML = `<header><div class="brand-icon">✦</div><div><h1>活动�
 <nav aria-label="功能导航"><button data-tab="editor" class="active">编写</button><button data-tab="tasks">任务</button><button data-tab="logs">记录</button><button data-tab="settings">设置</button></nav>
 <section id="editor" class="page">
 <div class="section-title"><div><h2 id="editorTitle">新建活动</h2><p>内容保存后，可立即发布或开启定时。</p></div><button id="reset" class="quiet">新建</button></div>
-<div class="card"><label>活动名称<input id="name" maxlength="100" placeholder="例如：每日活动介绍"></label><label>消息内容</label><div id="toolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-link" title="文字链接"></button><button class="ql-clean" title="清除格式"></button></div><div id="message"></div><div class="editor-footer"><button id="bodyEmoji" class="quiet">✦ 专属表情</button><span id="textCount" class="muted">0 / 4096</span></div><p class="hint">选中文字点链接图标，即可设置“点击进入频道”等文字链接。跨应用粘贴可能丢失专属表情身份，请从表情包选择器添加。</p>
+<div class="card"><label>活动名称<input id="name" maxlength="100" placeholder="例如：每日活动介绍"></label><label>消息内容</label><div id="toolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-link" title="文字链接"></button><button class="ql-clean" title="清除格式"></button></div><div id="message"></div><div class="editor-footer"><button id="bodyEmoji" class="quiet">✦ 专属表情</button><button id="editLink" class="quiet">添加链接</button><span id="textCount" class="muted">0 / 4096</span></div><p class="hint">点击「添加链接」填写显示文字和地址；点击已有链接可修改或移除链接。跨应用粘贴可能丢失专属表情身份，请从表情包选择器添加。</p>
 <label class="file-label">附带图片 <span class="muted">JPEG / PNG / WebP，最多 5 MB</span><input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="photoBox" hidden><img id="photoPreview" alt="活动图片"><button id="removePhoto" class="quiet">移除图片</button></div></div>
 <div class="card"><div class="section-title"><h3>跳转按钮</h3><button id="addButton" class="quiet">＋ 添加按钮</button></div><div id="buttons"></div><p class="hint">同一行号的按钮并排显示。专属表情和颜色以 Telegram 客户端实际支持为准。</p></div>
 <div class="card"><h3>发布目标</h3><div id="targetChecks" class="check-list"></div><h3>发布方式</h3><select id="kind"><option value="MANUAL">手动立即发布</option><option value="ONCE">指定时间发布</option><option value="DAILY">每天按时段重复发布</option></select><div id="onceFields" hidden><label>指定时间（北京时间）<input id="at" type="datetime-local"></label></div><div id="dailyFields" hidden><div class="grid"><label>开始时间<input id="start" type="time" value="01:00"></label><label>结束时间<input id="end" type="time" value="05:00"></label></div><div class="grid"><label>发送间隔<input id="interval" type="number" min="1" value="30"></label><label>单位<select id="unit"><option value="1">分钟</option><option value="60">小时</option></select></label></div><p class="hint">支持跨午夜；起点发送，终点恰好落在间隔上时发送。暂停恢复后从下一个时间点继续，不补发过去时段。</p></div></div>
@@ -55,6 +56,7 @@ class CustomEmoji extends Embed {
 }
 Quill.register(CustomEmoji);
 const quill = new Quill('#message', { theme:'snow', placeholder:'输入活动文案…', modules:{ toolbar:'#toolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
+installLinkEditor(Quill, quill);
 quill.on('selection-change', range => { if (range) savedRange = range; });
 quill.on('text-change', () => { $('textCount').textContent = `${quill.getText().trimEnd().length} / ${mediaId ? 1024 : 4096}`; remember(); preview(); });
 quill.root.addEventListener('paste', event => {
@@ -90,7 +92,15 @@ function showPhoto() { $('photoBox').hidden=!mediaId; $('photoPreview').src=imag
 $('removePhoto').onclick = () => {mediaId=null;imageUrl='';$('photo').value='';showPhoto();remember();};
 function populateTargets(selected = []) { $('targetChecks').innerHTML=data.targets.map(t=>`<label class="check"><input type="checkbox" name="target" value="${t.id}" ${selected.includes(t.id)?'checked':''} ${t.can_publish?'':'disabled'}><span>${esc(t.title)}<small>${esc(t.last_error || t.chat_id)}</small></span></label>`).join('')||'<p class="muted">请先在「设置」中添加群或频道。</p>'; }
 async function refresh() { const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); data=await api('/bootstrap'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=`${data.admin.name} · ID ${data.admin.id}`; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
-function showTasks() { $('taskList').innerHTML=data.tasks.map(t=>`<article class="card"><div class="section-title"><h3>${esc(t.name)}</h3><span class="status ${t.status}">${labels[t.status]}</span></div><p class="muted">下次：${fmt(t.next_at)}</p><div class="wrap-actions"><button class="quiet" data-edit="${t.id}">编辑</button>${t.status!=='STOPPED'?`<button class="quiet" data-send-task="${t.id}">立即发布</button>${!['COMPLETED'].includes(t.status)&&JSON.parse(t.schedule_json).kind!=='MANUAL'?`<button class="quiet" data-task="${t.id}" data-action="${t.status==='ACTIVE'?'pause':'activate'}">${t.status==='ACTIVE'?'暂停':'启用 / 恢复'}</button>`:''}<button class="quiet danger-text" data-task="${t.id}" data-action="stop">停止</button>`:''}</div></article>`).join('')||'<div class="card center muted">还没有发布任务</div>'; }
+function showTasks() {
+  $('taskList').innerHTML = data.tasks.map(t => {
+    const stopped = t.status === 'STOPPED', timed = JSON.parse(t.schedule_json).kind !== 'MANUAL';
+    const controls = stopped
+      ? `<button class="quiet" data-task="${t.id}" data-action="activate">重新开始</button>`
+      : `<button class="quiet" data-send-task="${t.id}">立即发布</button>${timed && t.status !== 'COMPLETED' ? `<button class="quiet" data-task="${t.id}" data-action="${t.status === 'ACTIVE' ? 'pause' : 'activate'}">${t.status === 'ACTIVE' ? '暂停' : '启用 / 恢复'}</button>` : ''}<button class="quiet danger-text" data-task="${t.id}" data-action="stop">停止</button>`;
+    return `<article class="card"><div class="section-title"><h3>${esc(t.name)}</h3><span class="status ${t.status}">${labels[t.status]}</span></div><p class="muted">下次：${fmt(t.next_at)}</p><div class="wrap-actions"><button class="quiet" data-edit="${t.id}">编辑</button>${controls}<button class="quiet danger-text" data-delete-task="${t.id}">删除</button></div></article>`;
+  }).join('') || '<div class="card center muted">还没有发布任务</div>';
+}
 async function fill(item) { ready=false; taskId=item.taskId || null; $('name').value=item.name||''; quill.setContents(item.delta || {ops:[{insert:'\n'}]}); hydrateEmojiImages(quill.root); buttons=item.buttons||[];mediaId=item.mediaId||null; imageUrl='';if(mediaId)imageUrl=await authenticatedImage(`/media/${mediaId}`).catch(()=> ''); const s=item.schedule||{kind:'MANUAL'}; $('kind').value=s.kind;$('start').value=s.start||'01:00';$('end').value=s.end||'05:00';$('interval').value=s.interval||30;$('unit').value='1';$('at').value=s.at?new Date(s.at+8*3600000).toISOString().slice(0,16):'';populateTargets(item.targetIds||[]);$('editorTitle').textContent=taskId?`编辑活动 #${taskId}`:'新建活动';showButtons();showPhoto();scheduleFields();ready=true; }
 async function save() { const result=await api(taskId?`/tasks/${taskId}`:'/tasks',taskId?'PUT':'POST',collect());taskId=result.id;$('editorTitle').textContent=`编辑活动 #${taskId}`;remember();await refresh();return taskId; }
 async function sendTask(id) { if(!pendingSend || pendingSend.id!==id) pendingSend={id,key:crypto.randomUUID()}; const result=await api(`/tasks/${id}/send`,'POST',{requestKey:pendingSend.key});pendingSend=null;toast(`已加入发送队列，记录 #${result.runId}`); }
@@ -98,7 +108,28 @@ $('save').onclick = event => action(async()=>{await save();toast('已保存');},
 $('send').onclick = event => action(async()=>{await sendTask(await save());},event.currentTarget);
 $('activate').onclick = event => action(async()=>{const id=await save();await api(`/tasks/${id}/status`,'POST',{action:'activate'});await refresh();toast('定时已启用');changeTab('tasks');},event.currentTarget);
 $('reset').onclick = () => action(async()=>{if(ready&&!confirm('新建空白活动？当前未保存的编辑会被清空。'))return;await fill({});remember();});
-$('taskList').onclick = event => action(async()=>{const b=event.target;if(b.dataset.edit){const t=await api(`/tasks/${b.dataset.edit}`);await fill({taskId:t.id,name:t.name,delta:{ops:JSON.parse(t.delta_json)},buttons:JSON.parse(t.buttons_json),mediaId:t.media_id,targetIds:JSON.parse(t.target_ids_json),schedule:JSON.parse(t.schedule_json)});remember();changeTab('editor');}if(b.dataset.task){if(b.dataset.action==='stop'&&!confirm('停止后此任务不再恢复，确定停止？'))return;await api(`/tasks/${b.dataset.task}/status`,'POST',{action:b.dataset.action});await refresh();}if(b.dataset.sendTask)await sendTask(Number(b.dataset.sendTask));},event.target);
+$('taskList').onclick = event => action(async () => {
+  const b = event.target;
+  if (b.dataset.edit) {
+    const t = await api(`/tasks/${b.dataset.edit}`);
+    await fill({ taskId:t.id, name:t.name, delta:{ops:JSON.parse(t.delta_json)}, buttons:JSON.parse(t.buttons_json), mediaId:t.media_id, targetIds:JSON.parse(t.target_ids_json), schedule:JSON.parse(t.schedule_json) });
+    remember(); changeTab('editor');
+  }
+  if (b.dataset.task) {
+    if (b.dataset.action === 'stop' && !confirm('停止后保留内容，可以重新开始。排队消息会取消，已经发出的消息保留。确定停止？')) return;
+    const task = await api(`/tasks/${b.dataset.task}/status`, 'POST', { action:b.dataset.action });
+    await refresh();
+    if (b.dataset.action === 'activate') toast(task.status === 'DRAFT' ? '已重新开始，可点击立即发布' : '已启用，从下个发布时间继续');
+  }
+  if (b.dataset.deleteTask) {
+    const id = Number(b.dataset.deleteTask);
+    if (!confirm('确定删除此任务及其发布记录？已发布的 Telegram 消息不会删除。运行中的任务请先停止。')) return;
+    await api(`/tasks/${id}`, 'DELETE');
+    if (taskId === id) { await fill({}); remember(); pendingSend = null; }
+    await refresh(); toast('任务已删除');
+  }
+  if (b.dataset.sendTask) await sendTask(Number(b.dataset.sendTask));
+}, event.target);
 $('savePublisher').onclick = event => action(async()=>{if(data.publisher&&!confirm('确认更新发布机器人配置？更换身份会暂停旧定时任务。'))return;await api('/publisher','POST',{token:$('token').value});$('token').value='';await refresh();toast('发布机器人已验证并保存');},event.currentTarget);
 $('addTarget').onclick = event => action(async()=>{const t=await api('/targets','POST',{reference:$('targetRef').value});$('targetRef').value='';await refresh();toast(t.can_publish?'目标已添加':t.last_error,!t.can_publish);},event.currentTarget);
 $('targets').onclick = event => action(async()=>{const id=event.target.dataset.deleteTarget;if(id&&confirm('删除该目标？引用它的任务将跳过此目标。')){await api(`/targets/${id}`,'DELETE');await refresh();}},event.target);
