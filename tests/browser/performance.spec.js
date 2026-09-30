@@ -1,0 +1,112 @@
+import { test, expect } from '@playwright/test';
+import sharp from 'sharp';
+import { signedData, publisherToken } from '../helpers.js';
+
+async function open(page, request) {
+  const headers = { 'x-telegram-init-data':signedData() };
+  await request.post('/api/publisher', { headers, data:{ token:publisherToken } });
+  await request.post('/api/targets', { headers, data:{ reference:'@test_channel' } });
+  await page.route('https://telegram.org/js/telegram-web-app.js', route => route.fulfill({
+    contentType:'application/javascript', body:`window.Telegram={WebApp:{initData:${JSON.stringify(headers['x-telegram-init-data'])},ready(){},expand(){}}};`
+  }));
+  await page.goto('/'); await expect(page.locator('#workspace')).toBeVisible();
+  await page.getByRole('button', { name:'编写', exact:true }).click();
+  return headers;
+}
+
+test('debounced draft, closed preview, reload flush and truthful server save status', async ({ page, request }) => {
+  await open(page, request);
+  expect(await page.locator('#toolbar .ql-link').count()).toBe(0);
+  await page.evaluate(() => {
+    window.draftWrites = 0;
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) { if (key === 'tgzhushou:draft:v1') window.draftWrites++; return original.call(this, key, value); };
+  });
+  await page.locator('#name').fill('输入减负');
+  await page.locator('.ql-editor').pressSequentially('abcdef', { delay:20 });
+  expect(await page.evaluate(() => window.draftWrites)).toBe(0);
+  await expect(page.locator('#saveStatus')).toContainText('本机已暂存');
+  expect(await page.evaluate(() => window.draftWrites)).toBe(1);
+  await expect(page.locator('#preview')).toBeEmpty();
+  await page.locator('#previewPanel summary').click();
+  await expect(page.locator('#preview')).toContainText('abcdef');
+  await page.locator('.ql-editor').fill('刷新前最后输入'); await page.reload();
+  await expect(page.locator('.ql-editor')).toHaveText('刷新前最后输入');
+  await page.locator('[name=target]').first().check(); await page.locator('#save').click();
+  await expect(page.locator('#saveStatus')).toHaveText('服务器已保存');
+  await page.locator('#name').fill('修改后未同步');
+  await expect(page.locator('#saveStatus')).toContainText('尚未保存到服务器');
+  await page.route('**/api/tasks/*', route => route.fulfill({ status:500, contentType:'application/json', body:'{"error":"模拟保存失败"}' }));
+  await page.locator('#save').click(); await expect(page.locator('#saveStatus')).toContainText('服务器保存失败');
+  await page.unroute('**/api/tasks/*');
+  await page.setViewportSize({ width:390, height:460 });
+  await page.locator('#name').focus();
+  const bounds = await page.locator('.actions').boundingBox();
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(460);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => document.getElementById('toast').hidden = true);
+  await page.screenshot({ path:'test-results/mobile-compact.png', fullPage:false });
+});
+
+test('emoji picker loads 24 at a time and reuses image blobs', async ({ page, request }) => {
+  await open(page, request);
+  const requests = []; page.on('request', r => { if (r.url().includes('/sticker-image?')) requests.push(r.url()); });
+  await page.locator('#bodyEmoji').click(); await page.locator('#pack').fill('batch_pack'); await page.locator('#loadPack').click();
+  await expect(page.locator('.emoji-choice')).toHaveCount(24);
+  await expect.poll(() => requests.length).toBe(24);
+  await expect(page.locator('.emoji-choice img')).toHaveCount(24);
+  await page.locator('#moreEmoji').click(); await expect(page.locator('.emoji-choice')).toHaveCount(48);
+  await expect(page.locator('.emoji-choice img')).toHaveCount(48);
+  const before = requests.length;
+  await page.locator('.emoji-choice').first().click(); await page.locator('#closeEmoji').click();
+  await expect(page.locator('.ql-editor .custom-emoji img')).toHaveCount(1);
+  await page.locator('#bodyEmoji').click(); await page.locator('#loadPack').click();
+  await expect(page.locator('.emoji-choice img')).toHaveCount(24);
+  expect(requests.length).toBe(before);
+  await page.locator('#closeEmoji').click();
+  await page.locator('#addButton').click(); await page.locator('[data-emoji="0"]').click();
+  await page.locator('.emoji-choice').first().click(); await page.locator('#closeEmoji').click();
+  await page.locator('#previewPanel summary').click();
+  await expect(page.locator('.preview-button img')).toHaveCount(1);
+  await expect(page.locator('.preview-button')).toContainText('立即进入');
+  await page.locator('[data-clear="0"]').click(); await expect(page.locator('.preview-button img')).toHaveCount(0);
+});
+
+test('thumbnail leaves original intact; private image auth and hashed asset caching', async ({ page, request }) => {
+  const headers = await open(page, request);
+  const original = await sharp({ create:{ width:1800, height:1200, channels:3, background:'#456abc' } }).png().toBuffer();
+  const upload = await request.post('/api/media', { headers, multipart:{ image:{ name:'large.png', mimeType:'image/png', buffer:original } } });
+  const media = await upload.json();
+  const preview = await request.get(`/api/media/${media.id}?preview=1`, { headers });
+  expect(preview.ok()).toBeTruthy(); const bytes = await preview.body();
+  expect(await sharp(bytes).metadata()).toMatchObject({ width:720, height:480, format:'webp' });
+  expect(bytes.length).toBeLessThan(original.length);
+  expect(await (await request.get(`/api/media/${media.id}`, { headers })).body()).toEqual(original);
+  expect(preview.headers()['cache-control']).toBe('private, max-age=3600');
+  expect(preview.headers().vary).toContain('x-telegram-init-data');
+  expect((await request.get(`/api/media/${media.id}?preview=1`)).status()).toBe(401);
+  expect((await request.get('/api/sticker-image?id=mock_thumbnail_1')).status()).toBe(401);
+  const sticker = await request.get('/api/sticker-image?id=mock_thumbnail_1', { headers });
+  expect(sticker.ok()).toBeTruthy(); expect(sticker.headers()['cache-control']).toContain('private');
+  const src = await page.locator('script[type=module]').getAttribute('src');
+  expect((await request.get(src)).headers()['cache-control']).toBe('public, max-age=31536000, immutable');
+  expect((await request.get('/')).headers()['cache-control']).toBe('no-store');
+  expect((await request.get('/api/bootstrap', { headers })).headers()['cache-control']).toBe('no-store');
+  await page.locator('#photo').setInputFiles({ name:'large.png', mimeType:'image/png', buffer:original });
+  await expect(page.locator('#photoBox')).toBeVisible();
+  await expect.poll(() => page.locator('#photoPreview').evaluate(img => img.naturalWidth)).toBe(720);
+  await page.reload();
+  await expect.poll(() => page.locator('#photoPreview').evaluate(img => img.naturalWidth)).toBe(720);
+  console.log(`Thumbnail ${original.length} -> ${bytes.length} bytes; original byte equality verified`);
+});
+
+
+test('storage failure is visible and never mislabels a successful server save', async ({ page, request }) => {
+  await open(page, request);
+  await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('quota'); }; });
+  await page.locator('#name').fill('存储失败测试'); await page.locator('.ql-editor').fill('仍可保存服务器');
+  await page.locator('[name=target]').first().check();
+  await expect(page.locator('#saveStatus')).toContainText('本机暂存失败');
+  await page.locator('#save').click();
+  await expect(page.locator('#saveStatus')).toHaveText('服务器已保存 · 本机暂存失败');
+});

@@ -72,7 +72,6 @@ export function installLinkEditor(Quill, quill) {
   field('removeLink').onclick = () => { quill.formatText(editing.index, editing.length, 'link', false, 'user'); finish(); };
   field('cancelLink').onclick = () => dialog.close();
   document.getElementById('editLink').onclick = () => open();
-  quill.getModule('toolbar').addHandler('link', () => open());
   quill.root.addEventListener('click', event => {
     const anchor = event.target.closest('a');
     if (anchor) { event.preventDefault(); event.stopPropagation(); open(anchor); }

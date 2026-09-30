@@ -1,4 +1,6 @@
 import express from 'express';
+import sharp from 'sharp';
+import { createAssetCache } from './asset-cache.js';
 import multer from 'multer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -49,6 +51,11 @@ app.use('/api', (req, res, next) => {
 
 const route = fn => async (req, res, next) => { try { await fn(req, res); } catch (error) { next(error); } };
 const currentBot = () => scheduler.publisher();
+const stickerCache = createAssetCache({ limit:128, ttl:3600000 });
+const packCache = createAssetCache({ limit:16, ttl:600000 });
+const previewCache = createAssetCache({ limit:16, ttl:3600000 });
+function privateImage(res) { res.set('Cache-Control', 'private, max-age=3600'); res.vary('x-telegram-init-data'); }
+
 
 app.get('/api/bootstrap', route(async (req, res) => {
   const bot = currentBot();
@@ -101,9 +108,12 @@ app.post('/api/sticker-packs', route(async (req, res) => {
   const input = String(req.body?.pack || '').trim();
   const name = /(?:^|\/addemoji\/)([A-Za-z0-9_]{5,64})\/?$/.exec(input)?.[1];
   if (!name) throw new Error('请输入 Telegram addemoji 表情包链接或包名');
-  const pack = await botCall(bot.token, 'getStickerSet', { name });
-  res.json({ title: pack.title, stickers: (pack.stickers || []).filter(item => item.custom_emoji_id).slice(0, 120)
-    .map(item => ({ id: item.custom_emoji_id, alt: item.emoji || '🙂', thumbnailId: item.thumbnail?.file_id || item.file_id || null })) });
+  const pack = await packCache(`${bot.id}:${name}`, async () => {
+    const pack = await botCall(bot.token, 'getStickerSet', { name });
+    return { title: pack.title, stickers: (pack.stickers || []).filter(item => item.custom_emoji_id).slice(0, 120)
+    .map(item => ({ id: item.custom_emoji_id, alt: item.emoji || '🙂', thumbnailId: item.thumbnail?.file_id || item.file_id || null })) };
+  });
+  res.json(pack);
 }));
 
 app.get('/api/sticker-image', route(async (req, res) => {
@@ -111,12 +121,24 @@ app.get('/api/sticker-image', route(async (req, res) => {
   if (!bot) return res.sendStatus(404);
   const fileId = String(req.query.id || '');
   if (!/^[A-Za-z0-9_-]{10,300}$/.test(fileId)) return res.sendStatus(400);
-  const file = await botCall(bot.token, 'getFile', { file_id: fileId });
-  if (!file.file_path || file.file_size > 128_000 || !/\.(webp|png|jpg|jpeg)$/.test(file.file_path)) return res.sendStatus(404);
-  const response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`, { signal: AbortSignal.timeout(15000) });
-  if (!response.ok) return res.sendStatus(502);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  res.type(path.extname(file.file_path)).send(bytes);
+  const image = await stickerCache(bot.id + ':' + fileId, async () => {
+    const file = await botCall(bot.token, 'getFile', { file_id:fileId });
+    if (!file.file_path || file.file_size > 128_000 || !/\.(webp|png|jpg|jpeg)$/.test(file.file_path)) throw new Error('表情缩略图不可用');
+    const response = await fetch('https://api.telegram.org/file/bot' + bot.token + '/' + file.file_path, { signal:AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error('表情缩略图下载失败');
+    // Enforce the limit on actual streamed bytes as well as Telegram metadata.
+    const reader = response.body.getReader(); let size = 0; const chunks = [];
+    try {
+      for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        size += value.length;
+        if (size > 128_000) { await reader.cancel(); throw new Error('表情缩略图过大'); }
+        chunks.push(Buffer.from(value));
+      }
+    } finally { reader.releaseLock(); }
+    return { bytes:Buffer.concat(chunks), type:path.extname(file.file_path) };
+  });
+  privateImage(res); res.type(image.type).send(image.bytes);
 }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -138,6 +160,22 @@ app.post('/api/media', upload.single('image'), route(async (req, res) => {
 app.get('/api/media/:id', route(async (req, res) => {
   const media = db.prepare('SELECT * FROM media WHERE id=?').get(Number(req.params.id));
   if (!media) return res.sendStatus(404);
+  privateImage(res);
+  if (req.query.preview === '1') {
+    const bytes = await previewCache(media.sha256, async () => {
+      const directory = path.join(dataDir, 'previews');
+      const filename = path.join(directory, media.sha256 + '.webp');
+      try { return await fs.readFile(filename); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      const result = await sharp(media.file_path, { limitInputPixels:40000000 }).rotate()
+        .resize(720, 720, { fit:'inside', withoutEnlargement:true }).webp({ quality:75 }).toBuffer();
+      await fs.mkdir(directory, { recursive:true });
+      const temporary = filename + '.' + crypto.randomUUID() + '.tmp';
+      try { await fs.writeFile(temporary, result); await fs.rename(temporary, filename); }
+      finally { await fs.unlink(temporary).catch(() => {}); }
+      return result;
+    });
+    return res.type('image/webp').send(bytes);
+  }
   res.type(media.mime).sendFile(media.file_path);
 }));
 
@@ -244,7 +282,11 @@ app.use('/api', (_req, res) => res.status(404).json({ error:'接口不存在' })
 // Serve the Mini App shell at `/` as well as client-side routes. Explicitly
 // enabling the index avoids Express 5 treating the root request as a missing
 // static asset and returning the JSON error handler response.
-app.use(express.static(dist, { index: 'index.html' }));
+app.use(express.static(dist, { index:'index.html', setHeaders(res, filename) {
+  if (path.dirname(filename) === path.join(dist, 'assets') && /-[A-Za-z0-9_-]{8,}\.(js|css)$/.test(filename)) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+} }));
 app.use((req, res, next) => {
   if (req.method === 'GET' && req.accepts('html')) return res.sendFile(path.join(dist, 'index.html'));
   next();
