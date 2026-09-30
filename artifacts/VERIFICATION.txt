@@ -33,3 +33,5 @@ PREVIEW_FIX exit status: 0
 
 MULTI_ADMIN_FIX command: npm run check; npm test; npm run build
 MULTI_ADMIN_FIX result: ADMIN_TG_IDS comma-separated accounts accepted; 12 tests passed; build passed; exit status 0
+MULTI_ADMIN_PARSE_FIX command: npm run check; npm test; npm run build
+MULTI_ADMIN_PARSE_FIX result: comma/fullwidth-comma/space/newline/semicolon separators accepted; 13 tests passed; build passed; exit status 0

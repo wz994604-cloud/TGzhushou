@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openDatabase, getSetting, setSetting, encryptToken } from './db.js';
-import { verifyInitData } from './auth.js';
+import { parseAdminIds, verifyInitData } from './auth.js';
 import { botCall, safeTelegramError } from './telegram.js';
 import { renderDelta, normalizeButtons } from './format.js';
 import { normalizeSchedule, nextSlot } from './schedule.js';
@@ -13,8 +13,7 @@ import { createScheduler } from './scheduler.js';
 
 const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
 for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
-const adminIds = String(process.env.ADMIN_TG_IDS || process.env.ADMIN_TG_ID || '').split(',').map(value => value.trim()).filter(Boolean);
-if (!adminIds.length || adminIds.some(value => !/^\d+$/.test(value))) throw new Error('ADMIN_TG_IDS 必须是逗号分隔的 Telegram 数字用户 ID');
+const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS || process.env.ADMIN_TG_ID);
 if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
 if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
 const dataDir = path.resolve(process.env.DATA_DIR || './data');

@@ -1,5 +1,11 @@
 import crypto from 'node:crypto';
 
+export function parseAdminIds(raw) {
+  const values = String(raw || '').split(/[,，;；\s]+/).map(value => value.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+  if (!values.length || values.some(value => !/^\d+$/.test(value))) throw new Error('ADMIN_TG_IDS 必须是分隔的 Telegram 数字用户 ID');
+  return [...new Set(values)];
+}
+
 export function verifyInitData(raw, botToken, adminId, now = Date.now()) {
   const allowedIds = (Array.isArray(adminId) ? adminId : String(adminId || '').split(','))
     .map(value => String(value).trim()).filter(Boolean);
