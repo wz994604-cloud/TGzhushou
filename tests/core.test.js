@@ -9,6 +9,7 @@ import { createScheduler } from '../server/scheduler.js';
 import { nextSlot, normalizeSchedule } from '../server/schedule.js';
 import { renderDelta, normalizeButtons, keyboard } from '../server/format.js';
 import { configKey, publisherToken } from './helpers.js';
+import { sendPhoto, multipartCaptionEntities } from '../server/telegram.js';
 
 const at = value => Date.parse(`${value}+08:00`);
 test('daily start, inclusive aligned end, non-aligned end and following day', () => {
@@ -34,6 +35,23 @@ test('text links and custom emojis preserve UTF-16 entity offsets', () => {
   assert.deepEqual(r.entities[0],{type:'custom_emoji',offset:3,length:2,custom_emoji_id:'5432101234567890123'});
   assert.equal(r.entities.find(e=>e.type==='text_link').offset,5);
   assert.throws(()=>renderDelta([{insert:'x',attributes:{link:'javascript:alert(1)'}}]));
+});
+test('photo captions keep entity offsets after multipart LF to CRLF serialization', async t => {
+  const transformed = multipartCaptionEntities('前\n🎁链接', [{ type:'custom_emoji', offset:2, length:2 }]);
+  assert.deepEqual(transformed, [{ type:'custom_emoji', offset:3, length:2 }]);
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async (_url, options) => {
+    const body = await new Response(options.body).text();
+    const match = body.match(/name="caption_entities"\r\n\r\n([\s\S]*?)\r\n------/);
+    const entities = JSON.parse(match[1]);
+    assert.equal(entities[0].offset, 3);
+    return Response.json({ ok:true, result:{ message_id:1, caption_entities:entities } });
+  };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-photo-')); const file = path.join(dir, 'x.jpg'); fs.writeFileSync(file, 'x');
+  t.after(() => fs.rmSync(dir, { recursive:true, force:true }));
+  const result = await sendPhoto('222222:LOCAL_TEST_PUBLISH_TOKEN_123456789', '-1001', file, 'image/jpeg', '前\n🎁链接', [{ type:'custom_emoji', offset:2, length:2, custom_emoji_id:'5432101234567890123' }], null);
+  assert.equal(result.message_id, 1);
 });
 test('native button colors and custom emoji field; unsafe URLs rejected', () => {
   const b=normalizeButtons([{text:'进入',url:'https://t.me/example',style:'success',row:0,iconId:'5432101234567890123',iconAlt:'🔥'}]);

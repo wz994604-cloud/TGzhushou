@@ -2,6 +2,15 @@ import fs from 'node:fs/promises';
 
 const API = 'https://api.telegram.org/bot';
 
+export function multipartCaptionEntities(text, entities) {
+  const shift = index => (text.slice(0, index).match(/\n/g) || []).length;
+  return entities.map(entity => {
+    const start = entity.offset;
+    const end = entity.offset + entity.length;
+    return { ...entity, offset: start + shift(start), length: entity.length + shift(end) - shift(start) };
+  });
+}
+
 export async function botCall(token, method, payload = {}, timeoutMs = 20000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -24,7 +33,10 @@ export async function sendPhoto(token, chatId, path, mime, caption, captionEntit
     form.set('chat_id', String(chatId));
     form.set('photo', new Blob([bytes], { type: mime }), 'activity-image');
     if (caption) form.set('caption', caption);
-    if (captionEntities.length) form.set('caption_entities', JSON.stringify(captionEntities));
+    // Multipart form serialization writes LF text as CRLF. Telegram validates
+    // entity offsets against that serialized caption, so account for the
+    // inserted CR code unit without changing the stored task Delta.
+    if (captionEntities.length) form.set('caption_entities', JSON.stringify(multipartCaptionEntities(caption, captionEntities)));
     if (replyMarkup) form.set('reply_markup', JSON.stringify(replyMarkup));
     const response = await fetch(`${API}${token}/sendPhoto`, { method: 'POST', body: form, signal: controller.signal });
     const body = await response.json();
