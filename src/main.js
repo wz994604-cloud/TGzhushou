@@ -39,7 +39,7 @@ function displayImage(node, url, alt, label = '') {
   img.src = url; node.replaceChildren(img, ...(label ? [document.createTextNode(' ' + label)] : []));
 }
 
-$('app').innerHTML = `<header><div class="brand-icon">✦</div><div><h1>活动助手</h1><p id="identity">Telegram 活动发布工作台</p></div><span class="chip">北京时间</span></header>
+$('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hidden="true"><svg viewBox="0 0 48 48" role="presentation"><path d="M24 5 28.2 19.8 43 24l-14.8 4.2L24 43l-4.2-14.8L5 24l14.8-4.2L24 5Z" fill="currentColor"/><circle cx="37" cy="11" r="3" fill="currentColor" opacity=".72"/><circle cx="11" cy="37" r="3" fill="currentColor" opacity=".72"/></svg></div><div class="brand-copy"><span class="eyebrow">运营工作台</span><h1>活动中枢</h1><p id="identity">Telegram 活动发布工作台</p></div><div class="header-meta"><span class="online-dot" aria-hidden="true"></span><span class="chip">北京时间</span></div></header>
 <div id="locked" class="card center" hidden><h2>从 Telegram 打开</h2><p>请使用已绑定的管理员账号，从入口机器人的「打开活动后台」进入。</p><p id="authError" class="muted"></p></div>
 <main id="workspace" hidden>
 <nav aria-label="功能导航"><button data-tab="editor" class="active">编写</button><button data-tab="tasks">任务</button><button data-tab="logs">记录</button><button data-tab="settings">设置</button></nav>

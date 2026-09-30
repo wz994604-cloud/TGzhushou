@@ -1,4 +1,4 @@
-# TGzhushou 活动助手
+# TGzhushou 活动中枢
 
 独立 Telegram Mini App，入口机器人负责打开后台，发布机器人负责发消息。此项目与 PCJND28 下注项目分开，使用独立 Railway 服务和数据库。
 
