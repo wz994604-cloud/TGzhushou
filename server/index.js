@@ -103,7 +103,7 @@ app.post('/api/sticker-packs', route(async (req, res) => {
   if (!name) throw new Error('请输入 Telegram addemoji 表情包链接或包名');
   const pack = await botCall(bot.token, 'getStickerSet', { name });
   res.json({ title: pack.title, stickers: (pack.stickers || []).filter(item => item.custom_emoji_id).slice(0, 120)
-    .map(item => ({ id: item.custom_emoji_id, alt: item.emoji || '🙂', thumbnailId: item.thumbnail?.file_id || null })) });
+    .map(item => ({ id: item.custom_emoji_id, alt: item.emoji || '🙂', thumbnailId: item.thumbnail?.file_id || item.file_id || null })) });
 }));
 
 app.get('/api/sticker-image', route(async (req, res) => {
