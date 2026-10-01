@@ -14,7 +14,7 @@ const fmt = value => value ? new Date(value).toLocaleString('zh-CN', { timeZone:
 const labels = { DRAFT:'草稿', ACTIVE:'运行中', PAUSED:'已暂停', STOPPED:'已停止', COMPLETED:'已完成', SUCCESS:'成功', FAILED:'失败', UNKNOWN:'待核实', PENDING:'排队中', SENDING:'发送中', CANCELLED:'已取消' };
 let data, taskId = null, buttons = [], mediaId = null, imageUrl = '', pickerTarget = null, savedRange = null, pendingSend = null, ready = false;
 let draftDirty = false, draftTimer, previewTimer, previewDirty = true, serverSnapshot = null;
-let selectedPlayerIds = new Set(), savedPacks = [];
+let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
 const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
 const loadImage = createImageLoader(async url => {
   const response = await fetch('/api' + url, { headers:{ 'x-telegram-init-data':initData } });
@@ -22,7 +22,25 @@ const loadImage = createImageLoader(async url => {
   return response.blob();
 });
 const draftKey = 'tgzhushou:draft:v1';
-async function loadSavedPacks(){const r=await api('/sticker-packs/saved');savedPacks=r.packs||[];$('savedPackTabs').innerHTML=savedPacks.map((p,i)=>`<button class="quiet pack-tab" data-pack-index="${i}">${esc(p.title)}</button>`).join('')||'<span class="muted">还没有保存的表情包</span>';}
+function readRecentEmojis() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(recentEmojiKey) || '[]');
+    recentEmojis = Array.isArray(stored) ? stored.filter(item => item && typeof item.id === 'string' && typeof item.alt === 'string').slice(0, 30) : [];
+  } catch { recentEmojis = []; }
+}
+function rememberRecentEmoji(sticker) {
+  recentEmojis = [sticker, ...recentEmojis.filter(item => item.id !== sticker.id)].slice(0, 30);
+  try { localStorage.setItem(recentEmojiKey, JSON.stringify(recentEmojis)); } catch { /* Keep session history when storage is unavailable. */ }
+}
+function renderSavedPackTabs() {
+  $('savedPackTabs').innerHTML = '<button class="quiet pack-tab" data-recent="1">最近使用</button>' + savedPacks.map((p,i)=>`<button class="quiet pack-tab" data-pack-index="${i}">${esc(p.title)}</button>`).join('');
+}
+async function loadSavedPacks() {
+  readRecentEmojis(); renderSavedPackTabs();
+  if (!stickers.size && recentEmojis.length) displayPack({ title:'最近使用', stickers:recentEmojis });
+  const r = await api('/sticker-packs/saved');
+  savedPacks = r.packs || []; renderSavedPackTabs();
+}
 async function api(url, method = 'GET', body) {
   const headers = { 'x-telegram-init-data':initData };
   if (body && !(body instanceof FormData)) headers['content-type'] = 'application/json';
@@ -210,7 +228,8 @@ function appendEmojiBatch() {
       } else if (buttons[pickerTarget]) {
         Object.assign(buttons[pickerTarget], { iconId:sticker.id, iconAlt:sticker.alt, iconThumbId:sticker.thumbnailId || '' });
         showButtons(); remember();
-      }
+      } else return;
+      rememberRecentEmoji(sticker);
     };
     $('emojiGrid').append(button);
     if (sticker.thumbnailId) authenticatedImage('/sticker-image?id=' + encodeURIComponent(sticker.thumbnailId))
@@ -240,7 +259,11 @@ function displayPack(pack) {
   appendEmojiBatch();
 }
 $('packHistory').onchange = () => displayPack(loadedPacks.get($('packHistory').value));
-$('savedPackTabs').addEventListener('click',e=>{const i=e.target.dataset.packIndex;if(i!==undefined)displayPack(savedPacks[Number(i)]);});
+$('savedPackTabs').addEventListener('click', e => {
+  if (e.target.dataset.recent) return displayPack({ title:'最近使用', stickers:recentEmojis });
+  const i = e.target.dataset.packIndex;
+  if (i !== undefined) displayPack(savedPacks[Number(i)]);
+});
 $('savePack').onclick=event=>action(async()=>{const key=$('pack').value.trim();const name=key.split('/').filter(Boolean).pop();const pack=loadedPacks.get(key);if(!pack)throw new Error('请先加载表情包');await api('/sticker-packs/saved','POST',{name,title:pack.title,stickers:pack.stickers});await loadSavedPacks();toast('表情包已保存');},event.currentTarget);
 $('loadPack').onclick = event => action(async () => {
   const key = $('pack').value.trim();
