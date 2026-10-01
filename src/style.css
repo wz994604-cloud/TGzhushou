@@ -49,3 +49,7 @@ nav{gap:6px;padding:6px;border-radius:16px;background:color-mix(in srgb,var(--bg
 :root{--accent:#279cdb}.quiet{background:#eef8fe;color:#1686c3;min-height:42px;border-radius:11px;padding:10px 14px}.quiet:hover{background:#def1fc}.danger-text{color:#c13d49;background:#fceef0}.primary,nav .active{color:#fff}.user-actions{margin-bottom:12px}.user-scroll{max-height:320px;overflow-y:auto;overscroll-behavior:contain}.user-scroll .list-row>div{min-width:0;overflow-wrap:anywhere}.user-scroll .list-row button{flex-shrink:0}.card>summary{margin-bottom:12px}#players .inline{margin-top:14px}#selectedPlayersHint{cursor:pointer;color:var(--accent)}#toggleWriting{align-self:flex-start;margin-bottom:8px}.ql-editor[contenteditable=false]{cursor:default}.ql-tooltip{display:none!important}#players .check-list{margin-bottom:12px}
 
 #sentDialog{width:720px}#sentDialog .ql-editor{min-height:160px}#sentRecipients .check{border:0;margin:0;padding:6px;min-width:0}#sentDialog .wrap-actions{margin-top:16px}#sentRecipients .list-row{align-items:flex-start}#sentRecipients .list-row>button{flex-shrink:0}#sentProgress{margin-top:12px}
+
+/* Keep operation controls and status feedback on one blue interaction system. */
+:root{--brand-primary:#279cdb;--brand-secondary:#1686c3}
+.sent-status{min-height:22px;color:var(--accent);font-weight:600}.sent-status:empty{display:none}.is-loaded{background:#e4f7ed;color:#16824b}

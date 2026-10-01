@@ -12,7 +12,7 @@ const initData = tg?.initData || '';
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = value => value ? new Date(value).toLocaleString('zh-CN', { timeZone:'Asia/Shanghai', hour12:false }) : '—';
-const labels = { DRAFT:'草稿', ACTIVE:'运行中', PAUSED:'已暂停', STOPPED:'已停止', COMPLETED:'已完成', SUCCESS:'成功', FAILED:'失败', UNKNOWN:'待核实', PENDING:'排队中', SENDING:'发送中', CANCELLED:'已取消' };
+const labels = { DRAFT:'草稿', ACTIVE:'运行中', PAUSED:'已暂停', STOPPED:'已停止', COMPLETED:'已完成', SUCCESS:'成功', FAILED:'失败', UNKNOWN:'待核实', PENDING:'排队中', SENDING:'发送中', CANCELLED:'已取消', EDITED:'已编辑', DELETED:'已删除', RUNNING:'发送中' };
 let data, taskId = null, buttons = [], mediaId = null, imageUrl = '', pickerTarget = null, savedRange = null, pendingSend = null, ready = false;
 let draftDirty = false, draftTimer, previewTimer, previewDirty = true, serverSnapshot = null;
 const playerCache = new Map();
@@ -312,7 +312,7 @@ function showTasks() {
     const stopped = t.status === 'STOPPED', timed = JSON.parse(t.schedule_json).kind !== 'MANUAL';
     const controls = stopped
       ? `<button class="quiet" data-task="${t.id}" data-action="activate">重新开始</button>`
-      : `<button class="quiet" data-send-task="${t.id}">立即发布</button>${timed && t.status !== 'COMPLETED' ? `<button class="quiet" data-task="${t.id}" data-action="${t.status === 'ACTIVE' ? 'pause' : 'activate'}">${t.status === 'ACTIVE' ? '暂停' : '启用 / 恢复'}</button>` : ''}<button class="quiet danger-text" data-task="${t.id}" data-action="stop">停止</button>`;
+      : `<button class="quiet" data-send-task="${t.id}">立即发布</button>${timed && t.status !== 'COMPLETED' ? `<button class="quiet" data-task="${t.id}" data-action="${t.status === 'ACTIVE' ? 'pause' : 'activate'}">${t.status === 'ACTIVE' ? '暂停' : '启用 / 恢复'}</button>` : ''}${['ACTIVE','PAUSED'].includes(t.status) ? `<button class="quiet danger-text" data-task="${t.id}" data-action="stop">停止</button>` : ''}`;
     return `<article class="card"><div class="section-title"><h3>${esc(t.name)}</h3><span class="status ${t.status}">${labels[t.status]}</span></div><p class="muted">下次：${fmt(t.next_at)}</p><div class="wrap-actions"><button class="quiet" data-edit="${t.id}">编辑</button>${controls}<button class="quiet danger-text" data-delete-task="${t.id}">删除</button></div></article>`;
   }).join('') || '<div class="card center muted">还没有发布任务</div>';
 }
