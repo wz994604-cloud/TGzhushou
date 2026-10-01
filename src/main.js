@@ -93,7 +93,7 @@ class CustomEmoji extends Embed {
   static value(node) { return { id:node.dataset.id, alt:node.dataset.alt, thumbId:node.dataset.thumbId || '' }; }
 }
 Quill.register(CustomEmoji);
-const openSent = installSentEditor({ Quill, api, esc, toast, action });
+const openSent = installSentEditor({ Quill, api, esc, toast, action, image: authenticatedImage, hydrateEmojiImages });
 const quill = new Quill('#message', { theme:'snow', placeholder:'输入活动文案…', modules:{ toolbar:'#toolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
 installLinkEditor(Quill, quill);
 quill.enable(false);

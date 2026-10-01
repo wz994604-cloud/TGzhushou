@@ -1,16 +1,18 @@
 // Keep Telegram text_link entities in Quill's Delta; the label is not the URL.
-export function installLinkEditor(Quill, quill) {
+export function installLinkEditor(Quill, quill, options = {}) {
+  const trigger = options.trigger || document.getElementById('editLink');
+  const id = name => `${options.idPrefix || ''}${name}`;
   const dialog = document.createElement('dialog');
-  dialog.id = 'linkDialog';
-  dialog.setAttribute('aria-labelledby', 'linkTitle');
-  dialog.innerHTML = `<form id="linkForm"><h3 id="linkTitle">文字链接</h3>
-    <label>显示文字<input id="linkText" placeholder="例如：点击领取福利" required></label>
-    <label>跳转地址<input id="linkUrl" placeholder="https://t.me/你的频道" required inputmode="url" autocapitalize="off" spellcheck="false"></label>
-    <p id="linkError" role="alert" class="hint" hidden></p>
+  dialog.id = options.dialogId || 'linkDialog';
+  dialog.setAttribute('aria-labelledby', id('linkTitle'));
+  dialog.innerHTML = `<form id="${id('linkForm')}"><h3 id="${id('linkTitle')}">文字链接</h3>
+    <label>显示文字<input id="${id('linkText')}" placeholder="例如：点击领取福利" required></label>
+    <label>跳转地址<input id="${id('linkUrl')}" placeholder="https://t.me/你的频道" required inputmode="url" autocapitalize="off" spellcheck="false"></label>
+    <p id="${id('linkError')}" role="alert" class="hint" hidden></p>
     <p class="hint">发布后显示你填写的文字，点击文字打开地址。</p>
-    <div class="wrap-actions"><button id="saveLink" class="primary" type="submit">确定</button><button id="removeLink" class="quiet danger-text" type="button">移除链接</button><button id="cancelLink" class="quiet" type="button">取消</button></div></form>`;
+    <div class="wrap-actions"><button id="${id('saveLink')}" class="primary" type="submit">确定</button><button id="${id('removeLink')}" class="quiet danger-text" type="button">移除链接</button><button id="${id('cancelLink')}" class="quiet" type="button">取消</button></div></form>`;
   document.body.append(dialog);
-  const field = id => dialog.querySelector(`#${id}`);
+  const field = name => dialog.querySelector(`#${id(name)}`);
   let lastRange = null, editing = null, selectedAnchor = null, wasEnabled = false;
   quill.on('selection-change', range => { if (range) lastRange = range; });
   const labelFor = range => quill.getContents(range.index, range.length).ops
@@ -74,11 +76,13 @@ export function installLinkEditor(Quill, quill) {
   });
   field('removeLink').onclick = () => { quill.formatText(editing.index, editing.length, 'link', false, 'user'); finish(); };
   field('cancelLink').onclick = () => dialog.close();
-  document.getElementById('editLink').onclick = () => { open(selectedAnchor?.isConnected ? selectedAnchor : null); selectedAnchor=null; };
+  trigger?.addEventListener('click', () => { open(selectedAnchor?.isConnected ? selectedAnchor : null); selectedAnchor=null; });
 
   quill.root.addEventListener('click', event => {
     selectedAnchor=null;
     const anchor = event.target.closest('a');
     if (anchor) { event.preventDefault(); event.stopPropagation(); selectedAnchor=anchor; quill.theme.tooltip?.hide(); }
   });
+
+  return open;
 }
