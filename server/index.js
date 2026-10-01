@@ -184,7 +184,7 @@ app.post('/api/broadcasts', route(async (req, res) => {
   const ids = [...new Set((Array.isArray(req.body?.playerIds) ? req.body.playerIds : []).map(normalizeTelegramId).filter(Boolean))];
   if (!ids.length) throw new Error('请选择至少一个有效玩家');
   const placeholders = ids.map(() => '?').join(',');
-  const players = db.prepare(`SELECT telegram_id,display_name FROM players WHERE active=1 AND telegram_id IN (${placeholders})`).all(...ids);
+  const players = db.prepare(`SELECT telegram_id AS telegramId,display_name AS displayName FROM players WHERE active=1 AND telegram_id IN (${placeholders})`).all(...ids);
   if (players.length !== ids.length) throw new Error('部分玩家不存在或已停用，请刷新名单后重试');
   const broadcastId = scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players });
   scheduler.tick().catch(error => console.error('Broadcast tick:', safeTelegramError(error)));
