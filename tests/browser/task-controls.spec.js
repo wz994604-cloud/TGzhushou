@@ -39,6 +39,7 @@ test('mobile text links: add, edit, remove, preserve emoji, persist and render e
   await page.reload(); await expect(link).toHaveText('官方频道');
   await link.click(); await page.locator('#removeLink').click();
   await expect(link).toHaveCount(0); await expect(page.locator('.ql-editor')).toHaveText('官方频道');
+  await expect(page.locator('#saveStatus')).toContainText('本机已暂存');
   // Selection formatting must keep embeds and bold rather than replace them with plain text.
   await page.evaluate(() => {
     const draft = JSON.parse(localStorage.getItem('tgzhushou:draft:v1'));
