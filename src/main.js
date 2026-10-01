@@ -21,7 +21,7 @@ let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
 const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
 const loadImage = createImageLoader(async url => {
   const response = await fetch('/api' + url, { headers:{ 'x-telegram-init-data':initData } });
-  if (!response.ok) throw new Error('图片加载失败');
+  if (!response.ok) throw Object.assign(new Error('图片加载失败'), { status:response.status });
   return response.blob();
 });
 const draftKey = 'tgzhushou:draft:v1';
@@ -93,7 +93,15 @@ class CustomEmoji extends Embed {
   static value(node) { return { id:node.dataset.id, alt:node.dataset.alt, thumbId:node.dataset.thumbId || '' }; }
 }
 Quill.register(CustomEmoji);
-const openSent = installSentEditor({ Quill, api, esc, toast, action, image: authenticatedImage, hydrateEmojiImages });
+const unavailableStickerImages = new Set();
+function stickerImage(url) {
+  if (unavailableStickerImages.has(url)) return Promise.reject(Object.assign(new Error('表情缩略图不可用'), { status:404 }));
+  return authenticatedImage(url).catch(error => {
+    if (error?.status === 404) unavailableStickerImages.add(url);
+    throw error;
+  });
+}
+const openSent = installSentEditor({ Quill, api, esc, toast, action, image: stickerImage, hydrateEmojiImages });
 const quill = new Quill('#message', { theme:'snow', placeholder:'输入活动文案…', modules:{ toolbar:'#toolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
 installLinkEditor(Quill, quill);
 quill.enable(false);
@@ -169,17 +177,17 @@ function renderPreview() {
   const text = document.createElement('div'); text.className='preview-text';
   for (const op of quill.getContents().ops) { let node = document.createElement('span'); const custom = op.insert?.customEmoji; node.textContent = typeof op.insert === 'string' ? op.insert : custom?.alt || ''; const a = op.attributes || {}; if (custom) { node.className='custom-emoji'; node.dataset.emojiId=custom.id; node.dataset.thumbId=custom.thumbId || ''; } if (a.bold) node.style.fontWeight='700'; if (a.italic) node.style.fontStyle='italic'; if (a.underline) node.style.textDecoration='underline'; if (a.link) { const link=document.createElement('a'); link.textContent=node.textContent; link.href=/^(https:|tg:)/i.test(a.link)?a.link:'#'; link.target='_blank'; link.rel='noopener noreferrer'; node=link; } text.append(node); } container.append(text);
   const rows = new Map(); for (const b of buttons) { const row=rows.get(b.row)||[]; row.push(b); rows.set(b.row,row); }
-  for (const [,row] of [...rows].sort(([a],[b])=>a-b)) { const div=document.createElement('div'); div.className='preview-row'; for(const b of row) { const span=document.createElement('span'); span.className=`preview-button ${b.style}`; span.textContent=b.text ? `${b.iconAlt || ''} ${b.text}`.trim() : ''; if (b.iconId) { span.dataset.emojiId=b.iconId; span.dataset.thumbId=b.iconThumbId || ''; span.dataset.emojiOnly=b.text ? '0' : '1'; span.dataset.label=b.text || '';  } div.append(span); } container.append(div); } hydrateEmojiImages(container);
+  for (const [,row] of [...rows].sort(([a],[b])=>a-b)) { const div=document.createElement('div'); div.className='preview-row'; for(const b of row) { const span=document.createElement('span'); span.className=`preview-button ${b.style}`; span.textContent=b.iconId ? (b.text ? `${b.iconAlt || ''} ${b.text}`.trim() : (b.iconAlt || '✦')) : (b.text || ''); if (b.iconId) { span.dataset.emojiId=b.iconId; span.dataset.thumbId=b.iconThumbId || ''; span.dataset.emojiOnly=b.text ? '0' : '1'; span.dataset.label=b.text || '';  } div.append(span); } container.append(div); } hydrateEmojiImages(container);
 }
 function hydrateEmojiImages(container) {
   for (const node of container.querySelectorAll('[data-thumb-id]')) {
     const id = node.dataset.thumbId, emoji = node.dataset.emojiId || node.dataset.id;
-    if ((!id && !emoji) || node.dataset.loaded === '1') continue;
+    if ((!id && !emoji) || node.dataset.loaded === '1' || node.dataset.loaded === 'unavailable') continue;
     node.dataset.loaded = '1';
     const query = (id ? 'id=' + encodeURIComponent(id) : '') + (emoji ? `${id ? '&' : ''}emoji=` + encodeURIComponent(emoji) : '');
-    authenticatedImage('/sticker-image?' + query).then(url => {
+    stickerImage('/sticker-image?' + query).then(url => {
       displayImage(node, url, node.dataset.alt || '', node.dataset.label || '');
-    }).catch(() => { delete node.dataset.loaded; });
+    }).catch(error => { if (error?.status === 404) node.dataset.loaded = 'unavailable'; else delete node.dataset.loaded; });
   }
 }
 function closePicker() {
@@ -261,8 +269,8 @@ function appendEmojiBatch() {
       rememberRecentEmoji(sticker);
     };
     $('emojiGrid').append(button);
-    if (sticker.thumbnailId || sticker.id) authenticatedImage('/sticker-image?' + (sticker.thumbnailId ? 'id=' + encodeURIComponent(sticker.thumbnailId) + '&' : '') + 'emoji=' + encodeURIComponent(sticker.id))
-      .then(url => displayImage(button, url, sticker.alt)).catch(() => {});
+    if (sticker.thumbnailId || sticker.id) stickerImage('/sticker-image?' + (sticker.thumbnailId ? 'id=' + encodeURIComponent(sticker.thumbnailId) + '&' : '') + 'emoji=' + encodeURIComponent(sticker.id))
+      .then(url => displayImage(button, url, sticker.alt)).catch(error => { if (error?.status === 404) button.dataset.imageState = 'unavailable'; });
   }
   visibleStickers += batch.length;
   queueMoreEmoji();

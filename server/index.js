@@ -60,7 +60,26 @@ app.post('/api/sent/:kind/:id', route(async(req,res)=>res.json(await sent.act(re
 const stickerCache = createAssetCache({ limit:128, ttl:3600000 });
 const packCache = createAssetCache({ limit:16, ttl:600000 });
 const previewCache = createAssetCache({ limit:16, ttl:3600000 });
+const unavailableStickerCache = new Map();
+const unavailableStickerTtl = 10 * 60 * 1000;
 function privateImage(res) { res.set('Cache-Control', 'private, max-age=3600'); res.vary('x-telegram-init-data'); }
+function privateUnavailableImage(res) { res.set('Cache-Control', 'private, max-age=600'); res.vary('x-telegram-init-data'); return res.sendStatus(404); }
+class StickerUnavailableError extends Error { constructor() { super('表情缩略图不可用'); this.code = 'STICKER_UNAVAILABLE'; } }
+function isImageFile(file) {
+  const filePath = String(file?.file_path || '').toLowerCase();
+  return Boolean(filePath && (!file.file_size || file.file_size <= 128_000) && /\.(webp|png|jpg|jpeg)$/.test(filePath));
+}
+function rememberUnavailableSticker(key) {
+  unavailableStickerCache.set(key, Date.now() + unavailableStickerTtl);
+  while (unavailableStickerCache.size > 256) unavailableStickerCache.delete(unavailableStickerCache.keys().next().value);
+}
+function isRememberedUnavailableSticker(key) {
+  const expires = unavailableStickerCache.get(key);
+  if (!expires) return false;
+  if (expires > Date.now()) return true;
+  unavailableStickerCache.delete(key);
+  return false;
+}
 
 function ffaToken() {
   const encrypted = getSetting(db, 'ffa_token');
@@ -237,7 +256,7 @@ app.post('/api/sticker-packs', route(async (req, res) => {
   const pack = await packCache(`${bot.id}:${name}`, async () => {
     const pack = await botCall(bot.token, 'getStickerSet', { name });
     return { title: pack.title, stickers: (pack.stickers || []).filter(item => item.custom_emoji_id).slice(0, 120)
-    .map(item => ({ id: item.custom_emoji_id, alt: item.emoji || '🙂', thumbnailId: item.thumbnail?.file_id || item.file_id || null })) };
+    .map(item => ({ id: item.custom_emoji_id, alt: item.emoji || '🙂', thumbnailId: item.thumbnail?.file_id || (!item.is_animated && !item.is_video ? item.file_id : null) })) };
   });
   res.json({ name, ...pack });
 }));
@@ -281,37 +300,61 @@ app.get('/api/sticker-image', route(async (req, res) => {
   const emojiId = String(req.query.emoji || '');
   if (fileId && !/^[A-Za-z0-9_-]{10,300}$/.test(fileId)) return res.sendStatus(400);
   if (!fileId && !/^\d{5,30}$/.test(emojiId)) return res.sendStatus(400);
-  const image = await stickerCache(bot.id + ':' + (fileId || `emoji:${emojiId}`), async () => {
-    let file;
-    if (fileId) {
-      try { file = await botCall(bot.token, 'getFile', { file_id:fileId }); }
-      catch (error) { if (!emojiId) throw error; }
-    }
-    // Telegram file_ids are scoped to the bot that obtained them. Saved packs
-    // can outlive a publisher-bot change, so resolve the current file_id from
-    // the stable custom emoji ID before downloading its thumbnail.
-    if (!file && emojiId) {
-      const stickers = await botCall(bot.token, 'getCustomEmojiStickers', { custom_emoji_ids:[emojiId] });
-      const sticker = Array.isArray(stickers) ? stickers[0] : null;
-      const currentFileId = sticker?.thumbnail?.file_id || sticker?.file_id;
-      if (!currentFileId) throw new Error('表情缩略图不可用');
-      file = await botCall(bot.token, 'getFile', { file_id:currentFileId });
-    }
-    if (!file.file_path || file.file_size > 128_000 || !/\.(webp|png|jpg|jpeg)$/.test(file.file_path)) throw new Error('表情缩略图不可用');
-    const response = await fetch('https://api.telegram.org/file/bot' + bot.token + '/' + file.file_path, { signal:AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error('表情缩略图下载失败');
-    // Enforce the limit on actual streamed bytes as well as Telegram metadata.
-    const reader = response.body.getReader(); let size = 0; const chunks = [];
-    try {
-      for (;;) {
-        const { done, value } = await reader.read(); if (done) break;
-        size += value.length;
-        if (size > 128_000) { await reader.cancel(); throw new Error('表情缩略图过大'); }
-        chunks.push(Buffer.from(value));
+  const key = bot.id + ':' + (fileId || `emoji:${emojiId}`);
+  if (isRememberedUnavailableSticker(key)) return privateUnavailableImage(res);
+  let image;
+  try {
+    image = await stickerCache(key, async () => {
+      let file;
+      if (fileId) {
+        try { file = await botCall(bot.token, 'getFile', { file_id:fileId }); }
+        catch (error) {
+          if (!emojiId || !error.telegramCode || error.telegramCode < 400 || error.telegramCode >= 500 || error.telegramCode === 429) throw error;
+        }
       }
-    } finally { reader.releaseLock(); }
-    return { bytes:Buffer.concat(chunks), type:path.extname(file.file_path) };
-  });
+      // Telegram file_ids are scoped to the bot that obtained them. Saved packs
+      // can outlive a publisher-bot change, so resolve the current file_id from
+      // the stable custom emoji ID before downloading its thumbnail. If an old
+      // file points to TGS/WEBM, resolve again so an available static thumbnail
+      // wins; otherwise the UI will keep the alt emoji instead of retrying.
+      if (!isImageFile(file) && emojiId) {
+        let stickers;
+        try { stickers = await botCall(bot.token, 'getCustomEmojiStickers', { custom_emoji_ids:[emojiId] }); }
+        catch (error) {
+          if (error.telegramCode && error.telegramCode >= 400 && error.telegramCode < 500 && error.telegramCode !== 429) throw new StickerUnavailableError();
+          throw error;
+        }
+        const sticker = Array.isArray(stickers) ? stickers.find(item => String(item?.custom_emoji_id) === emojiId) || stickers[0] : null;
+        const currentFileId = sticker?.thumbnail?.file_id || (!sticker?.is_animated && !sticker?.is_video ? sticker?.file_id : null);
+        if (!currentFileId) throw new StickerUnavailableError();
+        try { file = await botCall(bot.token, 'getFile', { file_id:currentFileId }); }
+        catch (error) {
+          if (error.telegramCode && error.telegramCode >= 400 && error.telegramCode < 500 && error.telegramCode !== 429) throw new StickerUnavailableError();
+          throw error;
+        }
+      }
+      if (!isImageFile(file)) throw new StickerUnavailableError();
+      const response = await fetch('https://api.telegram.org/file/bot' + bot.token + '/' + file.file_path, { signal:AbortSignal.timeout(15000) });
+      if (!response.ok) throw new StickerUnavailableError();
+      // Enforce the limit on actual streamed bytes as well as Telegram metadata.
+      const reader = response.body.getReader(); let size = 0; const chunks = [];
+      try {
+        for (;;) {
+          const { done, value } = await reader.read(); if (done) break;
+          size += value.length;
+          if (size > 128_000) { await reader.cancel(); throw new StickerUnavailableError(); }
+          chunks.push(Buffer.from(value));
+        }
+      } finally { reader.releaseLock(); }
+      return { bytes:Buffer.concat(chunks), type:path.extname(file.file_path).toLowerCase() };
+    });
+  } catch (error) {
+    if (error?.code === 'STICKER_UNAVAILABLE') {
+      rememberUnavailableSticker(key);
+      return privateUnavailableImage(res);
+    }
+    throw error;
+  }
   privateImage(res); res.type(image.type).send(image.bytes);
 }));
 

@@ -145,6 +145,21 @@ test('thumbnail leaves original intact; private image auth and hashed asset cach
   console.log(`Thumbnail ${original.length} -> ${bytes.length} bytes; original byte equality verified`);
 });
 
+test('unavailable custom emoji thumbnails degrade to alt text and stop retrying', async ({ page, request }) => {
+  const headers = await open(page, request);
+  const requests = []; page.on('request', r => { if (r.url().includes('/sticker-image?')) requests.push(r.url()); });
+  await page.locator('#bodyEmoji').click(); await expandPack(page); await page.locator('#pack').fill('broken_pack'); await page.locator('#loadPack').click();
+  await expect(page.locator('.emoji-choice')).toHaveCount(1); await expect(page.locator('.emoji-choice').first()).toHaveText('🧪');
+  await expect(page.locator('.emoji-choice').first()).toHaveAttribute('data-image-state', 'unavailable');
+  expect(requests.length).toBe(1);
+  await expandPack(page); await page.locator('#pack').fill('broken_pack'); await page.locator('#loadPack').click();
+  await expect(page.locator('.emoji-choice').first()).toHaveText('🧪'); expect(requests.length).toBe(1);
+  const missing = await request.get('/api/sticker-image?emoji=9999999999999999999', { headers });
+  expect(missing.status()).toBe(404); expect(missing.headers()['cache-control']).toContain('max-age=600');
+  const animated = await request.get('/api/sticker-image?id=animated_12345&emoji=8888888888888888888', { headers });
+  expect(animated.status()).toBe(404);
+});
+
 
 test('storage failure is visible and never mislabels a successful server save', async ({ page, request }) => {
   await open(page, request);
