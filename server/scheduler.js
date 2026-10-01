@@ -36,6 +36,19 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     return createRun(task, 'IMMEDIATE', Date.now(), `now:${task.id}:${key}`);
   }
 
+  function queueBroadcast(item) {
+    const bot = publisher();
+    if (!bot) throw new Error('请先配置发布机器人');
+    const players = Array.isArray(item.players) ? item.players : [];
+    if (!players.length || players.length > 100000) throw new Error('请选择 1–100000 个有效玩家');
+    const now = Date.now();
+    const result = db.prepare(`INSERT INTO broadcasts(name,delta_json,buttons_json,media_id,bot_id,status,total_count,created_at)
+      VALUES(?,?,?,?,?,'PENDING',?,?)`).run(item.name, item.deltaJson, item.buttonsJson, item.mediaId || null, bot.id, players.length, now);
+    const add = db.prepare('INSERT INTO broadcast_deliveries(broadcast_id,telegram_id,display_name,status) VALUES(?,?,?,?)');
+    db.transaction(() => { for (const player of players) add.run(result.lastInsertRowid, String(player.telegramId), String(player.displayName || ''), 'PENDING'); })();
+    return Number(result.lastInsertRowid);
+  }
+
   function queueDue(now) {
     const tasks = db.prepare("SELECT * FROM tasks WHERE status='ACTIVE' AND next_at<=? ORDER BY next_at LIMIT 30").all(now);
     for (const task of tasks) {
@@ -91,6 +104,29 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     }
   }
 
+  async function sendBroadcastOne(row, now) {
+    const claimed = db.prepare("UPDATE broadcast_deliveries SET status='SENDING',started_at=? WHERE id=? AND status='PENDING'").run(now, row.id);
+    if (!claimed.changes) return;
+    let attempted = false;
+    try {
+      const bot = publisher();
+      if (!bot || bot.id !== row.bot_id) throw new Error('发布机器人身份已变更');
+      const formatted = renderDelta(JSON.parse(row.delta_json));
+      const buttons = keyboard(JSON.parse(row.buttons_json));
+      const media = row.media_id ? db.prepare('SELECT * FROM media WHERE id=?').get(row.media_id) : null;
+      if (row.media_id && !media) throw new Error('图片不存在');
+      if (media && formatted.text.length > 1024) throw new Error('图片说明文字超过 1024 字符');
+      attempted = true;
+      const sent = media
+        ? await api.sendPhoto(bot.token, row.telegram_id, media.file_path, media.mime, formatted.text, formatted.entities, buttons)
+        : await api.botCall(bot.token, 'sendMessage', { chat_id: row.telegram_id, text: formatted.text, entities: formatted.entities, ...(buttons ? { reply_markup: buttons } : {}) });
+      db.prepare("UPDATE broadcast_deliveries SET status='SUCCESS',telegram_message_id=?,completed_at=? WHERE id=?").run(String(sent.message_id), Date.now(), row.id);
+    } catch (error) {
+      const status = !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
+      db.prepare('UPDATE broadcast_deliveries SET status=?,error_text=?,completed_at=? WHERE id=?').run(status, safeTelegramError(error), Date.now(), row.id);
+    }
+  }
+
   async function tick() {
     if (running) return;
     running = true;
@@ -102,6 +138,13 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       const rows = db.prepare(`SELECT d.*,r.bot_id,r.delta_json,r.buttons_json,r.media_id FROM deliveries d
         JOIN runs r ON r.id=d.run_id WHERE d.status='PENDING' ORDER BY d.id LIMIT 20`).all();
       for (const row of rows) await sendOne(row, now);
+      const broadcasts = db.prepare(`SELECT d.*,b.bot_id,b.delta_json,b.buttons_json,b.media_id FROM broadcast_deliveries d
+        JOIN broadcasts b ON b.id=d.broadcast_id WHERE d.status='PENDING' ORDER BY d.id LIMIT 20`).all();
+      for (const row of broadcasts) await sendBroadcastOne(row, now);
+      db.prepare(`UPDATE broadcasts SET status='RUNNING',started_at=COALESCE(started_at,?) WHERE status='PENDING' AND EXISTS
+        (SELECT 1 FROM broadcast_deliveries d WHERE d.broadcast_id=broadcasts.id AND d.status IN ('SENDING','SUCCESS','FAILED','UNKNOWN'))`).run(now);
+      db.prepare(`UPDATE broadcasts SET status='COMPLETED',completed_at=? WHERE status IN ('PENDING','RUNNING') AND NOT EXISTS
+        (SELECT 1 FROM broadcast_deliveries d WHERE d.broadcast_id=broadcasts.id AND d.status IN ('PENDING','SENDING'))`).run(now);
       db.prepare(`UPDATE runs SET status='COMPLETED' WHERE status='PENDING' AND NOT EXISTS
         (SELECT 1 FROM deliveries d WHERE d.run_id=runs.id AND d.status IN ('PENDING','SENDING'))`).run();
     } finally { running = false; }
@@ -114,5 +157,5 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     tick().catch(error => console.error('Activity tick:', safeTelegramError(error)));
   }
   function stop() { if (timer) clearInterval(timer); timer = null; }
-  return { start, stop, tick, queueNow, queueDue, publisher };
+  return { start, stop, tick, queueNow, queueDue, queueBroadcast, publisher };
 }

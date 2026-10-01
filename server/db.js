@@ -44,6 +44,34 @@ export function openDatabase(dataDir) {
       UNIQUE(run_id, target_id)
     );
     CREATE INDEX IF NOT EXISTS delivery_pending ON deliveries(status, id);
+    CREATE TABLE IF NOT EXISTS sticker_packs(
+      id INTEGER PRIMARY KEY, bot_id TEXT NOT NULL, name TEXT NOT NULL,
+      title TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+      UNIQUE(bot_id, name)
+    );
+    CREATE TABLE IF NOT EXISTS sticker_pack_items(
+      id INTEGER PRIMARY KEY, pack_id INTEGER NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
+      emoji_id TEXT NOT NULL, alt TEXT NOT NULL, thumbnail_id TEXT, position INTEGER NOT NULL,
+      UNIQUE(pack_id, emoji_id)
+    );
+    CREATE TABLE IF NOT EXISTS players(
+      id INTEGER PRIMARY KEY, telegram_id TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL DEFAULT '',
+      username TEXT NOT NULL DEFAULT '', platform_id TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
+      first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'ffa'
+    );
+    CREATE INDEX IF NOT EXISTS players_name ON players(display_name);
+    CREATE TABLE IF NOT EXISTS broadcasts(
+      id INTEGER PRIMARY KEY, name TEXT NOT NULL, delta_json TEXT NOT NULL, buttons_json TEXT NOT NULL,
+      media_id INTEGER REFERENCES media(id), bot_id TEXT NOT NULL, status TEXT NOT NULL,
+      total_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, started_at INTEGER, completed_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS broadcast_deliveries(
+      id INTEGER PRIMARY KEY, broadcast_id INTEGER NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+      telegram_id TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
+      telegram_message_id TEXT, error_text TEXT, started_at INTEGER, completed_at INTEGER,
+      UNIQUE(broadcast_id, telegram_id)
+    );
+    CREATE INDEX IF NOT EXISTS broadcast_pending ON broadcast_deliveries(status, id);
   `);
   return db;
 }

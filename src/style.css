@@ -3,3 +3,5 @@
 .emoji-choice.selected{outline:3px solid var(--accent);outline-offset:1px}.preview-button:has(img){display:inline-flex;align-items:center;justify-content:center;gap:3px}
 
 .editor-footer{flex-wrap:wrap;gap:8px}#linkDialog .wrap-actions{margin-top:18px}#linkError{color:#d04b54}
+.pack-tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 0}.pack-tab{white-space:nowrap;min-height:34px;padding:7px 10px;font-size:12px}
+.file-button{display:inline-block;margin:0;padding:9px 14px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer}
