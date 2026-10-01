@@ -23,12 +23,12 @@ test('mobile text links: add, edit, remove, preserve emoji, persist and render e
   await page.locator('#linkUrl').fill('https://t.me/example/60');
   await page.screenshot({ path: 'test-results/text-link-dialog.png', fullPage: true });
   await page.locator('#saveLink').click();
-  const link = page.locator('.ql-editor a');
+  const link = page.locator('#message .ql-editor a');
   await expect(link).toHaveText('领取福利'); await expect(link).toHaveAttribute('href', 'https://t.me/example/60');
-  await link.click(); await expect(page.locator('#linkText')).toHaveValue('领取福利');
+  await link.click(); await page.locator('#editLink').click(); await expect(page.locator('#linkText')).toHaveValue('领取福利');
   await page.locator('#linkText').fill('官方频道'); await page.locator('#linkUrl').fill('https://t.me/example');
   await page.locator('#saveLink').click(); await expect(link).toHaveText('官方频道');
-  await link.click(); await page.locator('#linkUrl').fill('javascript:alert(1)'); await page.locator('#saveLink').click();
+  await link.click(); await page.locator('#editLink').click(); await page.locator('#linkUrl').fill('javascript:alert(1)'); await page.locator('#saveLink').click();
   await expect(page.locator('#linkError')).toContainText('https://');
   await page.locator('#linkUrl').fill('https://t.me/example'); await page.locator('#saveLink').click();
   await page.locator('[name=target]').first().check(); await page.locator('#save').click();
@@ -37,8 +37,8 @@ test('mobile text links: add, edit, remove, preserve emoji, persist and render e
   const task = await (await request.get(`/api/tasks/${draft.taskId}`, { headers: { 'x-telegram-init-data': signedData() } })).json();
   expect(renderDelta(JSON.parse(task.delta_json)).entities).toContainEqual({ type: 'text_link', offset: 0, length: 4, url: 'https://t.me/example' });
   await page.reload(); await expect(link).toHaveText('官方频道');
-  await link.click(); await page.locator('#removeLink').click();
-  await expect(link).toHaveCount(0); await expect(page.locator('.ql-editor')).toHaveText('官方频道');
+  await link.click(); await page.locator('#editLink').click(); await page.locator('#removeLink').click();
+  await expect(link).toHaveCount(0); await expect(page.locator('#message .ql-editor')).toHaveText('官方频道');
   await expect(page.locator('#saveStatus')).toContainText('本机已暂存');
   // Selection formatting must keep embeds and bold rather than replace them with plain text.
   await page.evaluate(() => {
@@ -46,11 +46,11 @@ test('mobile text links: add, edit, remove, preserve emoji, persist and render e
     draft.delta = { ops: [{ insert: { customEmoji: { id: '5432101234567890123', alt: '🔥' } }, attributes: { bold: true, link: 'https://t.me/example' } }, { insert: '专属', attributes: { bold: true, link: 'https://t.me/example' } }, { insert: '\n' }] };
     localStorage.setItem('tgzhushou:draft:v1', JSON.stringify(draft));
   });
-  await page.reload(); await link.first().click(); await page.locator('#linkUrl').fill('https://t.me/updated'); await page.locator('#saveLink').click();
-  await expect(page.locator('.ql-editor .custom-emoji')).toHaveCount(1);
-  await expect(page.locator('.ql-editor strong')).toHaveCount(1);
+  await page.reload(); await link.first().click(); await page.locator('#editLink').click(); await page.locator('#linkUrl').fill('https://t.me/updated'); await page.locator('#saveLink').click();
+  await expect(page.locator('#message .ql-editor .custom-emoji')).toHaveCount(1);
+  await expect(page.locator('#message .ql-editor strong')).toHaveCount(1);
   await expect(link).toHaveAttribute('href', 'https://t.me/updated');
-  await link.click(); await page.locator('#removeLink').click(); await expect(page.locator('.ql-editor .custom-emoji')).toHaveCount(1);
+  await link.click(); await page.locator('#editLink').click(); await page.locator('#removeLink').click(); await expect(page.locator('#message .ql-editor .custom-emoji')).toHaveCount(1);
   expect(errors).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

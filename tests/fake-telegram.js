@@ -14,6 +14,7 @@ globalThis.fetch=async(url,options={})=>{
   else if(method==='getStickerSet') result={title:'测试表情包',stickers:[{custom_emoji_id:'5432101234567890123',emoji:'🔥'},{custom_emoji_id:'5432101234567890124',emoji:'💎'}]};
   else if(method==='sendMessage') result={message_id:456,entities:body.entities||[],reply_markup:body.reply_markup};
   else if(method==='sendPhoto') result={message_id:457,caption_entities:JSON.parse(options.body.get('caption_entities')||'[]'),reply_markup:JSON.parse(options.body.get('reply_markup')||'null')};
+  else if(['editMessageText','editMessageCaption','editMessageMedia','deleteMessage'].includes(method)) result=true;
   else if(['setChatMenuButton','setWebhook'].includes(method)) result=true;
   else throw new Error(`Unexpected mock Telegram method ${method}`);
   return Response.json({ok:true,result});

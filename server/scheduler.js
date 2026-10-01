@@ -40,7 +40,7 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     const bot = publisher();
     if (!bot) throw new Error('请先配置发布机器人');
     const players = Array.isArray(item.players) ? item.players : [];
-    if (!players.length || players.length > 100000) throw new Error('请选择 1–100000 个有效玩家');
+    if (!players.length || players.length > 100000) throw new Error('请选择 1–100000 个有效用户');
     const now = Date.now();
     const result = db.prepare(`INSERT INTO broadcasts(name,delta_json,buttons_json,media_id,bot_id,status,total_count,created_at)
       VALUES(?,?,?,?,?,'PENDING',?,?)`).run(item.name, item.deltaJson, item.buttonsJson, item.mediaId || null, bot.id, players.length, now);

@@ -1,3 +1,4 @@
+import { sentActions } from './sent-actions.js';
 import express from 'express';
 import sharp from 'sharp';
 import { createAssetCache } from './asset-cache.js';
@@ -53,6 +54,9 @@ app.use('/api', (req, res, next) => {
 
 const route = fn => async (req, res, next) => { try { await fn(req, res); } catch (error) { next(error); } };
 const currentBot = () => scheduler.publisher();
+const sent = sentActions(db, currentBot);
+app.get('/api/sent/:kind/:id', route(async(req,res)=>res.json(sent.read(req.params.kind,Number(req.params.id)))));
+app.post('/api/sent/:kind/:id', route(async(req,res)=>res.json(await sent.act(req.params.kind,Number(req.params.id),req.body||{}))));
 const stickerCache = createAssetCache({ limit:128, ttl:3600000 });
 const packCache = createAssetCache({ limit:16, ttl:600000 });
 const previewCache = createAssetCache({ limit:16, ttl:3600000 });
@@ -169,7 +173,7 @@ app.get('/api/broadcasts', route(async (_req, res) => {
 app.get('/api/broadcasts/:id', route(async (req, res) => {
   const item = db.prepare('SELECT * FROM broadcasts WHERE id=?').get(Number(req.params.id));
   if (!item) return res.sendStatus(404);
-  res.json({ ...item, deliveries: db.prepare('SELECT * FROM broadcast_deliveries WHERE broadcast_id=? ORDER BY id').all(item.id) });
+  res.json({ ...item, deliveries: db.prepare(`SELECT d.*,c.deleted,c.state AS last_action,c.error AS last_error FROM broadcast_deliveries d LEFT JOIN sent_changes c ON c.kind='broadcasts' AND c.delivery_id=d.id WHERE d.broadcast_id=? ORDER BY d.id`).all(item.id) });
 }));
 
 app.post('/api/broadcasts', route(async (req, res) => {
@@ -182,10 +186,10 @@ app.post('/api/broadcasts', route(async (req, res) => {
   if (mediaId && !db.prepare('SELECT id FROM media WHERE id=?').get(mediaId)) throw new Error('图片不存在');
   if (mediaId && formatted.text.length > 1024) throw new Error('图片说明最多 1024 字符');
   const ids = [...new Set((Array.isArray(req.body?.playerIds) ? req.body.playerIds : []).map(normalizeTelegramId).filter(Boolean))];
-  if (!ids.length) throw new Error('请选择至少一个有效玩家');
+  if (!ids.length) throw new Error('请选择至少一个有效用户');
   const placeholders = ids.map(() => '?').join(',');
   const players = db.prepare(`SELECT telegram_id AS telegramId,display_name AS displayName FROM players WHERE active=1 AND telegram_id IN (${placeholders})`).all(...ids);
-  if (players.length !== ids.length) throw new Error('部分玩家不存在或已停用，请刷新名单后重试');
+  if (players.length !== ids.length) throw new Error('部分用户不存在或已停用，请刷新名单后重试');
   const broadcastId = scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players });
   scheduler.tick().catch(error => console.error('Broadcast tick:', safeTelegramError(error)));
   res.json({ id: broadcastId, total: players.length });
@@ -447,7 +451,7 @@ app.get('/api/runs', route(async (_req, res) => {
 app.get('/api/runs/:id', route(async (req, res) => {
   const run = db.prepare('SELECT * FROM runs WHERE id=?').get(Number(req.params.id));
   if (!run) return res.sendStatus(404);
-  res.json({ ...run, deliveries: db.prepare('SELECT * FROM deliveries WHERE run_id=? ORDER BY id').all(run.id) });
+  res.json({ ...run, deliveries: db.prepare(`SELECT d.*,c.deleted,c.state AS last_action,c.error AS last_error FROM deliveries d LEFT JOIN sent_changes c ON c.kind='runs' AND c.delivery_id=d.id WHERE d.run_id=? ORDER BY d.id`).all(run.id) });
 }));
 
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');

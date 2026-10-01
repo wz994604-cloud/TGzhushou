@@ -23,15 +23,15 @@ test('debounced draft, closed preview, reload flush and truthful server save sta
     Storage.prototype.setItem = function(key, value) { if (key === 'tgzhushou:draft:v1') window.draftWrites++; return original.call(this, key, value); };
   });
   await page.locator('#name').fill('输入减负');
-  await page.locator('.ql-editor').pressSequentially('abcdef', { delay:20 });
+  await page.locator('#toggleWriting').click();await page.locator('#message .ql-editor').pressSequentially('abcdef', { delay:20 });
   expect(await page.evaluate(() => window.draftWrites)).toBe(0);
   await expect(page.locator('#saveStatus')).toContainText('本机已暂存');
   expect(await page.evaluate(() => window.draftWrites)).toBe(1);
   await expect(page.locator('#preview')).toBeEmpty();
   await page.locator('#previewPanel summary').click();
   await expect(page.locator('#preview')).toContainText('abcdef');
-  await page.locator('.ql-editor').fill('刷新前最后输入'); await page.reload();
-  await expect(page.locator('.ql-editor')).toHaveText('刷新前最后输入');
+  await page.locator('#toggleWriting').evaluate(n=>{if(document.querySelector('#message .ql-editor').contentEditable==='false')n.click();});await page.locator('#message .ql-editor').fill('刷新前最后输入'); await page.reload();
+  await expect(page.locator('#message .ql-editor')).toHaveText('刷新前最后输入');
   await page.locator('[name=target]').first().check(); await page.locator('#save').click();
   await expect(page.locator('#saveStatus')).toHaveText('服务器已保存');
   await page.locator('#name').fill('修改后未同步');
@@ -59,7 +59,7 @@ test('emoji picker loads 24 at a time and reuses image blobs', async ({ page, re
   await expect(page.locator('.emoji-choice img')).toHaveCount(48);
   const before = requests.length;
   await page.locator('.emoji-choice').first().click(); await page.locator('#closeEmoji').click();
-  await expect(page.locator('.ql-editor .custom-emoji img')).toHaveCount(1);
+  await expect(page.locator('#message .ql-editor .custom-emoji img')).toHaveCount(1);
   await page.locator('#bodyEmoji').click(); await expandPack(page); await page.locator('#loadPack').click();
   await expect(page.locator('.emoji-choice img')).toHaveCount(24);
   expect(requests.length).toBe(before);
@@ -74,7 +74,7 @@ test('emoji picker loads 24 at a time and reuses image blobs', async ({ page, re
 
 test('emoji keyboard keeps long text editable and inserts at different caret positions', async ({ page, request }) => {
   await open(page, request);
-  const editor = page.locator('.ql-editor');
+  const editor = page.locator('#message .ql-editor'); await page.locator('#toggleWriting').click();
   await editor.fill(Array.from({length:30}, (_,i) => '第' + (i+1) + '行活动文案').join('\n'));
   await page.locator('#bodyEmoji').click();
   const panel = page.locator('#emojiDialog');
@@ -147,7 +147,7 @@ test('thumbnail leaves original intact; private image auth and hashed asset cach
 test('storage failure is visible and never mislabels a successful server save', async ({ page, request }) => {
   await open(page, request);
   await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('quota'); }; });
-  await page.locator('#name').fill('存储失败测试'); await page.locator('.ql-editor').fill('仍可保存服务器');
+  await page.locator('#name').fill('存储失败测试'); await page.locator('#toggleWriting').evaluate(n=>{if(document.querySelector('#message .ql-editor').contentEditable==='false')n.click();});await page.locator('#message .ql-editor').fill('仍可保存服务器');
   await page.locator('[name=target]').first().check();
   await expect(page.locator('#saveStatus')).toContainText('本机暂存失败');
   await page.locator('#save').click();
@@ -157,7 +157,7 @@ test('storage failure is visible and never mislabels a successful server save', 
 
 test('emoji keyboard backspace supports selection, graphemes, embeds, undo and hold release', async ({ page, request }) => {
   await open(page, request);
-  const editor = page.locator('.ql-editor'), key = page.locator('#emojiBackspace');
+  const editor = page.locator('#message .ql-editor'), key = page.locator('#emojiBackspace'); await page.locator('#toggleWriting').click();
   await editor.fill('甲乙'); await editor.press('End');
   await page.locator('#bodyEmoji').click(); await key.click();
   await expect(editor).toHaveText('甲'); await expect(page.locator('#emojiDialog')).toBeVisible();
@@ -196,7 +196,7 @@ test('emoji list scrolls to the last item without a load-more button', async ({ 
     await page.locator('#emojiGrid').evaluate(node => {node.scrollTop=node.scrollHeight;});
     await expect(page.locator('.emoji-choice')).toHaveCount(count);
   }
-  await page.locator('.emoji-choice').last().click(); await expect(page.locator('.ql-editor .custom-emoji')).toHaveCount(1);
+  await page.locator('.emoji-choice').last().click(); await expect(page.locator('#message .ql-editor .custom-emoji')).toHaveCount(1);
 });
 
 async function expandPack(page) { if (!await page.locator('#packSettings').evaluate(n => n.open)) await page.locator('#packSettings summary').click(); }
@@ -213,6 +213,6 @@ test('pack controls collapse by default and after loading or switching', async (
   await expect(page.locator('#pack')).toBeHidden(); await expandPack(page);
   await page.locator('#packHistory').selectOption('batch_pack'); await expect(page.locator('#packHistory')).toBeHidden();
   await expect(page.locator('.emoji-choice')).toHaveCount(24);
-  await page.locator('.emoji-choice').first().click(); await expect(page.locator('.ql-editor .custom-emoji')).toHaveCount(1);
+  await page.locator('.emoji-choice').first().click(); await expect(page.locator('#message .ql-editor .custom-emoji')).toHaveCount(1);
   await page.screenshot({path:'test-results/emoji-pack-collapsed.png'});
 });

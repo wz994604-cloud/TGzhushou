@@ -48,3 +48,15 @@ export async function sendPhoto(token, chatId, path, mime, caption, captionEntit
 export function safeTelegramError(error) {
   return String(error?.message || 'Telegram 请求失败').replace(/\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g, '[REDACTED]').slice(0, 300);
 }
+
+export async function editPhoto(token, payload, media, caption, entities, replyMarkup) {
+  const form=new FormData();
+  form.set('chat_id',String(payload.chat_id));form.set('message_id',String(payload.message_id));
+  form.set('photo',new Blob([await fs.readFile(media.file_path)],{type:media.mime}),'edited-image');
+  form.set('media',JSON.stringify({type:'photo',media:'attach://photo',caption,caption_entities:multipartCaptionEntities(caption, entities)}));
+  form.set('reply_markup',JSON.stringify(replyMarkup));
+  const response=await fetch(`${API}${token}/editMessageMedia`,{method:'POST',body:form,signal:AbortSignal.timeout(30000)});
+  const body=await response.json();
+  if(!body.ok)throw Object.assign(new Error(body.description||'图片修改失败'),{telegramCode:body.error_code||response.status});
+  return body.result;
+}

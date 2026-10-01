@@ -11,12 +11,13 @@ export function installLinkEditor(Quill, quill) {
     <div class="wrap-actions"><button id="saveLink" class="primary" type="submit">确定</button><button id="removeLink" class="quiet danger-text" type="button">移除链接</button><button id="cancelLink" class="quiet" type="button">取消</button></div></form>`;
   document.body.append(dialog);
   const field = id => dialog.querySelector(`#${id}`);
-  let lastRange = null, editing = null;
+  let lastRange = null, editing = null, selectedAnchor = null, wasEnabled = false;
   quill.on('selection-change', range => { if (range) lastRange = range; });
   const labelFor = range => quill.getContents(range.index, range.length).ops
     .map(op => typeof op.insert === 'string' ? op.insert : op.insert?.customEmoji?.alt || '').join('');
 
   function open(anchor) {
+    wasEnabled=quill.isEnabled();quill.enable(true);
     let range = quill.getSelection() || lastRange || { index: quill.getLength() - 1, length: 0 };
     if (!anchor && range.length === 0) {
       const [leaf] = quill.getLeaf(range.index);
@@ -40,11 +41,13 @@ export function installLinkEditor(Quill, quill) {
   }
   function finish(length = editing.length) {
     dialog.close();
-    quill.focus();
+    quill.blur();
     quill.setSelection(editing.index + length, 0, 'silent');
     quill.format('link', false, 'silent');
+    quill.blur();
     quill.theme.tooltip?.hide();
   }
+  dialog.addEventListener('close',()=>{quill.enable(wasEnabled);quill.blur();});
   field('linkForm').addEventListener('submit', event => {
     event.preventDefault();
     const text = field('linkText').value, url = field('linkUrl').value.trim();
@@ -71,9 +74,11 @@ export function installLinkEditor(Quill, quill) {
   });
   field('removeLink').onclick = () => { quill.formatText(editing.index, editing.length, 'link', false, 'user'); finish(); };
   field('cancelLink').onclick = () => dialog.close();
-  document.getElementById('editLink').onclick = () => open();
+  document.getElementById('editLink').onclick = () => { open(selectedAnchor?.isConnected ? selectedAnchor : null); selectedAnchor=null; };
+
   quill.root.addEventListener('click', event => {
+    selectedAnchor=null;
     const anchor = event.target.closest('a');
-    if (anchor) { event.preventDefault(); event.stopPropagation(); open(anchor); }
+    if (anchor) { event.preventDefault(); event.stopPropagation(); selectedAnchor=anchor; quill.theme.tooltip?.hide(); }
   });
 }
