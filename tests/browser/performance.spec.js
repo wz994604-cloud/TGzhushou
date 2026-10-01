@@ -131,6 +131,8 @@ test('thumbnail leaves original intact; private image auth and hashed asset cach
   expect((await request.get('/api/sticker-image?id=mock_thumbnail_1')).status()).toBe(401);
   const sticker = await request.get('/api/sticker-image?id=mock_thumbnail_1', { headers });
   expect(sticker.ok()).toBeTruthy(); expect(sticker.headers()['cache-control']).toContain('private');
+  const refreshedSticker = await request.get('/api/sticker-image?emoji=5432101234567890123', { headers });
+  expect(refreshedSticker.ok()).toBeTruthy();
   const src = await page.locator('script[type=module]').getAttribute('src');
   expect((await request.get(src)).headers()['cache-control']).toBe('public, max-age=31536000, immutable');
   expect((await request.get('/')).headers()['cache-control']).toBe('no-store');

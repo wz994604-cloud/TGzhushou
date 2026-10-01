@@ -10,6 +10,7 @@ globalThis.fetch=async(url,options={})=>{
   else if(method==='getChat') result={id:body.chat_id==='@test_channel'?-1001:-1002,title:body.chat_id==='@test_channel'?'测试频道':'测试群',type:body.chat_id==='@test_channel'?'channel':'supergroup'};
   else if(method==='getChatMember') result={status:'administrator',can_post_messages:true};
   else if(method==='getFile') result={file_path:'emoji/test.png',file_size:68};
+  else if(method==='getCustomEmojiStickers') result=(body.custom_emoji_ids||[]).map(id=>({custom_emoji_id:id,file_id:'current_emoji_'+id,thumbnail:{file_id:'current_thumbnail_'+id}}));
   else if(method==='getStickerSet' && body.name==='batch_pack') result={title:'分批测试',stickers:Array.from({length:60},(_,i)=>({custom_emoji_id:String(6000000000000000000n+BigInt(i)),emoji:'⭐',thumbnail:{file_id:'mock_thumbnail_'+i}}))};
   else if(method==='getStickerSet') result={title:'测试表情包',stickers:[{custom_emoji_id:'5432101234567890123',emoji:'🔥'},{custom_emoji_id:'5432101234567890124',emoji:'💎'}]};
   else if(method==='sendMessage') result={message_id:456,entities:body.entities||[],reply_markup:body.reply_markup};

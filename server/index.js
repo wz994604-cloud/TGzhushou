@@ -278,9 +278,25 @@ app.get('/api/sticker-image', route(async (req, res) => {
   const bot = currentBot();
   if (!bot) return res.sendStatus(404);
   const fileId = String(req.query.id || '');
-  if (!/^[A-Za-z0-9_-]{10,300}$/.test(fileId)) return res.sendStatus(400);
-  const image = await stickerCache(bot.id + ':' + fileId, async () => {
-    const file = await botCall(bot.token, 'getFile', { file_id:fileId });
+  const emojiId = String(req.query.emoji || '');
+  if (fileId && !/^[A-Za-z0-9_-]{10,300}$/.test(fileId)) return res.sendStatus(400);
+  if (!fileId && !/^\d{5,30}$/.test(emojiId)) return res.sendStatus(400);
+  const image = await stickerCache(bot.id + ':' + (fileId || `emoji:${emojiId}`), async () => {
+    let file;
+    if (fileId) {
+      try { file = await botCall(bot.token, 'getFile', { file_id:fileId }); }
+      catch (error) { if (!emojiId) throw error; }
+    }
+    // Telegram file_ids are scoped to the bot that obtained them. Saved packs
+    // can outlive a publisher-bot change, so resolve the current file_id from
+    // the stable custom emoji ID before downloading its thumbnail.
+    if (!file && emojiId) {
+      const stickers = await botCall(bot.token, 'getCustomEmojiStickers', { custom_emoji_ids:[emojiId] });
+      const sticker = Array.isArray(stickers) ? stickers[0] : null;
+      const currentFileId = sticker?.thumbnail?.file_id || sticker?.file_id;
+      if (!currentFileId) throw new Error('表情缩略图不可用');
+      file = await botCall(bot.token, 'getFile', { file_id:currentFileId });
+    }
     if (!file.file_path || file.file_size > 128_000 || !/\.(webp|png|jpg|jpeg)$/.test(file.file_path)) throw new Error('表情缩略图不可用');
     const response = await fetch('https://api.telegram.org/file/bot' + bot.token + '/' + file.file_path, { signal:AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error('表情缩略图下载失败');

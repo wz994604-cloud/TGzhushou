@@ -167,16 +167,17 @@ function renderPreview() {
   const container = $('preview'); container.replaceChildren();
   if (imageUrl) { const img = document.createElement('img'); img.src = imageUrl; img.alt = '消息图片'; container.append(img); }
   const text = document.createElement('div'); text.className='preview-text';
-  for (const op of quill.getContents().ops) { let node = document.createElement('span'); const custom = op.insert?.customEmoji; node.textContent = typeof op.insert === 'string' ? op.insert : custom?.alt || ''; const a = op.attributes || {}; if (custom) { node.className='custom-emoji'; node.dataset.thumbId=custom.thumbId || ''; } if (a.bold) node.style.fontWeight='700'; if (a.italic) node.style.fontStyle='italic'; if (a.underline) node.style.textDecoration='underline'; if (a.link) { const link=document.createElement('a'); link.textContent=node.textContent; link.href=/^(https:|tg:)/i.test(a.link)?a.link:'#'; link.target='_blank'; link.rel='noopener noreferrer'; node=link; } text.append(node); } container.append(text);
+  for (const op of quill.getContents().ops) { let node = document.createElement('span'); const custom = op.insert?.customEmoji; node.textContent = typeof op.insert === 'string' ? op.insert : custom?.alt || ''; const a = op.attributes || {}; if (custom) { node.className='custom-emoji'; node.dataset.emojiId=custom.id; node.dataset.thumbId=custom.thumbId || ''; } if (a.bold) node.style.fontWeight='700'; if (a.italic) node.style.fontStyle='italic'; if (a.underline) node.style.textDecoration='underline'; if (a.link) { const link=document.createElement('a'); link.textContent=node.textContent; link.href=/^(https:|tg:)/i.test(a.link)?a.link:'#'; link.target='_blank'; link.rel='noopener noreferrer'; node=link; } text.append(node); } container.append(text);
   const rows = new Map(); for (const b of buttons) { const row=rows.get(b.row)||[]; row.push(b); rows.set(b.row,row); }
-  for (const [,row] of [...rows].sort(([a],[b])=>a-b)) { const div=document.createElement('div'); div.className='preview-row'; for(const b of row) { const span=document.createElement('span'); span.className=`preview-button ${b.style}`; span.textContent=b.text ? `${b.iconAlt || ''} ${b.text}`.trim() : ''; if (b.iconThumbId) { span.dataset.thumbId=b.iconThumbId; span.dataset.emojiOnly=b.text ? '0' : '1'; span.dataset.label=b.text || '';  } div.append(span); } container.append(div); } hydrateEmojiImages(container);
+  for (const [,row] of [...rows].sort(([a],[b])=>a-b)) { const div=document.createElement('div'); div.className='preview-row'; for(const b of row) { const span=document.createElement('span'); span.className=`preview-button ${b.style}`; span.textContent=b.text ? `${b.iconAlt || ''} ${b.text}`.trim() : ''; if (b.iconId) { span.dataset.emojiId=b.iconId; span.dataset.thumbId=b.iconThumbId || ''; span.dataset.emojiOnly=b.text ? '0' : '1'; span.dataset.label=b.text || '';  } div.append(span); } container.append(div); } hydrateEmojiImages(container);
 }
 function hydrateEmojiImages(container) {
   for (const node of container.querySelectorAll('[data-thumb-id]')) {
-    const id = node.dataset.thumbId;
-    if (!id || node.dataset.loaded === '1') continue;
+    const id = node.dataset.thumbId, emoji = node.dataset.emojiId || node.dataset.id;
+    if ((!id && !emoji) || node.dataset.loaded === '1') continue;
     node.dataset.loaded = '1';
-    authenticatedImage('/sticker-image?id=' + encodeURIComponent(id)).then(url => {
+    const query = (id ? 'id=' + encodeURIComponent(id) : '') + (emoji ? `${id ? '&' : ''}emoji=` + encodeURIComponent(emoji) : '');
+    authenticatedImage('/sticker-image?' + query).then(url => {
       displayImage(node, url, node.dataset.alt || '', node.dataset.label || '');
     }).catch(() => { delete node.dataset.loaded; });
   }
@@ -260,7 +261,7 @@ function appendEmojiBatch() {
       rememberRecentEmoji(sticker);
     };
     $('emojiGrid').append(button);
-    if (sticker.thumbnailId) authenticatedImage('/sticker-image?id=' + encodeURIComponent(sticker.thumbnailId))
+    if (sticker.thumbnailId || sticker.id) authenticatedImage('/sticker-image?' + (sticker.thumbnailId ? 'id=' + encodeURIComponent(sticker.thumbnailId) + '&' : '') + 'emoji=' + encodeURIComponent(sticker.id))
       .then(url => displayImage(button, url, sticker.alt)).catch(() => {});
   }
   visibleStickers += batch.length;
