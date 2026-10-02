@@ -135,3 +135,51 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   body.emoji-body-open #emojiDialog{z-index:21}
   body.emoji-body-open #chatComposer{z-index:20}
 }
+
+/* Telegram client shell for every first-level module. Chat keeps the existing
+   three-pane grid; the other modules reuse its rail and scroll contract. */
+#workspace:not(:has(#chat:not([hidden]))){display:grid;grid-template-columns:68px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:100dvh;min-height:100dvh;max-width:none;margin:0;padding:0;overflow:hidden;background:#edf2f5}
+#workspace:not(:has(#chat:not([hidden]))) .app-rail{grid-column:1;grid-row:1 / span 2;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 9px;background:#f7f9fb;border-right:1px solid var(--tg-client-line)}
+#workspace:not(:has(#chat:not([hidden]))) .publisher-switch{grid-column:2;grid-row:1;margin:12px 20px 0;max-width:1100px;width:auto;justify-self:center}
+#workspace:not(:has(#chat:not([hidden]))) nav{display:none}
+#workspace:not(:has(#chat:not([hidden])))>.page{grid-column:2;grid-row:2;min-width:0;min-height:0;overflow-y:auto;max-width:1100px;width:100%;margin:0 auto;padding:20px 24px calc(36px + env(safe-area-inset-bottom));scrollbar-gutter:stable}
+#workspace:not(:has(#chat:not([hidden])))>.page>.section-title{position:sticky;top:0;z-index:2;padding:4px 0 14px;background:linear-gradient(#edf2f5 76%,transparent)}
+.publisher-switch{position:relative;opacity:1!important;pointer-events:auto!important;background:var(--tg-client-panel);border-color:var(--tg-client-line);box-shadow:0 1px 2px rgb(25 45 65 / .06)}
+#workspace:has(#chat:not([hidden])) .publisher-switch{opacity:1!important;display:flex;align-items:center;gap:8px;width:230px;padding:4px 8px;background:rgb(255 255 255 / .94);border:1px solid var(--tg-client-line);border-radius:10px;box-shadow:0 4px 14px rgb(25 45 65 / .10)}
+#workspace:has(#chat:not([hidden])) .publisher-switch label{display:block!important}
+.publisher-switch label{color:var(--tg-client-muted);font-size:12px}
+.publisher-switch select{font-weight:700;border-color:transparent;background:#f0f5f8;min-height:42px}
+.chat-head{display:flex;align-items:center;gap:8px}.chat-back{display:none;width:44px;min-width:44px;height:44px;padding:0;border-radius:50%;font-size:30px;line-height:1;background:transparent;color:var(--tg-client-blue)}
+.chat-head #chatTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-main .chat-bubble + .chat-bubble{margin-top:-4px}.chat-main .chat-bubble + .chat-bubble:not(.out){border-top-left-radius:5px}.chat-main .chat-bubble.out + .chat-bubble.out{border-top-right-radius:5px}
+.chat-main .chat-bubble small{font-size:11px}.chat-main .chat-reply-btn,.chat-main .chat-delete-btn{min-width:32px;min-height:32px}
+.chat-main .chat-send-status,.chat-main #chatSendStatus{padding:5px 8px;border-radius:7px}.chat-main #chatSendStatus:not(:empty){background:#eef7fb;color:#167da9}
+#chatConversations:empty,#playerList:empty,#taskList:empty,#runList:empty{min-height:64px}
+#chatConversations>.hint,#playerList>.muted,#taskList>.card.center,#runList>.card.center{padding:28px 18px;border:1px dashed var(--tg-client-line);border-radius:12px;text-align:center;background:#f8fafb}
+#inboxStatus:not(:empty){padding:7px 9px;border-radius:8px;background:#eef7fb}
+#settings .card,#editor .card,#players .card,#tasks #taskList>.card,#logs #runList>.card{border-radius:12px;box-shadow:0 1px 2px rgb(25 45 65 / .06);border-color:var(--tg-client-line)}
+#settings .card>h3,#editor .card>h3{font-size:15px;letter-spacing:.01em}
+#settings .card+.card{margin-top:10px}
+#settings #token,#settings #ffaToken{font-variant-numeric:tabular-nums}
+#settings #browserLogout{min-height:44px}
+#editor .message-preview{background:#fff;border-radius:14px;box-shadow:0 1px 2px rgb(25 45 65 / .08)}
+#editor .actions{padding:8px;border-radius:12px;background:rgb(255 255 255 / .92);border:1px solid var(--tg-client-line);box-shadow:0 8px 24px rgb(25 45 65 / .08)}
+#players .check,#players .list-row,#tasks #taskList>.card,#logs #runList>.card{background:#fff}
+#players .check:has(input:checked){box-shadow:inset 3px 0 var(--tg-client-blue)}
+#tasks #taskList>.card .wrap-actions,#logs #runList>.card .wrap-actions{margin-top:10px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;transition-duration:.001ms!important}}
+@media(max-width:700px){
+  #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:56px minmax(0,1fr)}
+  #workspace:not(:has(#chat:not([hidden]))) .app-rail{padding:12px 7px}
+  #workspace:not(:has(#chat:not([hidden]))) .publisher-switch{margin:8px 10px 0}
+  #workspace:not(:has(#chat:not([hidden])))>.page{padding:12px 12px calc(110px + env(safe-area-inset-bottom))}
+  #workspace:not(:has(#chat:not([hidden])))>.page>.section-title{padding-bottom:10px}
+  #workspace:not(:has(#chat:not([hidden]))) .publisher-switch label{font-size:11px}
+  .chat-back{display:inline-grid;place-items:center}
+  #workspace:has(#chat:not([hidden])) .chat-main .chat-head{padding:6px 10px;min-height:56px}
+  #workspace:has(#chat:not([hidden])) .chat-main .chat-head #chatTitle{font-size:16px}
+  #workspace:has(#chat:not([hidden])) .publisher-switch{top:8px;right:8px;width:150px}
+  .chat-tools button,.chat-tools .file-button{min-width:44px;min-height:44px;padding:9px 10px}
+  .chat-tools #chatSend{margin-left:auto}
+  #editor .actions{position:sticky;bottom:8px;z-index:4;margin:12px 0 0}
+}

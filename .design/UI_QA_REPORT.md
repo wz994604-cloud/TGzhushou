@@ -4,8 +4,8 @@ Target: http://127.0.0.1:5174
 
 ## Screenshots
 
-- Desktop: screenshots/second-round-scroll-pass-desktop.png
-- Mobile: screenshots/second-round-scroll-pass-mobile.png
+- Desktop: screenshots/three-stage-shell-pass-desktop.png
+- Mobile: screenshots/three-stage-shell-pass-mobile.png
 
 ## Desktop Checks
 
