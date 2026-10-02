@@ -52,6 +52,11 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
   const currentId = req => botFor(req)?.id || '';
   const inbox = id => db.prepare('SELECT * FROM publisher_inbox WHERE bot_id=?').get(id);
   const wrapper = fn => async (req,res,next) => { try { await fn(req,res); } catch (error) { next(error); } };
+  async function refreshAvatar(bot, chatId) {
+    const chat = await botApi(bot.token, 'getChat', { chat_id: String(chatId) });
+    const fileId = chat?.photo?.big_file_id || chat?.photo?.small_file_id || null;
+    if (fileId) db.prepare('UPDATE conversations SET avatar_file_id=? WHERE bot_id=? AND chat_id=?').run(fileId,bot.id,String(chatId));
+  }
   function setState(id, status, enabled, error = null) {
     db.prepare(`INSERT INTO publisher_inbox(bot_id,webhook_status,enabled,last_error,checked_at) VALUES(?,?,?,?,?)
       ON CONFLICT(bot_id) DO UPDATE SET webhook_status=excluded.webhook_status,enabled=excluded.enabled,last_error=excluded.last_error,checked_at=excluded.checked_at`)
@@ -67,11 +72,12 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     return { status, enabled, external:status === 'EXTERNAL' };
   }
   app.post('/tg/publisher/:botId', wrapper(async (req,res) => {
-    const id = String(req.params.botId), row = inbox(id);
+    const id = String(req.params.botId), row = inbox(id), bot = scheduler.publisher(id);
     if (!row?.enabled || !row.secret) return res.sendStatus(403);
     const expected = decryptToken(row.secret,configKey);
     if (!sameSecret(req.get('x-telegram-bot-api-secret-token'),expected)) return res.sendStatus(403);
-    saveIncoming(db,id,req.body);
+    const saved = saveIncoming(db,id,req.body);
+    if (saved && bot) refreshAvatar(bot, req.body?.message?.chat?.id).catch(() => {});
     res.sendStatus(200);
   }));
   app.get('/api/inbox/status', wrapper(async (req,res) => {
@@ -100,8 +106,22 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
       AND (?=0 OR last_message_at<? OR (last_message_at=? AND chat_id<?))
       AND (title LIKE ? OR username LIKE ? OR chat_id LIKE ?) ORDER BY last_message_at DESC,chat_id DESC LIMIT ?`)
       .all(id,beforeAt,beforeAt,beforeAt,beforeChat,`%${q}%`,`%${q}%`,`%${q}%`,limit);
+    const bot = botFor(req);
+    if (bot) rows.filter(row => !row.avatar_file_id).slice(0, 20).forEach(row => refreshAvatar(bot,row.chat_id).catch(() => {}));
     const totalUnread = db.prepare('SELECT COALESCE(SUM(unread_count),0) n FROM conversations WHERE bot_id=?').get(id).n;
     res.json({ rows, next:rows.length === limit ? `${rows.at(-1).last_message_at}:${rows.at(-1).chat_id}` : null, totalUnread, cursor });
+  }));
+  app.get('/api/chat/avatars/:botId/:chatId', wrapper(async (req,res) => {
+    const bot = scheduler.publisher(String(req.params.botId));
+    if (!bot) return res.sendStatus(404);
+    const row = inbox(bot.id) && db.prepare('SELECT avatar_file_id FROM conversations WHERE bot_id=? AND chat_id=?').get(bot.id,String(req.params.chatId));
+    if (!row?.avatar_file_id) return res.sendStatus(404);
+    const file = await botApi(bot.token,'getFile',{ file_id:row.avatar_file_id });
+    const response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`);
+    if (!response.ok) return res.sendStatus(404);
+    res.set('Cache-Control','public, max-age=86400');
+    res.type(response.headers.get('content-type') || 'image/jpeg');
+    res.send(Buffer.from(await response.arrayBuffer()));
   }));
   app.get('/api/chat/conversations/:chatId/messages', wrapper(async (req,res) => {
     const id = currentId(req), chat = String(req.params.chatId), before = Number(req.query.before || 0), limit = clamp(req.query.limit,50,100);

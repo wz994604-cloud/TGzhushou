@@ -26,7 +26,7 @@ test('one dashboard isolates targets, tasks, players and private records by publ
   await page.route('https://telegram.org/js/telegram-web-app.js', r=>r.fulfill({ contentType:'application/javascript', body:`window.Telegram={WebApp:{initData:${JSON.stringify(signedData())},ready(){},expand(){}}};` }));
   await page.goto('/');
   await expect(page.locator('#publisherSelect option')).toHaveCount(2);
-  await page.locator('[data-tab=players]').click();
+  await page.getByRole('button',{name:'用户',exact:true}).click();
   await page.locator('#publisherSelect').selectOption('333333');
   await expect(page.locator('#identity')).toContainText('local_test_second');
   await expect(page.locator('#importPlayers')).toBeHidden();

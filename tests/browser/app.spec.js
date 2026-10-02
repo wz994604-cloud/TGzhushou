@@ -5,7 +5,7 @@ async function telegram(page,raw=signedData()) {
   await page.route('https://telegram.org/js/telegram-web-app.js',route=>route.fulfill({contentType:'application/javascript',body:`window.Telegram={WebApp:{initData:${JSON.stringify(raw)},ready(){},expand(){}}};`}));
 }
 test('browser and APIs reject missing or unauthorized Telegram identity',async({page,request})=>{
-  await telegram(page,'');await page.goto('/');await expect(page.getByRole('heading',{name:'从 Telegram 打开'})).toBeVisible();
+  await telegram(page,'');await page.goto('/');await expect(page.getByRole('heading',{name:'登录活动中枢'})).toBeVisible();
   expect((await request.get('/api/bootstrap')).status()).toBe(401);
   expect((await request.get('/api/bootstrap',{headers:{'x-telegram-init-data':signedData(999999)}})).status()).toBe(401);
 });

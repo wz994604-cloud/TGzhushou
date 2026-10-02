@@ -86,6 +86,7 @@ export function openDatabase(dataDir) {
     CREATE TABLE IF NOT EXISTS conversations(
       bot_id TEXT NOT NULL, chat_id TEXT NOT NULL, chat_type TEXT NOT NULL,
       title TEXT NOT NULL DEFAULT '', username TEXT NOT NULL DEFAULT '',
+      avatar_file_id TEXT,
       last_message_id TEXT, last_message_text TEXT NOT NULL DEFAULT '',
       last_message_at INTEGER NOT NULL DEFAULT 0, unread_count INTEGER NOT NULL DEFAULT 0,
       last_read_message_id TEXT, updated_at INTEGER NOT NULL,
@@ -120,6 +121,8 @@ export function openDatabase(dataDir) {
       expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL
     );
   `);
+  const conversationColumns = db.prepare('PRAGMA table_info(conversations)').all().map(column => column.name);
+  if (!conversationColumns.includes('avatar_file_id')) db.exec('ALTER TABLE conversations ADD COLUMN avatar_file_id TEXT');
   // Keep the original settings and players intact so a rollback can still read them.
   const legacyId = db.prepare("SELECT value FROM settings WHERE key='publisher_id'").get()?.value;
   const legacyToken = db.prepare("SELECT value FROM settings WHERE key='publisher_token'").get()?.value;
