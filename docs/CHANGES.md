@@ -1,5 +1,14 @@
 # 修复记录
 
+## TG 风格 Web/PWA Bot 工作台（2026-10-03）
+
+- 默认进入聊天工作台；新增账号式发布机器人切换、会话搜索、未读、分页历史、回复引用、2 秒前台增量刷新。原编写/群发、用户、任务、记录、设置入口保留。
+- 在同一 SQLite 增量新增会话、消息、变更事件、收件箱、浏览器一次性链接及会话表；不删除旧表，不改 `CONFIG_KEY`。历史从收件箱启用后开始，不补旧消息。
+- 发布机器人收件箱先查 `getWebhookInfo`，只对空或本服务 URL 启用独立 secret webhook；外部 URL 仅标记冲突，不覆盖。支持 text/photo/video/document、caption、回复与编辑消息幂等入库。
+- 定时、群发、直接聊天共用格式化发送核心；聊天图片、视频、文件可发送；已发聊天消息接入现有 `sent-actions` 编辑/删除逻辑。
+- 入口机器人 `/login` 生成 5 分钟一次性链接，浏览器换取 24 小时 HttpOnly/Secure/SameSite Cookie；Mini App `initData` 保留。加入 PWA manifest、图标和 service worker。
+- 定向 Node/Playwright 测试使用模拟 Telegram 和临时数据库；未读取真实发布 Bot webhook 状态，未真实发送，未部署生产。
+
 ## 同一后台多发布机器人隔离（2026-10-02）
 
 - 新增加密的发布机器人列表和后台切换；原入口机器人、管理员鉴权及原发布机器人保持不变，新增机器人不暂停原定时任务。

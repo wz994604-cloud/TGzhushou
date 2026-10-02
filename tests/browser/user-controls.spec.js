@@ -8,6 +8,7 @@ test('user folds, complete selected list, blue controls and deliberate editing',
   await page.route('**/api/players?*',r=>{const q=new URL(r.request().url()).searchParams.get('q');return r.fulfill({json:{rows:q?users.slice(1):users,total:q?1:2}});});
   await page.route('**/api/players/ids',r=>r.fulfill({json:{rows:users}}));
   await page.goto('/');await expect(page.locator('#workspace')).toBeVisible();
+  await page.getByRole('button',{name:'编写',exact:true}).click();
   await expect(page.locator('#message .ql-editor')).toHaveAttribute('contenteditable','false');
   await page.locator('#toggleWriting').click();await page.locator('#message .ql-editor').fill('正文');
   await page.locator('#toggleWriting').click();await expect(page.locator('#message .ql-editor')).toHaveAttribute('contenteditable','false');
@@ -32,7 +33,7 @@ test('links require explicit edit and successful broadcasts can be edited and de
   const headers={'x-telegram-init-data':signedData()};
   await request.post('/api/publisher',{headers,data:{token:publisherToken}});
   await page.route('https://telegram.org/js/telegram-web-app.js',r=>r.fulfill({contentType:'application/javascript',body:`window.Telegram={WebApp:{initData:${JSON.stringify(signedData())},ready(){},expand(){}}};`}));
-  await page.goto('/');await page.locator('#editLink').click();await page.locator('#linkText').fill('测试链接');await page.locator('#linkUrl').fill('https://t.me/example');await page.locator('#saveLink').click();
+  await page.goto('/');await page.getByRole('button',{name:'编写',exact:true}).click();await page.locator('#editLink').click();await page.locator('#linkText').fill('测试链接');await page.locator('#linkUrl').fill('https://t.me/example');await page.locator('#saveLink').click();
   await page.locator('#message .ql-editor a').click();await expect(page.locator('#linkDialog')).toBeHidden();
   await page.locator('#editLink').click();await expect(page.locator('#linkUrl')).toHaveValue('https://t.me/example');await page.locator('#cancelLink').click();
   await request.post('/api/players/import',{headers,multipart:{file:{name:'users.csv',mimeType:'text/csv',buffer:Buffer.from('ID,昵称,telegram_id\n1,测试用户,80001\n')}}});

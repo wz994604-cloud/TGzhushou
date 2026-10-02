@@ -14,7 +14,8 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;'
 const fmt = value => value ? new Date(value).toLocaleString('zh-CN', { timeZone:'Asia/Shanghai', hour12:false }) : '—';
 const labels = { DRAFT:'草稿', ACTIVE:'运行中', PAUSED:'已暂停', STOPPED:'已停止', COMPLETED:'已完成', SUCCESS:'成功', FAILED:'失败', UNKNOWN:'待核实', PENDING:'排队中', SENDING:'发送中', CANCELLED:'已取消', EDITED:'已编辑', DELETED:'已删除', RUNNING:'发送中' };
 let data, taskId = null, buttons = [], mediaId = null, imageUrl = '', pickerTarget = null, savedRange = null, pendingSend = null, ready = false, insertedEmbedPending = false;
-let selectedPublisherId = '';
+let selectedPublisherId = localStorage.getItem('tgzhushou:selected-publisher') || '';
+let chatQuill, chatRange = null, activeChat = null, chatCursor = 0, chatButtons = [], chatMedia = null, chatReply = null, chatPolling, hiddenPollTicks = 0, chatRows = [], chatOlderCursor = null, conversationRows = [], conversationNext = null;
 let draftDirty = false, draftTimer, previewTimer, previewDirty = true, serverSnapshot = null;
 const playerCache = new Map();
 let playerPage = 1;
@@ -66,11 +67,12 @@ function displayImage(node, url, alt, label = '') {
 }
 
 $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hidden="true"><svg viewBox="0 0 48 48" role="presentation"><path d="M24 5 28.2 19.8 43 24l-14.8 4.2L24 43l-4.2-14.8L5 24l14.8-4.2L24 5Z" fill="currentColor"/><circle cx="37" cy="11" r="3" fill="currentColor" opacity=".72"/><circle cx="11" cy="37" r="3" fill="currentColor" opacity=".72"/></svg></div><div class="brand-copy"><span class="eyebrow">运营工作台</span><h1>活动中枢</h1><p id="identity">Telegram 活动发布工作台</p></div><div class="header-meta"><span class="online-dot" aria-hidden="true"></span><span class="chip">北京时间</span></div></header>
-<div id="locked" class="card center" hidden><h2>从 Telegram 打开</h2><p>请使用已绑定的管理员账号，从入口机器人的「打开活动后台」进入。</p><p id="authError" class="muted"></p></div>
+<div id="locked" class="card center" hidden><h2>从 Telegram 打开</h2><p>请从入口机器人发送 /login 获取一次性浏览器登录链接，或从 Telegram 打开小程序。</p><p id="authError" class="muted"></p></div>
 <main id="workspace" hidden>
 <div class="publisher-switch"><label for="publisherSelect">当前发布机器人</label><select id="publisherSelect" aria-label="当前发布机器人"></select></div>
-<nav aria-label="功能导航"><button data-tab="editor" class="active">编写</button><button data-tab="players">用户</button><button data-tab="tasks">任务</button><button data-tab="logs">记录</button><button data-tab="settings">设置</button></nav>
-<section id="editor" class="page">
+<nav aria-label="功能导航"><button data-tab="chat" class="active">聊天</button><button data-tab="editor">编写</button><button data-tab="players">用户</button><button data-tab="tasks">任务</button><button data-tab="logs">记录</button><button data-tab="settings">设置</button></nav>
+<section id="chat" class="page"><div class="chat-shell"><aside class="chat-list"><div class="section-title"><h2>会话</h2><span id="chatUnread" class="status">0 未读</span></div><input id="chatSearch" placeholder="搜索会话"><div id="inboxStatus" class="hint"></div><button id="enableInbox" class="quiet" hidden>启用收消息</button><div id="chatConversations"></div><button id="chatMore" class="quiet" hidden>加载更多会话</button></aside><div class="chat-main"><div id="chatHeader" class="chat-head">请选择会话</div><button id="chatOlder" class="quiet" hidden>加载更早消息</button><div id="chatMessages" class="chat-messages"></div><div id="chatComposer" hidden><div id="chatReply" class="hint" hidden></div><div id="chatToolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="chatInput"></div><div class="chat-tools"><button id="chatEmoji" class="quiet">✦ 表情</button><button id="chatLink" class="quiet">链接</button><button id="chatAddButton" class="quiet">＋ 按钮</button><label class="file-button quiet">附件<input id="chatFile" type="file" accept="image/*,video/mp4,video/webm,.pdf,.txt,.zip,.docx,.xlsx" hidden></label><button id="chatSend" class="primary">发送</button></div><div id="chatButtons"></div><p id="chatMedia" class="hint"></p><p id="chatSendStatus" class="hint" role="status"></p></div></div></div></section>
+<section id="editor" class="page" hidden>
 <div class="section-title"><div><h2 id="editorTitle">新建活动</h2><p id="saveStatus" role="status">内容尚未保存到服务器</p></div><button id="reset" class="quiet">新建</button></div>
 <div class="card"><label>活动名称<input id="name" maxlength="100" placeholder="例如：每日活动介绍"></label><div id="composeArea"><label>消息内容</label><button id="toggleWriting" class="quiet" type="button">编辑文案</button><div id="toolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="message"></div><div class="editor-footer"><button id="bodyEmoji" class="quiet">✦ 专属表情</button><button id="editLink" class="quiet">添加 / 编辑链接</button><span id="textCount" class="muted">0 / 4096</span></div></div><details class="editor-help"><summary>编辑说明</summary><p class="hint">点击「添加链接」填写显示文字和地址；选中链接后点击「添加 / 编辑链接」修改。跨应用粘贴可能丢失专属表情身份，请从表情包选择器添加。</p></details>
 <label class="file-label">附带图片 <span class="muted">JPEG / PNG / WebP，最多 5 MB</span><input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="photoBox" hidden><img id="photoPreview" alt="活动图片"><button id="removePhoto" class="quiet">移除图片</button></div></div>
@@ -85,7 +87,7 @@ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hi
 <details id="broadcastPanel" class="card"><summary>私信记录</summary><button id="refreshBroadcasts" class="quiet">刷新</button><div id="broadcastList"></div></details></section>
 <section id="tasks" class="page" hidden><div class="section-title"><div><h2>发布任务</h2><p>查看状态与下次发送时间。</p></div><button id="refreshTasks" class="quiet">刷新</button></div><div id="taskList"></div></section>
 <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
-<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">同一后台管理多个发布机器人，原任务继续运行。发布机器人原有 webhook 不会被接管。</p></div><div id="ffaCard" class="card"><h3>发发娱乐用户接口</h3><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从发发娱乐后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 Railway 的 ADMIN_TG_IDS（兼容 ADMIN_TG_ID）。所有接口均验证 Telegram 签名。</p></div></section>
+<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">同一后台管理多个发布机器人，原任务继续运行。发布机器人 webhook 仅在收件箱安全启用时配置；外部 webhook 不会被覆盖。</p></div><div id="ffaCard" class="card"><h3>发发娱乐用户接口</h3><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从发发娱乐后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 Railway 的 ADMIN_TG_IDS（兼容 ADMIN_TG_ID）；接口验证 Telegram 签名或浏览器安全会话。</p><button id="browserLogout" class="quiet" hidden>退出浏览器登录</button></div></section>
 </main><div id="toast" class="toast" role="status" hidden></div>
 <dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button><button id="savePack" class="quiet">保存</button></div><div id="savedPackTabs" class="pack-tabs"></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><div id="emojiGrid"></div></dialog>`;
 
@@ -115,7 +117,51 @@ quill.root.addEventListener('paste', event => {
   const html = event.clipboardData?.getData('text/html') || '';
   if (/custom_emoji|tg-emoji|data-document-id/.test(html)) toast('粘贴内容中的专属表情可能需要从选择器重新添加。');
 });
-function changeTab(id) { closePicker(); document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); document.querySelectorAll('nav button').forEach(button => button.classList.toggle('active', button.dataset.tab === id)); if (id === 'logs') action(loadRuns); if (id === 'players') action(loadPlayers); }
+chatQuill = new Quill('#chatInput', { theme:'snow', placeholder:'输入消息…', modules:{ toolbar:'#chatToolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
+installLinkEditor(Quill, chatQuill, { trigger:$('chatLink'),dialogId:'chatLinkDialog',idPrefix:'chat-' });
+chatQuill.on('selection-change', range => { if (range) chatRange = range; });
+function chatButtonEditor() {
+  $('chatButtons').innerHTML = chatButtons.map((b,i)=>`<div class="chat-button-row"><input data-chat-button="${i}" data-field="text" placeholder="按钮文字" value="${esc(b.text)}"><input data-chat-button="${i}" data-field="url" placeholder="https://链接" value="${esc(b.url)}"><select data-chat-button="${i}" data-field="style"><option value="default">默认</option><option value="primary" ${b.style==='primary'?'selected':''}>蓝色</option><option value="success" ${b.style==='success'?'selected':''}>绿色</option><option value="danger" ${b.style==='danger'?'selected':''}>红色</option></select><button class="quiet" data-chat-icon="${i}">✦${b.iconAlt||''}</button><button class="quiet" data-chat-remove="${i}">×</button></div>`).join('');
+}
+$('chatAddButton').onclick=()=>{if(chatButtons.length>=12)return toast('最多 12 个按钮');chatButtons.push({text:'',url:'https://t.me/',style:'default',row:chatButtons.length});chatButtonEditor();};
+$('chatButtons').addEventListener('input',event=>{const {chatButton,field}=event.target.dataset;if(chatButton!==undefined&&field)chatButtons[Number(chatButton)][field]=event.target.value;});
+$('chatButtons').addEventListener('change',event=>{const {chatButton,field}=event.target.dataset;if(chatButton!==undefined&&field)chatButtons[Number(chatButton)][field]=event.target.value;});
+$('chatButtons').onclick=event=>{if(event.target.dataset.chatRemove!==undefined){chatButtons.splice(Number(event.target.dataset.chatRemove),1);chatButtons.forEach((b,i)=>b.row=i);chatButtonEditor();}if(event.target.dataset.chatIcon!==undefined)openPicker(`chat-button-${event.target.dataset.chatIcon}`);};
+$('chatEmoji').onclick=()=>openPicker('chat');
+$('chatSearch').oninput=()=>action(loadConversations);
+$('enableInbox').onclick=event=>action(async()=>{await api('/inbox/enable','POST',{});await loadInboxStatus();toast('收消息已启用');},event.currentTarget);
+$('chatFile').onchange=event=>action(async()=>{const file=event.target.files[0];if(!file)return;const form=new FormData();form.set('file',file);chatMedia=await api('/chat/media','POST',form);$('chatMedia').textContent=`已附加：${file.name} · ${(file.size/1024/1024).toFixed(1)} MB`;},event.currentTarget);
+function renderChatRows(rows) {
+  const byTelegramId=new Map(rows.map(m=>[m.telegram_message_id,m]));
+  $('chatMessages').innerHTML=rows.map(m=>`<article class="chat-bubble ${m.direction==='OUT'?'out':''}" data-message="${m.id}">${m.reply_to_message_id?`<small class="chat-quoted">↩ ${esc((byTelegramId.get(m.reply_to_message_id)?.text||`消息 #${m.reply_to_message_id}`).slice(0,80))}</small>`:''}${m.media_kind?`<button class="chat-attachment quiet" data-file="${m.id}">${m.media_kind==='photo'?'🖼 图片':m.media_kind==='video'?'▶ 视频':'📎 文件'}</button>`:''}${m.media_kind==='photo'?`<div class="chat-photo" data-photo-id="${m.id}"></div>`:''}<div>${m.status==='DELETED'?'[已删除]':esc(m.text).replace(/\n/g,'<br>')}</div><small>${fmt(m.sent_at)}${m.edited_at?' · 已编辑':''}</small><button class="chat-reply-btn" data-reply="${esc(m.telegram_message_id)}" title="回复">↩</button>${m.direction==='OUT'&&m.status==='SUCCESS'?`<button class="chat-delete-btn" data-manage-chat="${m.id}" title="编辑或删除">⋯</button>`:''}</article>`).join('')||'<p class="muted center">还没有消息</p>';
+  for(const node of $('chatMessages').querySelectorAll('[data-photo-id]'))authenticatedImage(`/chat/files/${node.dataset.photoId}`).then(url=>displayImage(node,url,'聊天图片')).catch(()=>{node.textContent='图片暂不可预览';});
+  $('chatMessages').scrollTop=$('chatMessages').scrollHeight;
+}
+async function loadChat() {
+  if(!activeChat)return;
+  const result=await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/messages`);
+  chatRows=result.rows;chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows);
+  await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/read`,'POST',{});
+  await loadConversations();
+}
+$('chatOlder').onclick=event=>action(async()=>{if(!activeChat||!chatOlderCursor)return;const result=await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/messages?before=${chatOlderCursor}`);chatRows=[...result.rows,...chatRows];chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows);$('chatMessages').scrollTop=0;},event.currentTarget);
+async function loadConversations(more=false) {
+  const result=await api('/chat/conversations?q='+encodeURIComponent($('chatSearch').value)+(more&&conversationNext?'&before='+encodeURIComponent(conversationNext):''));
+  if(chatCursor===0)chatCursor=result.cursor;
+  conversationRows=more?[...conversationRows,...result.rows]:result.rows;
+  conversationNext=result.next;$('chatMore').hidden=!conversationNext;
+  const rows=conversationRows; $('chatUnread').textContent=`${result.totalUnread} 未读`;
+  $('chatConversations').innerHTML=rows.map(c=>`<button class="chat-conversation ${activeChat?.chat_id===c.chat_id?'selected':''}" data-chat-id="${esc(c.chat_id)}"><span class="chat-avatar">${esc((c.title||'?').slice(0,1))}</span><span class="chat-summary"><strong>${esc(c.title||c.chat_id)}</strong><small>${esc(c.last_message_text||'新会话')}</small></span><span class="chat-meta"><small>${c.last_message_at?fmt(c.last_message_at):''}</small>${c.unread_count?`<b>${c.unread_count}</b>`:''}</span></button>`).join('')||'<p class="hint">暂无会话。启用收消息后，新消息会显示在这里。</p>';
+  if(activeChat){activeChat=rows.find(c=>c.chat_id===activeChat.chat_id)||activeChat;$('chatHeader').textContent=activeChat.title;}
+}
+$('chatMore').onclick=event=>action(()=>loadConversations(true),event.currentTarget);
+$('chatConversations').onclick=event=>action(async()=>{const id=event.target.closest('[data-chat-id]')?.dataset.chatId;if(!id)return;activeChat=conversationRows.find(c=>c.chat_id===id);if(!activeChat)return;$('chatHeader').textContent=activeChat.title;$('chatComposer').hidden=false;await loadChat();});
+$('chatMessages').onclick=event=>action(async()=>{const reply=event.target.dataset.reply, file=event.target.dataset.file, manage=event.target.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReply').textContent=`回复 #${reply} · 点击取消`;}if(manage){await openSent('chat',manage);$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file){const response=await fetch(`/api/chat/files/${file}`,{headers:{'x-telegram-init-data':initData,...(selectedPublisherId?{'x-publisher-id':selectedPublisherId}:{})}});if(!response.ok)throw new Error('附件读取失败');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);}},event.target);
+$('chatReply').onclick=()=>{chatReply=null;$('chatReply').hidden=true;};
+$('chatSend').onclick=event=>action(async()=>{if(!activeChat)throw new Error('请选择会话');$('chatSendStatus').textContent='发送中…';try{await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/send`,'POST',{delta:chatQuill.getContents(),buttons:chatButtons,mediaId:chatMedia?.id,replyTo:chatReply});chatQuill.setText('');chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatFile').value='';$('chatSendStatus').textContent='已发送';await loadChat();await loadConversations();}catch(error){$('chatSendStatus').textContent=`发送失败或结果待核实：${error.message}`;throw error;}},event.currentTarget);
+async function loadInboxStatus(){if(!data?.publisher)return;try{const s=await api('/inbox/status');$('inboxStatus').textContent=s.status==='EXTERNAL'?'已有外部 webhook；不会覆盖，当前无法接收新消息':s.status==='READY'?'收消息已启用':s.status==='AVAILABLE'?'尚未启用收消息':s.status==='NO_PUBLIC_URL'?'需要配置 PUBLIC_URL':'收消息状态：'+s.status;$('enableInbox').hidden=s.status!=='AVAILABLE'&&s.status!=='READY';$('enableInbox').textContent=s.status==='READY'?'修复收消息配置':'启用收消息';}catch(error){$('inboxStatus').textContent=`状态检查失败：${error.message}`;$('enableInbox').hidden=true;}}
+async function pollChats(){if(!data?.publisher)return;try{const result=await api('/chat/updates?after='+chatCursor);if(result.rows.length){chatCursor=result.cursor;await loadConversations();if(activeChat&&result.rows.some(m=>m.chat_id===activeChat.chat_id))await loadChat();}}catch{/* Keep the UI usable and retry on the next interval. */}}
+function changeTab(id) { closePicker(); sessionStorage.setItem('tgzhushou:tab',id); document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); document.querySelectorAll('nav button').forEach(button => button.classList.toggle('active', button.dataset.tab === id)); if (id === 'logs') action(loadRuns); if (id === 'players') action(loadPlayers); if(id==='chat')action(loadConversations); }
 document.querySelector('nav').addEventListener('click', event => { if (event.target.dataset.tab) changeTab(event.target.dataset.tab); });
 function updatePlayerSelection() {
   $('playerSelectionCount').textContent = '已选用户 · '+selectedPlayerIds.size+' 人';
@@ -198,24 +244,27 @@ function closePicker() {
   $('emojiDialog').close();
   document.body.classList.remove('emoji-open', 'emoji-body-open');
   quill.root.removeAttribute('inputmode');
+  chatQuill?.root.removeAttribute('inputmode');
   $('bodyEmoji').setAttribute('aria-expanded', 'false');
 }
 function openPicker(target) {
   if ($('emojiDialog').open && pickerTarget === target) { closePicker(); return; }
-  const caret = savedRange ? { ...savedRange } : null;
+  const caret = target === 'chat' ? chatRange && { ...chatRange } : savedRange && { ...savedRange };
   stopDeleting();
   pickerTarget = target;
   $('emojiBackspace').hidden = target !== 'body';
   document.body.classList.add('emoji-open');
   document.body.classList.toggle('emoji-body-open', target === 'body');
-  quill.root.setAttribute('inputmode', 'none');
+  (target === 'chat' ? chatQuill : quill).root.setAttribute('inputmode', 'none');
   if (!$('emojiDialog').open) $('emojiDialog').show();
   $('bodyEmoji').setAttribute('aria-expanded', String(target === 'body')); loadSavedPacks().catch(error=>toast(error.message,true));
-  if (target === 'body') {
+  if (target === 'body' || target === 'chat') {
     // Opening the non-modal dialog may focus its controls; restore the caret.
-    const at = Math.min(caret?.index ?? quill.getLength()-1, quill.getLength()-1);
-    const length = Math.min(caret?.length || 0, quill.getLength()-1-at);
-    quill.setSelection(at, length, 'silent'); savedRange = { index:at, length };
+    const editor = target === 'chat' ? chatQuill : quill;
+    const at = Math.min(caret?.index ?? editor.getLength()-1, editor.getLength()-1);
+    const length = Math.min(caret?.length || 0, editor.getLength()-1-at);
+    editor.setSelection(at, length, 'silent');
+    if(target==='chat')chatRange={index:at,length};else savedRange={index:at,length};
   }
 }
 $('bodyEmoji').addEventListener('pointerdown', () => { const range=quill.getSelection(); if(range) savedRange={...range}; });
@@ -262,7 +311,15 @@ function appendEmojiBatch() {
     button.dataset.emojiId = sticker.id; button.textContent = sticker.alt; button.title = sticker.id;
     button.onclick = () => {
       button.classList.add('selected');
-      if (pickerTarget === 'body') {
+      if (pickerTarget === 'chat') {
+        const at=Math.min(chatRange?.index??chatQuill.getLength()-1,chatQuill.getLength()-1);
+        chatQuill.insertEmbed(at,'customEmoji',{id:sticker.id,alt:sticker.alt,thumbId:sticker.thumbnailId||''},'user');
+        chatQuill.setSelection(at+1,0);chatRange={index:at+1,length:0};hydrateEmojiImages(chatQuill.root);
+      } else if (String(pickerTarget).startsWith('chat-button-')) {
+        const index=Number(String(pickerTarget).slice('chat-button-'.length));
+        if(!chatButtons[index])return;
+        Object.assign(chatButtons[index],{iconId:sticker.id,iconAlt:sticker.alt,iconThumbId:sticker.thumbnailId||''});chatButtonEditor();
+      } else if (pickerTarget === 'body') {
         const at = Math.min(savedRange?.index ?? quill.getLength()-1, quill.getLength()-1);
         quill.insertEmbed(at, 'customEmoji', { id:sticker.id, alt:sticker.alt, thumbId:sticker.thumbnailId || '' }, 'user');
         quill.setSelection(at+1, 0); savedRange = { index:at+1, length:0 }; insertedEmbedPending=true; hydrateEmojiImages(quill.root);
@@ -324,12 +381,15 @@ async function switchPublisher(id) {
   if (savePromise) throw new Error('正在保存活动，请稍后切换机器人');
   flushDraft();
   selectedPublisherId=id;
+  localStorage.setItem('tgzhushou:selected-publisher',id);
+  activeChat=null;chatCursor=0;$('chatComposer').hidden=true;$('chatHeader').textContent='请选择会话';$('chatMessages').replaceChildren();
   selectedPlayerIds.clear(); playerCache.clear(); playerPage=1; savedPacks=[]; pendingSend=null;
   await refresh();
   let draft; try { draft=JSON.parse(localStorage.getItem(draftKey())||'null'); } catch { draft=null; }
   await fill(draft||{});
   await loadPlayers(); await loadRuns();
   if (data.publisher?.legacy) await loadFfaStatus();
+  await loadConversations();await loadInboxStatus();
 }
 $('publisherSelect').onchange=event=>action(async()=>{await switchPublisher(event.target.value);toast('已切换发布机器人');},event.currentTarget);
 function showTasks() {
@@ -390,13 +450,15 @@ $('taskList').onclick = event => action(async () => {
 }, event.target);
 $('saveFfaToken').onclick = event => action(async()=>{await api('/ffa/token','POST',{token:$('ffaToken').value});$('ffaToken').value='';$('ffaStatus').textContent='Token 已验证并保存';toast('发发娱乐接口已连接');},event.currentTarget);
 $('savePublisher').onclick = event => action(async()=>{const result=await api('/publisher','POST',{token:$('token').value});$('token').value='';await switchPublisher(result.id);toast('发布机器人已验证并保存');},event.currentTarget);
+$('browserLogout').hidden=Boolean(initData);
+$('browserLogout').onclick=async()=>{await fetch('/auth/logout',{method:'POST'});location.reload();};
 $('addTarget').onclick = event => action(async()=>{const t=await api('/targets','POST',{reference:$('targetRef').value});$('targetRef').value='';await refresh();toast(t.can_publish?'目标已添加':t.last_error,!t.can_publish);},event.currentTarget);
 $('targets').onclick = event => action(async()=>{const id=event.target.dataset.deleteTarget;if(id&&confirm('删除该目标？引用它的任务将跳过此目标。')){await api(`/targets/${id}`,'DELETE');await refresh();}},event.target);
 async function loadRuns() { const runs=await api('/runs');$('runList').innerHTML=runs.map(r=>`<details class="card" data-run="${r.id}"><summary><strong>${esc(r.name)}</strong><span class="muted">${fmt(r.created_at)}</span></summary><p>成功 ${r.success_count||0} / ${r.total} · 失败 ${r.failed_count||0} · 待核实 ${r.unknown_count||0}</p><div class="run-detail"><button class="quiet" data-run-detail="${r.id}">查看各目标结果</button></div></details>`).join('')||'<div class="card center muted">还没有发布记录</div>'; }
 $('runList').onclick = event => action(async()=>{const id=event.target.dataset.runDetail;if(!id)return;await openSent('runs',id);},event.target);
 $('refreshTasks').onclick=event=>action(refresh,event.currentTarget);$('refreshLogs').onclick=event=>action(loadRuns,event.currentTarget); updatePlayerSelection(); async function loadFfaStatus(){const r=await api('/ffa');$('ffaStatus').textContent=r.configured?`已配置：${r.baseUrl}`:`未配置（接口：${r.baseUrl}）`;}
 $('editor').addEventListener('input', event => { if (!event.target.closest('#message, #buttons')) remember(); });$('kind').onchange=()=>{scheduleFields();remember();};
-async function boot() { if(!initData){$('locked').hidden=false;return;}try{await refresh();if(data.publisher?.legacy)await loadFfaStatus();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');}catch(error){$('locked').hidden=false;$('authError').textContent=error.message;} }
+async function boot() { try{const token=location.hash.match(/^#login=([A-Za-z0-9_-]+)$/)?.[1];if(token){const response=await fetch('/auth/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});history.replaceState(null,'',location.pathname);if(!response.ok)throw new Error('登录链接已过期或已使用');}await refresh();if(data.publisher?.legacy)await loadFfaStatus();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){$('locked').hidden=false;$('authError').textContent=error.message;} }
 boot();
 
 let viewportFrame;

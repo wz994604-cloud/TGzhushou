@@ -83,6 +83,42 @@ export function openDatabase(dataDir) {
       UNIQUE(broadcast_id, telegram_id)
     );
     CREATE INDEX IF NOT EXISTS broadcast_pending ON broadcast_deliveries(status, id);
+    CREATE TABLE IF NOT EXISTS conversations(
+      bot_id TEXT NOT NULL, chat_id TEXT NOT NULL, chat_type TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '', username TEXT NOT NULL DEFAULT '',
+      last_message_id TEXT, last_message_text TEXT NOT NULL DEFAULT '',
+      last_message_at INTEGER NOT NULL DEFAULT 0, unread_count INTEGER NOT NULL DEFAULT 0,
+      last_read_message_id TEXT, updated_at INTEGER NOT NULL,
+      PRIMARY KEY(bot_id, chat_id)
+    );
+    CREATE INDEX IF NOT EXISTS conversations_recent ON conversations(bot_id,last_message_at DESC,chat_id);
+    CREATE TABLE IF NOT EXISTS chat_messages(
+      id INTEGER PRIMARY KEY, bot_id TEXT NOT NULL, chat_id TEXT NOT NULL,
+      telegram_message_id TEXT NOT NULL, direction TEXT NOT NULL,
+      from_id TEXT, text TEXT NOT NULL DEFAULT '', entities_json TEXT NOT NULL DEFAULT '[]',
+      media_kind TEXT, file_id TEXT, media_id INTEGER REFERENCES media(id),
+      reply_to_message_id TEXT, sent_at INTEGER NOT NULL, edited_at INTEGER,
+      status TEXT NOT NULL DEFAULT 'SUCCESS', buttons_json TEXT NOT NULL DEFAULT '[]',
+      UNIQUE(bot_id,chat_id,telegram_message_id)
+    );
+    CREATE INDEX IF NOT EXISTS chat_messages_page ON chat_messages(bot_id,chat_id,id DESC);
+    CREATE INDEX IF NOT EXISTS chat_messages_changes ON chat_messages(bot_id,id);
+    CREATE TABLE IF NOT EXISTS chat_events(
+      id INTEGER PRIMARY KEY, bot_id TEXT NOT NULL, chat_id TEXT NOT NULL, created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS chat_events_bot ON chat_events(bot_id,id);
+    CREATE TABLE IF NOT EXISTS publisher_inbox(
+      bot_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
+      webhook_status TEXT NOT NULL DEFAULT 'NOT_CHECKED',
+      secret TEXT, last_error TEXT, checked_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS browser_links(
+      token_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL, expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS browser_sessions(
+      session_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL
+    );
   `);
   // Keep the original settings and players intact so a rollback can still read them.
   const legacyId = db.prepare("SELECT value FROM settings WHERE key='publisher_id'").get()?.value;

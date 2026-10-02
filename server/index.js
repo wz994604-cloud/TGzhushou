@@ -15,6 +15,8 @@ import { renderDelta, normalizeButtons } from './format.js';
 import { normalizeSchedule, nextSlot } from './schedule.js';
 import { createScheduler } from './scheduler.js';
 import { normalizeTelegramId, decodeCsv, parseCsv } from './player-utils.js';
+import { createBrowserAuth } from './browser-auth.js';
+import { registerChatRoutes } from './chat.js';
 
 const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
 for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
@@ -26,9 +28,11 @@ const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffy
 const db = openDatabase(dataDir);
 const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
 const app = express();
+const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL);
 app.disable('x-powered-by');
 app.use(express.json({ limit: '512kb' }));
 app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+browserAuth.routes(app);
 
 app.get('/healthz', (_req, res) => {
   try { db.prepare('SELECT 1').get(); res.json({ ok: true, database: true }); }
@@ -46,11 +50,20 @@ app.post('/tg/entry', async (req, res) => {
     if (base) botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } })
       .catch(error => console.error('Entry bot:', safeTelegramError(error)));
   }
+  if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+    const link = browserAuth.issueLink(req.body.message.from?.id);
+    if (link) botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
+      text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } })
+      .catch(error => console.error('Browser login:',safeTelegramError(error)));
+  }
 });
 
 app.use('/api', (req, res, next) => {
   try {
-    req.admin = verifyInitData(String(req.get('x-telegram-init-data') || ''), process.env.ENTRY_BOT_TOKEN, adminIds);
+    req.admin = req.get('x-telegram-init-data')
+      ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
+      : browserAuth.authenticate(req);
+    if (!req.admin) throw new Error('未授权');
     const selected = String(req.get('x-publisher-id') || '');
     if (selected && !scheduler.publisher(selected)) throw new Error('所选发布机器人不存在');
     next();
@@ -59,6 +72,7 @@ app.use('/api', (req, res, next) => {
 });
 
 const route = fn => async (req, res, next) => { try { await fn(req, res); } catch (error) { next(error); } };
+registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL });
 const currentBot = req => scheduler.publisher(req.get('x-publisher-id') || undefined);
 function selectedBotId(req) { return currentBot(req)?.id || ''; }
 function requireOriginalPlayerSource(req) {
@@ -378,6 +392,7 @@ app.get('/api/sticker-image', route(async (req, res) => {
 }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const chatUpload = multer({ storage:multer.memoryStorage(), limits:{ fileSize:20 * 1024 * 1024 } });
 app.post('/api/players/import', upload.single('file'), route(async (req, res) => {
   const botId = requireOriginalPlayerSource(req);
   const file = req.file; if (!file) throw new Error('请选择 WPS 导出的 CSV 文件');
@@ -415,11 +430,28 @@ app.post('/api/media', upload.single('image'), route(async (req, res) => {
   res.json(db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
 }));
 
+app.post('/api/chat/media', chatUpload.single('file'), route(async (req,res) => {
+  const file = req.file;
+  if (!file?.buffer) throw new Error('请选择图片、视频或文件');
+  const mime = String(file.mimetype || '').toLowerCase();
+  const allowed = /^(image\/(jpeg|png|webp)|video\/(mp4|webm)|application\/(pdf|zip|octet-stream|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet))|text\/plain)$/;
+  if (!allowed.test(mime)) throw new Error('文件格式不支持');
+  const ext = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp'
+    : mime === 'video/mp4' ? '.mp4' : mime === 'video/webm' ? '.webm' : '.bin';
+  const sha = crypto.createHash('sha256').update(file.buffer).digest('hex');
+  const filename = path.join(dataDir,'media',sha+ext);
+  await fs.writeFile(filename,file.buffer,{ flag:'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+  db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)')
+    .run(sha,mime,file.buffer.length,filename,Date.now());
+  res.json(db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
+}));
+
 app.get('/api/media/:id', route(async (req, res) => {
   const media = db.prepare('SELECT * FROM media WHERE id=?').get(Number(req.params.id));
   if (!media) return res.sendStatus(404);
   privateImage(res);
   if (req.query.preview === '1') {
+    if (!media.mime.startsWith('image/')) return res.sendStatus(400);
     const bytes = await previewCache(media.sha256, async () => {
       const directory = path.join(dataDir, 'previews');
       const filename = path.join(directory, media.sha256 + '.webp');

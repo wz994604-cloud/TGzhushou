@@ -1,6 +1,7 @@
 import { getPublisher } from './publishers.js';
 import { botCall, sendPhoto, safeTelegramError } from './telegram.js';
 import { renderDelta, keyboard } from './format.js';
+import { sendFormatted } from './sender.js';
 import { nextSlot } from './schedule.js';
 
 export function createScheduler(db, config, api = { botCall, sendPhoto }) {
@@ -83,9 +84,8 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       if (row.media_id && !media) throw new Error('图片不存在');
       if (media && formatted.text.length > 1024) throw new Error('图片说明文字超过 1024 字符');
       attempted = true;
-      const sent = media
-        ? await api.sendPhoto(bot.token, row.chat_id, media.file_path, media.mime, formatted.text, formatted.entities, buttons)
-        : await api.botCall(bot.token, 'sendMessage', { chat_id: row.chat_id, text: formatted.text, entities: formatted.entities, ...(buttons ? { reply_markup: buttons } : {}) });
+      const { sent } = await sendFormatted({ token:bot.token, chatId:row.chat_id,
+        delta:JSON.parse(row.delta_json), buttons:JSON.parse(row.buttons_json), media, api });
       const returned = sent.entities || sent.caption_entities || [];
       const shown = returned.filter(entity => entity.type === 'custom_emoji').length;
       const notes = [];
@@ -114,9 +114,8 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       if (row.media_id && !media) throw new Error('图片不存在');
       if (media && formatted.text.length > 1024) throw new Error('图片说明文字超过 1024 字符');
       attempted = true;
-      const sent = media
-        ? await api.sendPhoto(bot.token, row.telegram_id, media.file_path, media.mime, formatted.text, formatted.entities, buttons)
-        : await api.botCall(bot.token, 'sendMessage', { chat_id: row.telegram_id, text: formatted.text, entities: formatted.entities, ...(buttons ? { reply_markup: buttons } : {}) });
+      const { sent } = await sendFormatted({ token:bot.token, chatId:row.telegram_id,
+        delta:JSON.parse(row.delta_json), buttons:JSON.parse(row.buttons_json), media, api });
       db.prepare("UPDATE broadcast_deliveries SET status='SUCCESS',telegram_message_id=?,completed_at=? WHERE id=?").run(String(sent.message_id), Date.now(), row.id);
     } catch (error) {
       const status = !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';

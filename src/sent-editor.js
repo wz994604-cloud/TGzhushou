@@ -46,7 +46,7 @@ export function installSentEditor({Quill,api,esc,toast,action,image,hydrateEmoji
     if(running||!e.target.dataset.loadSent)return;
     const loadButton=e.target.closest('[data-load-sent]');
     const item=await api(`/sent/${kind}/${loadButton.dataset.loadSent}`);
-    $('sentPhoto').value='';originalMediaId=item.media_id||null;$('sentPhoto').disabled=!originalMediaId;$('sentPhotoHint').textContent=originalMediaId?'可替换原图片':'原消息没有图片，Telegram 不支持把文字改成图片';editor.setContents({ops:JSON.parse(item.delta_json)});hydrateEmojiImages?.(editor.root);buttons=JSON.parse(item.buttons_json||'[]').map((b,i)=>({...b,row:Number.isInteger(b.row)?b.row:i,iconThumbId:b.iconThumbId||''}));renderButtons();loaded=true;
+    $('sentPhoto').value='';originalMediaId=item.media_id||null;$('sentPhoto').disabled=!originalMediaId || (kind==='chat'&&item.media_kind!=='photo');$('sentPhotoHint').textContent=$('sentPhoto').disabled?'当前消息不支持替换图片':'可替换原图片';editor.setContents({ops:JSON.parse(item.delta_json)});hydrateEmojiImages?.(editor.root);buttons=JSON.parse(item.buttons_json||'[]').map((b,i)=>({...b,row:Number.isInteger(b.row)?b.row:i,iconThumbId:b.iconThumbId||''}));renderButtons();loaded=true;
     $('sentContent').open=true;editor.blur();$('sentProgress').textContent='已载入内容，可以开始编辑。';loadButton.textContent='已载入';loadButton.classList.add('is-loaded');
   },e.target);
   $('selectSent').onclick=()=>{if(!running){selected=new Set(rows.filter(r=>r.status==='SUCCESS'&&!r.deleted).map(r=>r.id));render();}};
@@ -67,7 +67,7 @@ for(const id of ids){const row=rows.find(r=>r.id===id);try{const result=await ap
   $('applySent').onclick=e=>action(()=>apply('edit'),e.currentTarget);$('deleteSent').onclick=e=>action(()=>apply('delete'),e.currentTarget);
   return async(type,id)=>{
     kind=type;$('sentPhoto').value='';originalMediaId=null;$('sentPhoto').disabled=true;selected.clear();loaded=false;editor.setText('');buttons=[];renderButtons();$('sentContent').open=false;$('sentEmojiPicker').open=false;$('sentProgress').textContent='';
-    const record=await api(`/${type}/${id}`);rows=record.deliveries;
+    const record=type==='chat'?{deliveries:[await api(`/sent/chat/${id}`)]}:await api(`/${type}/${id}`);rows=record.deliveries;
     // Read persisted outcomes, including edits/deletes from a previous session.
 
     render();dialog.showModal();editor.blur();

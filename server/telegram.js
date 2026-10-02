@@ -24,7 +24,7 @@ export async function botCall(token, method, payload = {}, timeoutMs = 20000) {
   } finally { clearTimeout(timer); }
 }
 
-export async function sendPhoto(token, chatId, path, mime, caption, captionEntities, replyMarkup) {
+export async function sendPhoto(token, chatId, path, mime, caption, captionEntities, replyMarkup, replyTo = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
@@ -38,11 +38,28 @@ export async function sendPhoto(token, chatId, path, mime, caption, captionEntit
     // inserted CR code unit without changing the stored task Delta.
     if (captionEntities.length) form.set('caption_entities', JSON.stringify(multipartCaptionEntities(caption, captionEntities)));
     if (replyMarkup) form.set('reply_markup', JSON.stringify(replyMarkup));
+    if (replyTo) form.set('reply_parameters', JSON.stringify({ message_id:Number(replyTo) }));
     const response = await fetch(`${API}${token}/sendPhoto`, { method: 'POST', body: form, signal: controller.signal });
     const body = await response.json();
     if (!body.ok) throw Object.assign(new Error(String(body.description || `Telegram ${response.status}`)), { telegramCode: body.error_code || response.status });
     return body.result;
   } finally { clearTimeout(timer); }
+}
+
+export async function sendMedia(token, chatId, media, caption, entities, markup, replyTo = null) {
+  const method = media.mime.startsWith('video/') ? 'sendVideo' : 'sendDocument';
+  const field = method === 'sendVideo' ? 'video' : 'document';
+  const form = new FormData();
+  form.set('chat_id', String(chatId));
+  form.set(field, new Blob([await fs.readFile(media.file_path)], { type:media.mime }), `activity-${field}`);
+  if (caption) form.set('caption', caption);
+  if (entities.length) form.set('caption_entities', JSON.stringify(multipartCaptionEntities(caption, entities)));
+  if (markup) form.set('reply_markup', JSON.stringify(markup));
+  if (replyTo) form.set('reply_parameters', JSON.stringify({ message_id:Number(replyTo) }));
+  const response = await fetch(`${API}${token}/${method}`, { method:'POST', body:form, signal:AbortSignal.timeout(30000) });
+  const body = await response.json();
+  if (!body.ok) throw Object.assign(new Error(String(body.description || `Telegram ${response.status}`)), { telegramCode:body.error_code || response.status });
+  return body.result;
 }
 
 export function safeTelegramError(error) {

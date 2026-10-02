@@ -12,6 +12,7 @@ async function open(page) {
   await page.route('https://telegram.org/js/telegram-web-app.js', route => route.fulfill({ contentType: 'application/javascript', body: `window.Telegram={WebApp:{initData:${JSON.stringify(signedData())},ready(){},expand(){}}};` }));
   await page.goto('/');
   await expect(page.locator('#workspace')).toBeVisible();
+  await page.getByRole('button',{name:'编写',exact:true}).click();
 }
 
 test('mobile text links: add, edit, remove, preserve emoji, persist and render entities', async ({ page, request }) => {
