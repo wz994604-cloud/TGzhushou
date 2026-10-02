@@ -4,8 +4,8 @@ Target: http://127.0.0.1:5174
 
 ## Screenshots
 
-- Desktop: screenshots/chronology-final-desktop.png
-- Mobile: screenshots/chronology-final-mobile.png
+- Desktop: screenshots/touch-target-final-desktop.png
+- Mobile: screenshots/touch-target-final-mobile.png
 
 ## Desktop Checks
 

@@ -216,3 +216,11 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   #workspace:not(:has(#chat:not([hidden]))) #editor{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
   dialog{max-height:calc(var(--visible-height,100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)}
 }
+
+/* Keep the visual rail narrow while preserving accessible mobile hit areas. */
+@media(max-width:700px){
+  .rail-menu,.rail-bot,.rail-nav button{width:44px;min-height:44px}
+  .rail-bot{height:44px}
+  #workspace:has(#chat:not([hidden])) .rail-bot.active:after{left:-6px;top:12px}
+  #workspace:has(#chat:not([hidden])):has(.chat-conversation.selected) .publisher-switch{display:none}
+}

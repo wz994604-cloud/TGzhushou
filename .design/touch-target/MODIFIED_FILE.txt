@@ -1,0 +1,5 @@
+MODIFIED_FILE
+Changed branch/field: mobile rail touch targets and selected-chat publisher overlap.
+File: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\src\style.css
+BASELINE SHA-1: ed6b7c26fd02cb67fb6bec5c61ba5fc45d9d7777
+MODIFIED SHA-1: 2f867bf1c3cf1b41e04acedae2c87dd934828e85
