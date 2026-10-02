@@ -3,6 +3,16 @@ import crypto from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { entryToken, publisherToken } from '../helpers.js';
 
+test('账号密码登录 opens the workspace without Telegram',async({page})=>{
+  await page.goto('/');
+  await expect(page.locator('#locked')).toBeVisible();
+  await page.locator('#loginUsername').fill('admin');
+  await page.locator('#loginPassword').fill('test-password-123');
+  await page.getByRole('button',{name:'登录',exact:true}).click();
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#locked')).toBeHidden();
+});
+
 test('one-time browser link opens PWA without Mini App initData',async({page,request})=>{
   fs.rmSync('test-results/browser-login.json',{force:true});
   const secret=crypto.createHash('sha256').update(`entry:${entryToken}`).digest('hex');

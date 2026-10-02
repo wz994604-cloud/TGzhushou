@@ -28,7 +28,11 @@ const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffy
 const db = openDatabase(dataDir);
 const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
 const app = express();
-const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL);
+const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
+  username: process.env.ADMIN_LOGIN_USERNAME || 'admin',
+  password: process.env.ADMIN_LOGIN_PASSWORD,
+  salt: process.env.CONFIG_KEY
+});
 app.disable('x-powered-by');
 app.use(express.json({ limit: '512kb' }));
 app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
