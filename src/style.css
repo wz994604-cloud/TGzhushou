@@ -183,3 +183,36 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   .chat-tools #chatSend{margin-left:auto}
   #editor .actions{position:sticky;bottom:8px;z-index:4;margin:12px 0 0}
 }
+
+/* Message chronology and true empty states use only existing server data. */
+.chat-date-divider{align-self:center;position:relative;z-index:1;margin:6px 0 12px;text-align:center}
+.chat-date-divider span{display:inline-block;padding:5px 12px;border-radius:999px;background:rgb(76 101 112 / .68);color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgb(25 45 65 / .12)}
+.chat-main #chatMessages:has(.chat-empty){justify-content:center;align-items:center}
+.chat-main .chat-empty{max-width:240px;padding:20px 24px;border-radius:14px;background:rgb(255 255 255 / .84);box-shadow:0 1px 3px rgb(25 45 65 / .10);color:#536576;font-weight:600}
+.chat-main .chat-empty::before{content:'✦';display:block;margin-bottom:8px;color:var(--tg-client-blue);font-size:24px;line-height:1}
+#chatConversations>.hint{color:#526678}
+#inboxStatus:not(:empty){color:#176985}
+#inboxStatus.is-ready{background:#e8f7ee;color:#166d43}
+#inboxStatus.is-warning,#inboxStatus.is-available{background:#fff5df;color:#805c17}
+#inboxStatus.is-error{background:#fff0ee;color:#a92329}
+#inboxStatus:not(:empty) + #enableInbox:not([hidden]){margin:5px 0 10px;min-height:44px}
+#players .user-scroll .list-row{min-height:56px;padding:10px 12px;border-radius:9px}
+#players .check{min-height:56px;margin:4px 0;background:#fff}
+#tasks #taskList>.card,#logs #runList>.card{margin:8px 0;padding:16px 18px}
+#tasks #taskList>.card .section-title{margin-bottom:4px}
+#tasks #taskList>.card .status{margin-left:auto}
+#logs #runList>.card summary{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;min-height:44px}
+#logs #runList>.card summary .muted{font-size:12px}
+#settings .card{overflow-wrap:anywhere}
+#settings .list-row{min-height:56px}
+#settings .card>button:disabled,#settings .card button:disabled{cursor:wait}
+#editor #previewPanel .message-preview{max-width:min(100%,560px);margin-left:auto;margin-right:auto}
+#editor .preview-row{gap:4px}
+#editor .preview-button{min-height:40px;border-radius:8px;color:#177cb0}
+@media(max-width:480px){
+  #editor .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  #editor .actions button{min-width:0;min-height:44px;padding:8px 6px}
+  #workspace:not(:has(#chat:not([hidden])))>.page{padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+  #workspace:not(:has(#chat:not([hidden]))) #editor{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+  dialog{max-height:calc(var(--visible-height,100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)}
+}
