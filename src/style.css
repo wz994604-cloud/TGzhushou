@@ -103,3 +103,35 @@ body:has(#workspace:not([hidden])){background:var(--tg-client-bg);color:var(--tg
 .chat-bubble small{color:#82919b}.chat-main #chatComposer{padding:10px 14px 12px;background:#fff;border-top-color:var(--tg-client-line)}.chat-main #chatInput{border:1px solid var(--tg-client-line);border-radius:12px;background:#fff}.chat-main .chat-tools{margin-top:8px}.chat-main .chat-tools .primary{background:var(--tg-client-blue)}.chat-main .chat-tools .primary:hover{background:var(--tg-client-blue-dark)}
 .quiet{background:#e9f6fc;color:var(--tg-client-blue)}.quiet:hover{background:#d8effa}.primary{background:var(--tg-client-blue)}.primary:hover{background:var(--tg-client-blue-dark)}
 @media(max-width:700px){#workspace:has(#chat:not([hidden])){grid-template-columns:56px minmax(0,1fr)}#workspace:has(#chat:not([hidden])) .app-rail{padding:12px 7px}.rail-brand{width:38px;height:38px}.rail-brand::before{font-size:20px}.chat-list .section-title h2{font-size:17px}.chat-conversation{min-height:58px;padding:8px 6px}.chat-avatar{flex-basis:38px;width:38px;height:38px}.chat-main .chat-head{min-height:54px;padding:12px 14px}.chat-main .chat-messages{padding:12px 10px}.chat-bubble{max-width:92%}}
+
+/* Second-round interaction corrections: bounded mobile workspace and explicit
+   scroll ownership. These overrides preserve the existing DOM and behavior. */
+#workspace:has(#chat:not([hidden])){min-height:100dvh;height:100dvh;overflow:hidden}
+#workspace:has(#chat:not([hidden])) .chat-list,
+#workspace:has(#chat:not([hidden])) .chat-main{min-height:0;overflow:hidden}
+#workspace:has(#chat:not([hidden])) .chat-list{overflow-y:auto;overscroll-behavior:contain}
+#workspace:has(#chat:not([hidden])) .chat-main{display:flex;flex-direction:column}
+#workspace:has(#chat:not([hidden])) .chat-messages{min-height:0;flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain}
+#workspace:has(#chat:not([hidden])) #chatComposer{position:static;flex:0 0 auto;max-height:min(34dvh,310px);overflow-y:auto;overscroll-behavior:contain}
+body:has(#workspace:not([hidden])){overflow:hidden}
+#settings .card{position:relative}
+#settings #token,#settings #ffaToken{background:#fffaf0;border-color:#f0d6a0}
+#settings #token:focus,#settings #ffaToken:focus{border-color:#e0a52b;box-shadow:0 0 0 3px rgb(224 165 43 / .18)}
+#settings #browserLogout{color:#b42318;background:#fff1f0;border:1px solid #f3c4c0}
+#settings .hint{max-width:72ch}
+#settings #ffaStatus:not(:empty),#settings #saveStatus:not(:empty),#settings #publisherStatus:not(:empty){padding:8px 10px;border-radius:8px;background:#f1f5f7}
+#settings .is-loaded,#settings #ffaStatus.is-loaded{background:#e8f7ee;color:#167447}
+#settings .error,#settings .status.FAILED{background:#fff1f0;color:#b42318}
+#players #playerList,#players #selectedPlayerList,#tasks #taskList,#chatConversations{min-height:42px}
+#inboxStatus{padding:6px 8px;border-radius:8px}
+@media(max-width:700px){
+  #workspace:has(#chat:not([hidden])){height:100dvh;min-height:0}
+  #workspace:has(#chat:not([hidden])) .chat-list{height:100dvh}
+  #workspace:has(#chat:not([hidden])) .chat-main{height:100dvh;inset:0 0 0 56px}
+  #workspace:has(#chat:not([hidden])) .chat-main #chatComposer{max-height:min(38dvh,300px);padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  #workspace:has(#chat:not([hidden])) .chat-main .chat-messages{min-height:0}
+  body.emoji-open .actions{visibility:hidden;pointer-events:none}
+  #emojiDialog{bottom:calc(var(--keyboard-inset,0px) + 78px);max-height:min(44dvh,360px)}
+  body.emoji-body-open #emojiDialog{z-index:21}
+  body.emoji-body-open #chatComposer{z-index:20}
+}

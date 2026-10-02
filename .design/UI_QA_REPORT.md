@@ -1,15 +1,15 @@
 # UI QA REPORT
 
-Target: http://127.0.0.1:4173/
+Target: http://127.0.0.1:5174
 
 ## Screenshots
 
-- Desktop: screenshots/after-desktop.png
-- Mobile: screenshots/after-mobile.png
+- Desktop: screenshots/second-round-scroll-pass-desktop.png
+- Mobile: screenshots/second-round-scroll-pass-mobile.png
 
 ## Desktop Checks
 
-- PASS blank / loading risk: body text 78, screenshot 85810 bytes
+- PASS blank / loading risk: body text 142, screenshot 114748 bytes
 - PASS horizontal scroll: scrollWidth 1440, viewport 1440
 - PASS text overflow candidates: 0
 - PASS small button candidates: 0
@@ -17,7 +17,7 @@ Target: http://127.0.0.1:4173/
 
 ## Mobile Checks
 
-- PASS blank / loading risk: body text 78, screenshot 40444 bytes
+- PASS blank / loading risk: body text 142, screenshot 50816 bytes
 - PASS horizontal scroll: scrollWidth 390, viewport 390
 - PASS text overflow candidates: 0
 - PASS small button candidates: 0

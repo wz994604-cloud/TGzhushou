@@ -1,0 +1,37 @@
+VERIFICATION
+
+Changed branch/field: mobile chat workspace scroll ownership and settings state styling.
+
+Artifacts:
+- MODIFIED_FILE: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\MODIFIED_FILE.txt
+- DIFF_FILE: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\DIFF_FILE.patch
+- VERIFICATION.txt: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\VERIFICATION.txt
+- ROLLBACK.sh: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\ROLLBACK.sh
+
+BASELINE
+Command: git hash-object .design/MODIFIED_FILE.baseline.css
+Input: HEAD 7012de0 src/style.css
+Literal output/result: 6301532e05bd4699d130817ef05c44c6f21f3956
+Exit status: 0
+
+MODIFIED
+Command: npm run build; npm run check; npm test
+Input: src/style.css second-round overrides
+Literal output/result: Vite 8.3.1 build passed; server syntax checks passed; 31 tests passed, 0 failed
+Exit status: 0
+Command: git diff --check
+Input: modified CSS diff
+Literal output/result: no whitespace errors
+Exit status: 0
+Command: local browser http://127.0.0.1:5174/
+Input: unauthenticated local page
+Literal output/result: login shell rendered; existing API error text shown because local backend/auth is unavailable; no CSS/layout crash observed
+Exit status: 0
+
+ROLLBACK
+Command: pwsh -NoProfile -File .design/rollback-test/ROLLBACK.ps1 -Target .design/rollback-test/style.css -Backup .design/MODIFIED_FILE.baseline.css
+Input: copy of modified CSS
+Literal output/result: ROLLBACK_OK; restored hash 6301532e05bd4699d130817ef05c44c6f21f3956 matching baseline
+Exit status: 0
+
+Restored behavior/status: rollback copy matches baseline CSS; real src/style.css remains modified. No backend/API/database/business logic changes.

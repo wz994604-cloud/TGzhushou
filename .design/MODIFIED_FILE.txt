@@ -1,0 +1,8 @@
+# MODIFIED_FILE
+
+Changed branch/field: mobile chat workspace scroll ownership and settings state styling.
+
+- MODIFIED_FILE: src/style.css
+- Baseline SHA-1: 6301532e05bd4699d130817ef05c44c6f21f3956
+- Modified SHA-1: b15dd6a9a209fa47e1a5135d795eab00cdd46d3f
+- Backend/API/database/business logic: unchanged.
