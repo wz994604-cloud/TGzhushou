@@ -1,0 +1,27 @@
+VERIFICATION
+Changed branch/field: mobile chat title/publisher spacing, immediate back navigation, same-direction bubble grouping.
+Artifacts:
+MODIFIED_FILE=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\review-fixes\MODIFIED_FILE.txt
+DIFF_FILE=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\review-fixes\DIFF_FILE.patch
+VERIFICATION.txt=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\review-fixes\VERIFICATION.txt
+ROLLBACK.sh=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\review-fixes\ROLLBACK.sh
+BASELINE
+Command: git hash-object .design/review-fixes/baseline-main.js; git hash-object .design/review-fixes/baseline-style.css
+Input: HEAD 045b164
+Literal output/result: 8c5b3a13af0ed67731a218d48b3d984e4c8f1512; bb952573af6861f71ec6b1266794195005f08c0d
+Exit status: 0
+MODIFIED
+Command: npm run build; node --check src/main.js; npm test; git diff --check
+Input: current src/main.js and src/style.css
+Literal output/result: Vite 8.3.1 built in 149ms; 31 tests pass, 0 fail; BUILD=0 JS=0 TEST=0 DIFF=0
+Exit status: 0
+Command: node C:/Users/win11/.codex/skills/codex-ui-designer-kit/scripts/visual-audit.mjs --url http://127.0.0.1:5174 --name review-fixes
+Input: local unauthenticated page
+Literal output/result: desktop/mobile blankRisk=false, horizontalScroll=false, textOverflow=0, smallButtons=0
+Exit status: 0
+ROLLBACK
+Command: pwsh -NoProfile -File .design/review-fixes/ROLLBACK.ps1 -Target .design/review-fixes/rollback-copy.css -Backup .design/review-fixes/baseline-style.css
+Input: copy of modified CSS
+Literal output/result: ROLLBACK_OK; restored hash bb952573af6861f71ec6b1266794195005f08c0d
+Exit status: 0
+Restored behavior/status: rollback copy matches baseline; real src/main.js and src/style.css remain changed. Authorized mobile chat was not visual-tested.

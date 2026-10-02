@@ -151,7 +151,7 @@ body:has(#workspace:not([hidden])){overflow:hidden}
 .publisher-switch select{font-weight:700;border-color:transparent;background:#f0f5f8;min-height:42px}
 .chat-head{display:flex;align-items:center;gap:8px}.chat-back{display:none;width:44px;min-width:44px;height:44px;padding:0;border-radius:50%;font-size:30px;line-height:1;background:transparent;color:var(--tg-client-blue)}
 .chat-head #chatTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chat-main .chat-bubble + .chat-bubble{margin-top:-4px}.chat-main .chat-bubble + .chat-bubble:not(.out){border-top-left-radius:5px}.chat-main .chat-bubble.out + .chat-bubble.out{border-top-right-radius:5px}
+.chat-main .chat-bubble:not(.out) + .chat-bubble:not(.out),.chat-main .chat-bubble.out + .chat-bubble.out{margin-top:-4px}.chat-main .chat-bubble:not(.out) + .chat-bubble:not(.out){border-top-left-radius:5px}.chat-main .chat-bubble.out + .chat-bubble.out{border-top-right-radius:5px}
 .chat-main .chat-bubble small{font-size:11px}.chat-main .chat-reply-btn,.chat-main .chat-delete-btn{min-width:32px;min-height:32px}
 .chat-main .chat-send-status,.chat-main #chatSendStatus{padding:5px 8px;border-radius:7px}.chat-main #chatSendStatus:not(:empty){background:#eef7fb;color:#167da9}
 #chatConversations:empty,#playerList:empty,#taskList:empty,#runList:empty{min-height:64px}
@@ -222,5 +222,5 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   .rail-menu,.rail-bot,.rail-nav button{width:44px;min-height:44px}
   .rail-bot{height:44px}
   #workspace:has(#chat:not([hidden])) .rail-bot.active:after{left:-6px;top:12px}
-  #workspace:has(#chat:not([hidden])):has(.chat-conversation.selected) .publisher-switch{display:none}
+  #workspace:has(#chat:not([hidden])):has(.chat-conversation.selected) .chat-head{padding-right:160px}
 }
