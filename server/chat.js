@@ -51,6 +51,7 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
   const botFor = req => scheduler.publisher(req.get('x-publisher-id') || undefined);
   const currentId = req => botFor(req)?.id || '';
   const inbox = id => db.prepare('SELECT * FROM publisher_inbox WHERE bot_id=?').get(id);
+  const botAvatars = new Map();
   const wrapper = fn => async (req,res,next) => { try { await fn(req,res); } catch (error) { next(error); } };
   async function refreshAvatar(bot, chatId) {
     const chat = await botApi(bot.token, 'getChat', { chat_id: String(chatId) });
@@ -110,6 +111,32 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     if (bot) rows.filter(row => !row.avatar_file_id).slice(0, 20).forEach(row => refreshAvatar(bot,row.chat_id).catch(() => {}));
     const totalUnread = db.prepare('SELECT COALESCE(SUM(unread_count),0) n FROM conversations WHERE bot_id=?').get(id).n;
     res.json({ rows, next:rows.length === limit ? `${rows.at(-1).last_message_at}:${rows.at(-1).chat_id}` : null, totalUnread, cursor });
+  }));
+  app.get('/api/chat/bot-avatars/:botId', wrapper(async (req,res) => {
+    const id = String(req.params.botId);
+    if (id !== currentId(req) || !/^\d+$/.test(id)) return res.sendStatus(404);
+    const bot = botFor(req);
+    const cached = botAvatars.get(id);
+    if (cached && cached.expires > Date.now()) {
+      if (!cached.bytes) return res.sendStatus(404);
+      res.set('Cache-Control','private, max-age=3600');res.type(cached.type);return res.send(cached.bytes);
+    }
+    const photos = await botApi(bot.token,'getUserProfilePhotos',{user_id:Number(id),limit:1});
+    const photo = photos?.photos?.[0]?.[0];
+    if (!photo?.file_id) {
+      botAvatars.set(id,{expires:Date.now()+5*60_000});
+      return res.sendStatus(404);
+    }
+    const file = await botApi(bot.token,'getFile',{file_id:photo.file_id});
+    if (!/^[A-Za-z0-9_./-]+$/.test(file?.file_path || '') || file.file_path.includes('..')) return res.sendStatus(404);
+    const response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`,{signal:AbortSignal.timeout(10000)});
+    if (!response.ok) return res.sendStatus(502);
+    const type = response.headers.get('content-type')?.split(';')[0]?.trim();
+    if (!['image/jpeg','image/png','image/webp'].includes(type) || Number(response.headers.get('content-length') || 0)>2_000_000) return res.sendStatus(502);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length>2_000_000) return res.sendStatus(502);
+    botAvatars.set(id,{bytes,type,expires:Date.now()+6*60*60_000});
+    res.set('Cache-Control','private, max-age=3600');res.type(type);res.send(bytes);
   }));
   app.get('/api/chat/avatars/:botId/:chatId', wrapper(async (req,res) => {
     const bot = scheduler.publisher(String(req.params.botId));

@@ -91,6 +91,38 @@ test('empty webhook can be enabled without altering another bot',async t=>{
   assert.equal(new Set([...first.rows,...second.rows].map(row=>row.chat_id)).size,3);
 });
 
+test('bot avatars load with their own selected context and missing photos fall back',async t=>{
+  const db=fixture(t),app=express(),calls=[];
+  const bots={123:{id:'123',token:'123:SECRET_TOKEN_A'},456:{id:'456',token:'456:SECRET_TOKEN_B'},678:{id:'678',token:'678:SECRET_TOKEN_MISSING'},789:{id:'789',token:'789:SECRET_TOKEN_C'}};
+  const originalFetch=globalThis.fetch;
+  t.after(()=>{globalThis.fetch=originalFetch;});
+  globalThis.fetch=(url,options)=>String(url).startsWith('https://api.telegram.org/file/')
+    ? Promise.resolve(new Response(Buffer.from('avatar-a'),{headers:{'content-type':'image/jpeg'}}))
+    : originalFetch(url,options);
+  registerChatRoutes(app,{db,scheduler:{publisher:id=>bots[id||'123']},configKey,publicUrl:'https://example.test',
+    botApi:async(token,method,payload)=>{calls.push({token,method,payload});
+      if(token===bots[789].token)throw Object.assign(new Error('Telegram unavailable'),{telegramCode:503});
+      if(method==='getUserProfilePhotos')return {photos:token===bots[678].token?[]:[[{file_id:'photo-a'}]]};
+      if(method==='getFile')return {file_path:'photos/avatar-a.jpg'};
+      throw new Error('unexpected method');}});
+  app.use((error,_req,res,_next)=>res.status(error.telegramCode?502:400).json({error:'头像暂不可用'}));
+  const server=app.listen(0);t.after(()=>server.close());
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const ok=await originalFetch(base+'/api/chat/bot-avatars/123',{headers:{'x-publisher-id':'123'}});
+  assert.equal(ok.status,200);assert.equal(await ok.text(),'avatar-a');
+  assert.equal(ok.headers.get('content-type'),'image/jpeg');
+  assert.equal((await originalFetch(base+'/api/chat/bot-avatars/123',{headers:{'x-publisher-id':'456'}})).status,404);
+  assert.equal((await originalFetch(base+'/api/chat/bot-avatars/456',{headers:{'x-publisher-id':'456'}})).status,200);
+  assert.equal((await originalFetch(base+'/api/chat/bot-avatars/678',{headers:{'x-publisher-id':'678'}})).status,404);
+  assert.equal((await originalFetch(base+'/api/chat/bot-avatars/999',{headers:{'x-publisher-id':'123'}})).status,404);
+  const failed=await originalFetch(base+'/api/chat/bot-avatars/789',{headers:{'x-publisher-id':'789'}});
+  assert.equal(failed.status,502);assert.ok(!(await failed.text()).includes('SECRET_TOKEN_C'));
+  assert.equal(calls.filter(call=>call.method==='getUserProfilePhotos').length,4);
+  assert.equal(calls[0].payload.user_id,123);
+  assert.equal(calls.find(call=>call.token===bots[456].token).payload.user_id,456);
+  assert.ok(!JSON.stringify(calls.map(({method,payload})=>({method,payload}))).includes('SECRET_TOKEN'));
+});
+
 test('browser link is one-time and session expires or logs out',async t=>{
   const db=fixture(t),auth=createBrowserAuth(db,['123'],'https://example.test'),link=auth.issueLink('123');
   const token=new URL(link).hash.slice('#login='.length),app=express();app.use(express.json());auth.routes(app);

@@ -224,3 +224,35 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   #workspace:has(#chat:not([hidden])) .rail-bot.active:after{left:-6px;top:12px}
   #workspace:has(#chat:not([hidden])):has(.chat-conversation.selected) .chat-head{padding-right:160px}
 }
+/* Keep navigation operable from its SVG children and the bot rail keyboard-accessible. */
+.publisher-switch{display:none!important}
+#workspace:not(:has(#chat:not([hidden])))>.page{grid-row:1 / span 2}
+.rail-bot{width:44px;height:44px;min-height:44px;flex:0 0 44px;overflow:visible}
+.rail-bot.active{box-shadow:0 0 0 2px #279cdb,0 0 0 5px #fff}
+.rail-bot:focus-visible,.rail-nav button:focus-visible{outline:2px solid #176ba0;outline-offset:3px}
+.rail-nav button{display:grid;place-items:center;width:44px;min-height:44px;padding:0}
+.rail-nav button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#workspace:not(:has(#chat:not([hidden]))) #editor{max-width:1240px}
+#workspace:not(:has(#chat:not([hidden]))) :is(#players,#tasks,#logs){max-width:1320px}
+#workspace:not(:has(#chat:not([hidden]))) #settings{max-width:1040px;margin-left:max(0px,calc((100% - 1320px)/2))}
+#workspace:not(:has(#chat:not([hidden])))>.page>.section-title h2{font-size:24px}
+#workspace:not(:has(#chat:not([hidden])))>.page .card h3{font-size:16px}
+#workspace:not(:has(#chat:not([hidden])))>.page :is(button,input,select){min-height:44px}
+#workspace:not(:has(#chat:not([hidden])))>.page .list-row{min-height:56px}
+@media(max-width:700px){
+  #workspace:not(:has(#chat:not([hidden]))) #settings{margin-left:0}
+  #workspace:has(#chat:not([hidden])):has(.chat-conversation.selected) .chat-head{padding-right:14px}
+}
+@media(max-width:480px){
+  #workspace:not(:has(#chat:not([hidden])))>.page>.section-title h2{font-size:21px}
+  #workspace:not(:has(#chat:not([hidden])))>.page .grid{grid-template-columns:minmax(0,1fr)}
+}
+.rail-bot{overflow:hidden}
+.rail-bot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+@media(max-width:700px){
+  #workspace:has(#chat:not([hidden])) .chat-main{display:none}
+  #workspace:has(#chat:not([hidden])) .chat-list:has(.chat-conversation.selected)+.chat-main{display:flex}
+}
+@media(max-width:480px){
+  #editor .actions{position:static}
+}

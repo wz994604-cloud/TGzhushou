@@ -6,12 +6,13 @@ const webhooks=new Map();
 globalThis.fetch=async(url,options={})=>{
   const address=String(url);
   if(!address.startsWith('https://api.telegram.org/'))return realFetch(url,options);
-  if (address.includes('/file/bot')) return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/C9sAAAAASUVORK5CYII=', 'base64'));
+  if (address.includes('/file/bot')) return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/C9sAAAAASUVORK5CYII=', 'base64'),{headers:{'content-type':'image/png'}});
   const method=address.split('/').at(-1), body=typeof options.body==='string'?JSON.parse(options.body):{};
   let result;
   if(method==='getMe') result=address.includes('bot111111:')?{id:111111,is_bot:true,username:'local_test_entry'}:address.includes('bot333333:')?{id:333333,is_bot:true,username:'local_test_second'}:{id:222222,is_bot:true,username:'local_test_publisher'};
   else if(method==='getChat') result={id:body.chat_id==='@test_channel'?-1001:-1002,title:body.chat_id==='@test_channel'?'测试频道':'测试群',type:body.chat_id==='@test_channel'?'channel':'supergroup'};
   else if(method==='getChatMember') result={status:'administrator',can_post_messages:true};
+  else if(method==='getUserProfilePhotos') result={photos:[[{file_id:'bot-avatar'}]]};
   else if(method==='getFile') {
     const fileId=String(body.file_id||'');
     result=fileId.startsWith('animated_')?{file_path:'emoji/test.tgs',file_size:68}:{file_path:'emoji/test.png',file_size:68};
