@@ -21,7 +21,7 @@ export function sentActions(db, publisher, call = botCall, photo = editPhoto) {
     return {...row, media_id:change?.media_id??row.media_id,delta_json:change?.delta_json??row.delta_json,buttons_json:change?.buttons_json??row.buttons_json,deleted:!!change?.deleted,last_action:change?.state,last_error:change?.error};
   }
   async function act(kind,id,body) {
-    const row=read(kind,id), bot=publisher(), key=kind+':'+id;
+    const row=read(kind,id), bot=publisher(row.bot_id), key=kind+':'+id;
     if(!bot || bot.id!==row.bot_id) throw new Error('请使用原发送机器人操作');
     if(busy.has(key)) throw new Error('该消息正在处理中');
     if(!['edit','delete'].includes(body.action)) throw new Error('操作无效');

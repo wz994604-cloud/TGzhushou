@@ -1,14 +1,11 @@
-import { getSetting, decryptToken } from './db.js';
+import { getPublisher } from './publishers.js';
 import { botCall, sendPhoto, safeTelegramError } from './telegram.js';
 import { renderDelta, keyboard } from './format.js';
 import { nextSlot } from './schedule.js';
 
 export function createScheduler(db, config, api = { botCall, sendPhoto }) {
   let running = false, timer = null;
-  const publisher = () => {
-    const encrypted = getSetting(db, 'publisher_token');
-    return encrypted ? { token: decryptToken(encrypted, config.configKey), id: getSetting(db, 'publisher_id') } : null;
-  };
+  const publisher = id => getPublisher(db, config.configKey, id);
 
   const createRun = db.transaction((task, source, slotAt, key) => {
     const existing = db.prepare('SELECT id FROM runs WHERE run_key=?').get(key);
@@ -26,18 +23,18 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     return Number(result.lastInsertRowid);
   });
 
-  function queueNow(taskId, requestKey) {
+  function queueNow(taskId, requestKey, botId) {
     const key = String(requestKey || '');
     if (!/^[0-9a-f-]{36}$/i.test(key)) throw new Error('立即发布请求标识无效');
     const task = db.prepare('SELECT * FROM tasks WHERE id=?').get(taskId);
     if (!task || task.status === 'STOPPED') throw new Error('任务不存在或已停止');
-    const bot = publisher();
+    const bot = publisher(botId);
     if (!bot || task.bot_id !== bot.id) throw new Error('任务所属发布机器人已变化');
     return createRun(task, 'IMMEDIATE', Date.now(), `now:${task.id}:${key}`);
   }
 
-  function queueBroadcast(item) {
-    const bot = publisher();
+  function queueBroadcast(item, botId) {
+    const bot = publisher(botId);
     if (!bot) throw new Error('请先配置发布机器人');
     const players = Array.isArray(item.players) ? item.players : [];
     if (!players.length || players.length > 100000) throw new Error('请选择 1–100000 个有效用户');
@@ -74,7 +71,7 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     if (!claimed.changes) return;
     let attempted = false;
     try {
-      const bot = publisher();
+      const bot = publisher(row.bot_id);
       if (!bot || bot.id !== row.bot_id) throw new Error('发布机器人身份已变更');
       const target = db.prepare('SELECT * FROM targets WHERE id=? AND bot_id=?').get(row.target_id, bot.id);
       if (!target || !target.can_publish) throw new Error('目标未登记或无发布权限');
@@ -109,7 +106,7 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     if (!claimed.changes) return;
     let attempted = false;
     try {
-      const bot = publisher();
+      const bot = publisher(row.bot_id);
       if (!bot || bot.id !== row.bot_id) throw new Error('发布机器人身份已变更');
       const formatted = renderDelta(JSON.parse(row.delta_json));
       const buttons = keyboard(JSON.parse(row.buttons_json));

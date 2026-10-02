@@ -53,4 +53,6 @@ nav{gap:6px;padding:6px;border-radius:16px;background:color-mix(in srgb,var(--bg
 
 /* Keep operation controls and status feedback on one blue interaction system. */
 :root{--brand-primary:#279cdb;--brand-secondary:#1686c3}
+.publisher-switch{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:10px 14px;background:var(--bg);border:1px solid var(--line);border-radius:12px}.publisher-switch label{margin:0;white-space:nowrap}.publisher-switch select{max-width:360px;min-width:0}.publisher-switch select:disabled{opacity:.65}
+@media(max-width:480px){.publisher-switch{gap:8px}.publisher-switch label{font-size:12px}.publisher-switch select{flex:1}}
 .sent-status{min-height:22px;color:var(--accent);font-weight:600}.sent-status:empty{display:none}.is-loaded{background:#e4f7ed;color:#16824b}

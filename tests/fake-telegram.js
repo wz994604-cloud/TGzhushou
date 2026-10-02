@@ -6,7 +6,7 @@ globalThis.fetch=async(url,options={})=>{
   if (address.includes('/file/bot')) return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/C9sAAAAASUVORK5CYII=', 'base64'));
   const method=address.split('/').at(-1), body=typeof options.body==='string'?JSON.parse(options.body):{};
   let result;
-  if(method==='getMe') result={id:address.includes('bot111111:')?111111:222222,is_bot:true,username:'local_test_publisher'};
+  if(method==='getMe') result=address.includes('bot111111:')?{id:111111,is_bot:true,username:'local_test_entry'}:address.includes('bot333333:')?{id:333333,is_bot:true,username:'local_test_second'}:{id:222222,is_bot:true,username:'local_test_publisher'};
   else if(method==='getChat') result={id:body.chat_id==='@test_channel'?-1001:-1002,title:body.chat_id==='@test_channel'?'测试频道':'测试群',type:body.chat_id==='@test_channel'?'channel':'supergroup'};
   else if(method==='getChatMember') result={status:'administrator',can_post_messages:true};
   else if(method==='getFile') {

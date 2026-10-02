@@ -12,6 +12,10 @@ export function openDatabase(dataDir) {
   db.pragma('busy_timeout = 5000');
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS publishers(
+      id TEXT PRIMARY KEY, username TEXT NOT NULL, token TEXT NOT NULL,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS targets(
       id INTEGER PRIMARY KEY, bot_id TEXT NOT NULL, chat_id TEXT NOT NULL,
       title TEXT NOT NULL, chat_type TEXT NOT NULL, username TEXT,
@@ -60,6 +64,13 @@ export function openDatabase(dataDir) {
       first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'ffa'
     );
     CREATE INDEX IF NOT EXISTS players_name ON players(display_name);
+    CREATE TABLE IF NOT EXISTS bot_players(
+      bot_id TEXT NOT NULL, telegram_id TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '',
+      username TEXT NOT NULL DEFAULT '', platform_id TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
+      first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'ffa',
+      PRIMARY KEY(bot_id, telegram_id)
+    );
+    CREATE INDEX IF NOT EXISTS bot_players_name ON bot_players(bot_id, display_name);
     CREATE TABLE IF NOT EXISTS broadcasts(
       id INTEGER PRIMARY KEY, name TEXT NOT NULL, delta_json TEXT NOT NULL, buttons_json TEXT NOT NULL,
       media_id INTEGER REFERENCES media(id), bot_id TEXT NOT NULL, status TEXT NOT NULL,
@@ -73,6 +84,18 @@ export function openDatabase(dataDir) {
     );
     CREATE INDEX IF NOT EXISTS broadcast_pending ON broadcast_deliveries(status, id);
   `);
+  // Keep the original settings and players intact so a rollback can still read them.
+  const legacyId = db.prepare("SELECT value FROM settings WHERE key='publisher_id'").get()?.value;
+  const legacyToken = db.prepare("SELECT value FROM settings WHERE key='publisher_token'").get()?.value;
+  if (legacyId && legacyToken) db.transaction(() => {
+    db.prepare(`INSERT OR IGNORE INTO publishers(id,username,token,created_at,updated_at)
+      VALUES(?,?,?,?,?)`).run(legacyId, db.prepare("SELECT value FROM settings WHERE key='publisher_username'").get()?.value || '', legacyToken, Date.now(), Date.now());
+    if (!db.prepare("SELECT 1 FROM settings WHERE key='multibot_players_migrated'").get()) {
+      db.prepare(`INSERT OR IGNORE INTO bot_players(bot_id,telegram_id,display_name,username,platform_id,active,first_seen,last_seen,source)
+        SELECT ?,telegram_id,display_name,username,platform_id,active,first_seen,last_seen,source FROM players`).run(legacyId);
+      db.prepare("INSERT INTO settings(key,value) VALUES('multibot_players_migrated','1')").run();
+    }
+  })();
   return db;
 }
 

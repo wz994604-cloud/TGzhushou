@@ -13,18 +13,19 @@ const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = value => value ? new Date(value).toLocaleString('zh-CN', { timeZone:'Asia/Shanghai', hour12:false }) : '—';
 const labels = { DRAFT:'草稿', ACTIVE:'运行中', PAUSED:'已暂停', STOPPED:'已停止', COMPLETED:'已完成', SUCCESS:'成功', FAILED:'失败', UNKNOWN:'待核实', PENDING:'排队中', SENDING:'发送中', CANCELLED:'已取消', EDITED:'已编辑', DELETED:'已删除', RUNNING:'发送中' };
-let data, taskId = null, buttons = [], mediaId = null, imageUrl = '', pickerTarget = null, savedRange = null, pendingSend = null, ready = false;
+let data, taskId = null, buttons = [], mediaId = null, imageUrl = '', pickerTarget = null, savedRange = null, pendingSend = null, ready = false, insertedEmbedPending = false;
+let selectedPublisherId = '';
 let draftDirty = false, draftTimer, previewTimer, previewDirty = true, serverSnapshot = null;
 const playerCache = new Map();
 let playerPage = 1;
 let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
 const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
 const loadImage = createImageLoader(async url => {
-  const response = await fetch('/api' + url, { headers:{ 'x-telegram-init-data':initData } });
+  const response = await fetch('/api' + url, { headers:{ 'x-telegram-init-data':initData, ...(selectedPublisherId ? { 'x-publisher-id':selectedPublisherId } : {}) } });
   if (!response.ok) throw Object.assign(new Error('图片加载失败'), { status:response.status });
   return response.blob();
 });
-const draftKey = 'tgzhushou:draft:v1';
+const draftKey = () => data?.publisher?.legacy ? 'tgzhushou:draft:v1' : `tgzhushou:draft:${selectedPublisherId || 'none'}:v1`;
 function readRecentEmojis() {
   try {
     const stored = JSON.parse(localStorage.getItem(recentEmojiKey) || '[]');
@@ -46,6 +47,7 @@ async function loadSavedPacks() {
 }
 async function api(url, method = 'GET', body) {
   const headers = { 'x-telegram-init-data':initData };
+  if (selectedPublisherId) headers['x-publisher-id'] = selectedPublisherId;
   if (body && !(body instanceof FormData)) headers['content-type'] = 'application/json';
   const response = await fetch(`/api${url}`, { method, headers, body:body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
   const result = await response.json().catch(() => ({}));
@@ -66,6 +68,7 @@ function displayImage(node, url, alt, label = '') {
 $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hidden="true"><svg viewBox="0 0 48 48" role="presentation"><path d="M24 5 28.2 19.8 43 24l-14.8 4.2L24 43l-4.2-14.8L5 24l14.8-4.2L24 5Z" fill="currentColor"/><circle cx="37" cy="11" r="3" fill="currentColor" opacity=".72"/><circle cx="11" cy="37" r="3" fill="currentColor" opacity=".72"/></svg></div><div class="brand-copy"><span class="eyebrow">运营工作台</span><h1>活动中枢</h1><p id="identity">Telegram 活动发布工作台</p></div><div class="header-meta"><span class="online-dot" aria-hidden="true"></span><span class="chip">北京时间</span></div></header>
 <div id="locked" class="card center" hidden><h2>从 Telegram 打开</h2><p>请使用已绑定的管理员账号，从入口机器人的「打开活动后台」进入。</p><p id="authError" class="muted"></p></div>
 <main id="workspace" hidden>
+<div class="publisher-switch"><label for="publisherSelect">当前发布机器人</label><select id="publisherSelect" aria-label="当前发布机器人"></select></div>
 <nav aria-label="功能导航"><button data-tab="editor" class="active">编写</button><button data-tab="players">用户</button><button data-tab="tasks">任务</button><button data-tab="logs">记录</button><button data-tab="settings">设置</button></nav>
 <section id="editor" class="page">
 <div class="section-title"><div><h2 id="editorTitle">新建活动</h2><p id="saveStatus" role="status">内容尚未保存到服务器</p></div><button id="reset" class="quiet">新建</button></div>
@@ -82,7 +85,7 @@ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hi
 <details id="broadcastPanel" class="card"><summary>私信记录</summary><button id="refreshBroadcasts" class="quiet">刷新</button><div id="broadcastList"></div></details></section>
 <section id="tasks" class="page" hidden><div class="section-title"><div><h2>发布任务</h2><p>查看状态与下次发送时间。</p></div><button id="refreshTasks" class="quiet">刷新</button></div><div id="taskList"></div></section>
 <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
-<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>发布机器人 Token<input id="token" type="password" autocomplete="off" placeholder="仅在首次配置或更换时填写"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">入口机器人只负责打开后台；发布机器人负责发消息。更换发布身份会暂停旧身份的定时任务。此服务不接管发布机器人的 webhook。</p></div><div class="card"><h3>发发娱乐用户接口</h3><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从发发娱乐后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 Railway 的 ADMIN_TG_IDS（兼容 ADMIN_TG_ID）。所有接口均验证 Telegram 签名。</p></div></section>
+<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">同一后台管理多个发布机器人，原任务继续运行。发布机器人原有 webhook 不会被接管。</p></div><div id="ffaCard" class="card"><h3>发发娱乐用户接口</h3><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从发发娱乐后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 Railway 的 ADMIN_TG_IDS（兼容 ADMIN_TG_ID）。所有接口均验证 Telegram 签名。</p></div></section>
 </main><div id="toast" class="toast" role="status" hidden></div>
 <dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button><button id="savePack" class="quiet">保存</button></div><div id="savedPackTabs" class="pack-tabs"></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><div id="emojiGrid"></div></dialog>`;
 
@@ -107,7 +110,7 @@ installLinkEditor(Quill, quill);
 quill.enable(false);
 $('toggleWriting').onclick=()=>{const edit=!quill.isEnabled();quill.enable(edit);$('toggleWriting').textContent=edit?'完成编辑':'编辑文案';if(edit)quill.focus();else{quill.blur();closePicker();}};
 quill.on('selection-change', range => { if (range) savedRange = range; });
-quill.on('text-change', () => { $('textCount').textContent = `${quill.getText().trimEnd().length} / ${mediaId ? 1024 : 4096}`; remember(); preview(); });
+quill.on('text-change', () => { insertedEmbedPending=false; $('textCount').textContent = `${quill.getText().trimEnd().length} / ${mediaId ? 1024 : 4096}`; remember(); preview(); });
 quill.root.addEventListener('paste', event => {
   const html = event.clipboardData?.getData('text/html') || '';
   if (/custom_emoji|tg-emoji|data-document-id/.test(html)) toast('粘贴内容中的专属表情可能需要从选择器重新添加。');
@@ -126,7 +129,7 @@ async function loadPlayers() {
   $('userTotal').textContent='· 共 '+result.total+' 人';
   $('playerStats').textContent='第 '+playerPage+' 页 · 共 '+result.total+' 名用户';
   $('prevPlayers').disabled=playerPage<=1; $('nextPlayers').disabled=playerPage*50>=result.total;
-  $('playerList').innerHTML=result.rows.map(p=>'<label class="check"><input type="checkbox" data-player-id="'+esc(p.telegram_id)+'" '+(p.active?'':'disabled')+'><span>'+esc(p.display_name||'未命名')+'<small>'+esc(p.telegram_id)+(p.username?' · @'+esc(p.username):'')+'</small></span></label>').join('')||'<p class="muted">暂无用户，请同步或导入名单。</p>';
+  $('playerList').innerHTML=result.rows.map(p=>'<label class="check"><input type="checkbox" data-player-id="'+esc(p.telegram_id)+'" '+(p.active?'':'disabled')+'><span>'+esc(p.display_name||'未命名')+'<small>'+esc(p.telegram_id)+(p.username?' · @'+esc(p.username):'')+'</small></span></label>').join('')||(data?.publisher?.legacy?'<p class="muted">暂无用户，请同步或导入名单。</p>':'<p class="muted">此机器人的用户来源尚未配置，私信发送流程已就绪。</p>');
   updatePlayerSelection(); await loadBroadcasts();
 }
 $('importPlayers').onclick=()=>$('playerCsv').click();
@@ -144,7 +147,7 @@ function saveStatus(local = true) {
 function flushDraft(force = false) {
   clearTimeout(draftTimer);
   if (!ready || (!draftDirty && !force)) return;
-  try { localStorage.setItem(draftKey, JSON.stringify({ ...collect(), taskId })); draftDirty = false; saveStatus(); }
+  try { localStorage.setItem(draftKey(), JSON.stringify({ ...collect(), taskId })); draftDirty = false; saveStatus(); }
   catch { $('saveStatus').textContent = serverSnapshot === JSON.stringify(collect()) ? '服务器已保存 · 本机暂存失败' : '本机暂存失败，请点击保存到服务器'; }
 }
 function remember() {
@@ -223,12 +226,13 @@ $('emojiGrid').addEventListener('mousedown', event => { if (event.target.closest
 let deleteTimer, deletePointer = null;
 function deleteAtCaret() {
   if (!$('emojiDialog').open || pickerTarget !== 'body') return;
-  const range = quill.getSelection() || savedRange;
+  // Dialog controls can leave Quill's live selection stale immediately after an embed insert.
+  const range = insertedEmbedPending ? savedRange : quill.getSelection() || savedRange;
   if (!range) return;
   const remove = deletionRange(quill.getContents().ops, range);
   if (!remove.length) return;
   quill.deleteText(remove.index, remove.length, 'user');
-  quill.setSelection(remove.index, 0, 'silent'); savedRange = { index:remove.index, length:0 };
+  quill.setSelection(remove.index, 0, 'silent'); savedRange = { index:remove.index, length:0 }; insertedEmbedPending=false;
 }
 function stopDeleting() {
   clearTimeout(deleteTimer);
@@ -261,7 +265,7 @@ function appendEmojiBatch() {
       if (pickerTarget === 'body') {
         const at = Math.min(savedRange?.index ?? quill.getLength()-1, quill.getLength()-1);
         quill.insertEmbed(at, 'customEmoji', { id:sticker.id, alt:sticker.alt, thumbId:sticker.thumbnailId || '' }, 'user');
-        quill.setSelection(at+1, 0); savedRange = { index:at+1, length:0 }; hydrateEmojiImages(quill.root);
+        quill.setSelection(at+1, 0); savedRange = { index:at+1, length:0 }; insertedEmbedPending=true; hydrateEmojiImages(quill.root);
       } else if (buttons[pickerTarget]) {
         Object.assign(buttons[pickerTarget], { iconId:sticker.id, iconAlt:sticker.alt, iconThumbId:sticker.thumbnailId || '' });
         showButtons(); remember();
@@ -315,7 +319,19 @@ $('photo').onchange = event => action(async () => { const file=event.target.file
 function showPhoto() { $('photoBox').hidden=!mediaId; $('photoPreview').src=imageUrl; $('textCount').textContent=`${quill.getText().trimEnd().length} / ${mediaId?1024:4096}`; preview(); }
 $('removePhoto').onclick = () => {mediaId=null;replacePhoto();$('photo').value='';showPhoto();remember();};
 function populateTargets(selected = []) { $('targetChecks').innerHTML=data.targets.map(t=>`<label class="check"><input type="checkbox" name="target" value="${t.id}" ${selected.includes(t.id)?'checked':''} ${t.can_publish?'':'disabled'}><span>${esc(t.title)}<small>${esc(t.last_error || t.chat_id)}</small></span></label>`).join('')||'<p class="muted">请先在「设置」中添加群或频道。</p>'; }
-async function refresh() { const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); data=await api('/bootstrap'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=`${data.admin.name} · ID ${data.admin.id}`; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
+async function refresh() { const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); data=await api('/bootstrap'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=`${data.admin.name} · ID ${data.admin.id}`; $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length; $('ffaCard').hidden=!data.publisher?.legacy; $('syncPlayers').hidden=!data.publisher?.legacy; $('importPlayers').hidden=!data.publisher?.legacy; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
+async function switchPublisher(id) {
+  if (savePromise) throw new Error('正在保存活动，请稍后切换机器人');
+  flushDraft();
+  selectedPublisherId=id;
+  selectedPlayerIds.clear(); playerCache.clear(); playerPage=1; savedPacks=[]; pendingSend=null;
+  await refresh();
+  let draft; try { draft=JSON.parse(localStorage.getItem(draftKey())||'null'); } catch { draft=null; }
+  await fill(draft||{});
+  await loadPlayers(); await loadRuns();
+  if (data.publisher?.legacy) await loadFfaStatus();
+}
+$('publisherSelect').onchange=event=>action(async()=>{await switchPublisher(event.target.value);toast('已切换发布机器人');},event.currentTarget);
 function showTasks() {
   $('taskList').innerHTML = data.tasks.map(t => {
     const stopped = t.status === 'STOPPED', timed = JSON.parse(t.schedule_json).kind !== 'MANUAL';
@@ -373,14 +389,14 @@ $('taskList').onclick = event => action(async () => {
   if (b.dataset.sendTask) await sendTask(Number(b.dataset.sendTask));
 }, event.target);
 $('saveFfaToken').onclick = event => action(async()=>{await api('/ffa/token','POST',{token:$('ffaToken').value});$('ffaToken').value='';$('ffaStatus').textContent='Token 已验证并保存';toast('发发娱乐接口已连接');},event.currentTarget);
-$('savePublisher').onclick = event => action(async()=>{if(data.publisher&&!confirm('确认更新发布机器人配置？更换身份会暂停旧定时任务。'))return;await api('/publisher','POST',{token:$('token').value});$('token').value='';await refresh();toast('发布机器人已验证并保存');},event.currentTarget);
+$('savePublisher').onclick = event => action(async()=>{const result=await api('/publisher','POST',{token:$('token').value});$('token').value='';await switchPublisher(result.id);toast('发布机器人已验证并保存');},event.currentTarget);
 $('addTarget').onclick = event => action(async()=>{const t=await api('/targets','POST',{reference:$('targetRef').value});$('targetRef').value='';await refresh();toast(t.can_publish?'目标已添加':t.last_error,!t.can_publish);},event.currentTarget);
 $('targets').onclick = event => action(async()=>{const id=event.target.dataset.deleteTarget;if(id&&confirm('删除该目标？引用它的任务将跳过此目标。')){await api(`/targets/${id}`,'DELETE');await refresh();}},event.target);
 async function loadRuns() { const runs=await api('/runs');$('runList').innerHTML=runs.map(r=>`<details class="card" data-run="${r.id}"><summary><strong>${esc(r.name)}</strong><span class="muted">${fmt(r.created_at)}</span></summary><p>成功 ${r.success_count||0} / ${r.total} · 失败 ${r.failed_count||0} · 待核实 ${r.unknown_count||0}</p><div class="run-detail"><button class="quiet" data-run-detail="${r.id}">查看各目标结果</button></div></details>`).join('')||'<div class="card center muted">还没有发布记录</div>'; }
 $('runList').onclick = event => action(async()=>{const id=event.target.dataset.runDetail;if(!id)return;await openSent('runs',id);},event.target);
 $('refreshTasks').onclick=event=>action(refresh,event.currentTarget);$('refreshLogs').onclick=event=>action(loadRuns,event.currentTarget); updatePlayerSelection(); async function loadFfaStatus(){const r=await api('/ffa');$('ffaStatus').textContent=r.configured?`已配置：${r.baseUrl}`:`未配置（接口：${r.baseUrl}）`;}
 $('editor').addEventListener('input', event => { if (!event.target.closest('#message, #buttons')) remember(); });$('kind').onchange=()=>{scheduleFields();remember();};
-async function boot() { if(!initData){$('locked').hidden=false;return;}try{await refresh();await loadFfaStatus();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey)||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');}catch(error){$('locked').hidden=false;$('authError').textContent=error.message;} }
+async function boot() { if(!initData){$('locked').hidden=false;return;}try{await refresh();if(data.publisher?.legacy)await loadFfaStatus();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');}catch(error){$('locked').hidden=false;$('authError').textContent=error.message;} }
 boot();
 
 let viewportFrame;
