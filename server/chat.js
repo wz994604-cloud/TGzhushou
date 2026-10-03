@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { encryptToken, decryptToken } from './db.js';
-import { botCall } from './telegram.js';
+import { botCall, safeTelegramError } from './telegram.js';
 import { sendFormatted } from './sender.js';
 
 const idPattern = /^-?\d+$/;
@@ -52,6 +52,17 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
   const currentId = req => botFor(req)?.id || '';
   const inbox = id => db.prepare('SELECT * FROM publisher_inbox WHERE bot_id=?').get(id);
   const botAvatars = new Map();
+  async function avatarBotCall(bot, method, payload) {
+    try { return await botApi(bot.token,method,payload); }
+    catch (error) {
+      console.warn(`Bot avatar ${method} failed for ${bot.id}:`,safeTelegramError(error));
+      if (method==='getUserProfilePhotos' && error.telegramCode===401) {
+        try { await botApi(bot.token,'getMe');console.warn(`Bot avatar getMe succeeded for ${bot.id}`); }
+        catch (checkError) { console.warn(`Bot avatar getMe failed for ${bot.id}:`,safeTelegramError(checkError)); }
+      }
+      throw error;
+    }
+  }
   const wrapper = fn => async (req,res,next) => { try { await fn(req,res); } catch (error) { next(error); } };
   async function refreshAvatar(bot, chatId) {
     const chat = await botApi(bot.token, 'getChat', { chat_id: String(chatId) });
@@ -121,16 +132,18 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
       if (!cached.bytes) return res.sendStatus(404);
       res.set('Cache-Control','private, max-age=3600');res.type(cached.type);return res.send(cached.bytes);
     }
-    const photos = await botApi(bot.token,'getUserProfilePhotos',{user_id:Number(id),limit:1});
+    const photos = await avatarBotCall(bot,'getUserProfilePhotos',{user_id:Number(id),limit:1});
     const photo = photos?.photos?.[0]?.[0];
     if (!photo?.file_id) {
       botAvatars.set(id,{expires:Date.now()+5*60_000});
       return res.sendStatus(404);
     }
-    const file = await botApi(bot.token,'getFile',{file_id:photo.file_id});
+    const file = await avatarBotCall(bot,'getFile',{file_id:photo.file_id});
     if (!/^[A-Za-z0-9_./-]+$/.test(file?.file_path || '') || file.file_path.includes('..')) return res.sendStatus(404);
-    const response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`,{signal:AbortSignal.timeout(10000)});
-    if (!response.ok) return res.sendStatus(502);
+    let response;
+    try { response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`,{signal:AbortSignal.timeout(10000)}); }
+    catch (error) { console.warn(`Bot avatar file download failed for ${bot.id}:`,safeTelegramError(error));throw error; }
+    if (!response.ok) { console.warn(`Bot avatar file download returned ${response.status} for ${bot.id}`);return res.sendStatus(502); }
     const type = response.headers.get('content-type')?.split(';')[0]?.trim();
     if (!['image/jpeg','image/png','image/webp'].includes(type) || Number(response.headers.get('content-length') || 0)>2_000_000) return res.sendStatus(502);
     const bytes = Buffer.from(await response.arrayBuffer());
