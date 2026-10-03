@@ -1,11 +1,51 @@
-OBJECT: TGzhushou Vercel + Turso migration
-BASE_COMMIT: 30fbeb86e1d503e98b807b1f256b0aea0c4d3d0c
-MODIFIED_FILE: .design/vercel-migration-20261003/MODIFIED_FILE.zip
-DIFF_FILE: .design/vercel-migration-20261003/DIFF_FILE.patch
-VERIFICATION.txt: .design/vercel-migration-20261003/VERIFICATION.txt
-ROLLBACK.sh: .design/vercel-migration-20261003/ROLLBACK.sh
-BASELINE: better-sqlite3/Railway package baseline at 30fbeb8
-MODIFIED: Turso worker DB, Vercel function entry, Blob URLs, cron endpoint, cleaned Railway/Docker config
-VERIFICATION: npm run check; npm run build; node --test tests/auth.test.js tests/format.test.js -> syntax/build passed, 3 tests passed
-TURSO: empty schema prepared in server/schema.sql; live initialization requires configured Vercel Turso credentials
-ROLLBACK: restore 30fbeb8 and remove migration-only files in a separate clone
+# Vercel + Turso migration verification
+
+BASELINE
+- Commit: 30fbeb8
+- Command: npm run check
+- Result: passed (baseline source syntax)
+- Exit: 0
+
+MODIFIED
+- Commit: ee6cfeb
+- Command: npm run check
+- Result: passed (all server syntax checks)
+- Exit: 0
+- Command: npm run build
+- Result: passed; dist/index.html and hashed assets generated
+- Exit: 0
+- Command: node --test tests/auth.test.js tests/format.test.js
+- Result: 3 tests passed
+- Exit: 0
+
+DEPLOYMENT
+- Vercel production commit: ee6cfeb
+- Project: t-gzhushou (Project ID prj_jrIRdXIutzhq6SpYLrV2j9IfraIx)
+- URL: https://t-gzhushou.vercel.app
+- Runtime fix: SQL statement splitter now preserves trigger BEGIN...END bodies; /api/bootstrap no longer fails with SQL_PARSE_ERROR.
+
+PRODUCTION PROBES
+- Command: Invoke-WebRequest https://t-gzhushou.vercel.app/healthz
+- Result: HTTP 200; {"ok":true,"database":true}
+- Exit: 0
+- Command: POST /auth/login with dummy probe credentials
+- Result: HTTP 403 (route active; credentials rejected as expected)
+- Exit: 0
+- Command: GET /api/bootstrap without auth
+- Result: HTTP 401 (route active; auth required; no 500/SQL_PARSE_ERROR)
+- Exit: 0
+
+ROLLBACK
+- Command: .design/vercel-migration-20261003/ROLLBACK.sh
+- Result: restores the pre-migration snapshot to a separate copy; MODIFIED_FILE remains changed.
+- Exit: 0 (script validated on another copy)
+
+ARTIFACTS
+- MODIFIED_FILE: .design/vercel-migration-20261003/MODIFIED_FILE.zip
+- DIFF_FILE: .design/vercel-migration-20261003/DIFF_FILE.patch
+- VERIFICATION: .design/vercel-migration-20261003/VERIFICATION.txt
+- ROLLBACK: .design/vercel-migration-20261003/ROLLBACK.sh
+
+REMAINING CONFIGURATION
+- BLOB_READ_WRITE_TOKEN is still required in Vercel Production for media upload routes; no backend/API/database changes are pending.
+- Configure an external cron provider to call POST /api/cron/tick with Authorization: Bearer CRON_SECRET.
