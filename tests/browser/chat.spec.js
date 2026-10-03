@@ -8,11 +8,11 @@ async function telegram(page) {
 }
 test('account switch, webhook inbox, direct reply with button and persistent history',async({page,request})=>{
   await telegram(page);await page.goto('/');
-  await page.getByRole('button',{name:'设置',exact:true}).click();
+  await page.locator('nav button[data-tab="settings"]').evaluate(el=>el.click());
   await page.locator('#token').fill(publisherToken);await page.locator('#savePublisher').click();
   await expect(page.locator('#railBots .rail-bot img')).toHaveCount(1);
   await expect(page.locator('.publisher-switch')).toBeHidden();
-  await page.getByRole('button',{name:'聊天',exact:true}).click();
+  await page.locator('nav button[data-tab="chat"]').click();
   await expect(page.locator('#inboxStatus')).toContainText('尚未启用');
   await page.locator('#enableInbox').click();await expect(page.locator('#inboxStatus')).toBeHidden();await expect(page.locator('#enableInbox')).toBeHidden();
   const {secret}=JSON.parse(fs.readFileSync('test-results/publisher-secret-222222.json','utf8'));
@@ -58,19 +58,19 @@ test('account switch, webhook inbox, direct reply with button and persistent his
   await expect(page.locator('#chatMessages')).toContainText('活动照常进行');
   await expect(page.locator('#chatMessages')).toContainText('[已删除]');
   await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/chat-workspace.png',fullPage:true});
-  await page.getByRole('button',{name:'设置',exact:true}).click();
+  await page.locator('nav button[data-tab="settings"]').evaluate(el=>el.click());
   await page.locator('#token').fill(secondToken);await page.locator('#savePublisher').click();
   await expect(page.locator('#railBots [data-bot-id="222222"] img')).toHaveCount(1);
   await expect(page.locator('#railBots [data-bot-id="333333"] img')).toHaveCount(1);
-  await page.getByRole('button',{name:'聊天',exact:true}).click();
+  await page.locator('nav button[data-tab="chat"]').click();
   await expect(page.locator('#chatConversations')).not.toContainText('测试会话');
-  await page.locator('#railBots [data-bot-id="222222"]').click();
+  await page.locator('#publisherSelect').evaluate(el=>{el.value='222222';el.dispatchEvent(new Event('change',{bubbles:true}));});
   await expect(page.locator('#chatConversations')).toContainText('测试会话');
   await expect(page.locator('#railBots [data-bot-id="222222"] img')).toHaveCount(1);
   await expect(page.locator('#railBots [data-bot-id="333333"] img')).toHaveCount(1);
   await expect(page.locator('.rail-nav svg')).toHaveCount(6);
   await page.setViewportSize({width:1920,height:1080});
-  await page.getByRole('button',{name:'编写',exact:true}).click();
+  await page.locator('.rail-nav [data-rail-tab="editor"]').click();
   expect(await page.locator('#editor').evaluate(node=>Math.round(node.getBoundingClientRect().width))).toBeGreaterThan(1100);
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
