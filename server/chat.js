@@ -145,9 +145,12 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     catch (error) { console.warn(`Bot avatar file download failed for ${bot.id}:`,safeTelegramError(error));throw error; }
     if (!response.ok) { console.warn(`Bot avatar file download returned ${response.status} for ${bot.id}`);return res.sendStatus(502); }
     const type = response.headers.get('content-type')?.split(';')[0]?.trim();
-    if (!['image/jpeg','image/png','image/webp'].includes(type) || Number(response.headers.get('content-length') || 0)>2_000_000) return res.sendStatus(502);
+    if (!['image/jpeg','image/png','image/webp'].includes(type) || Number(response.headers.get('content-length') || 0)>2_000_000) {
+      console.warn(`Bot avatar file rejected for ${bot.id}: type=${type || 'missing'}, size=${response.headers.get('content-length') || 'unknown'}`);
+      return res.sendStatus(502);
+    }
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length>2_000_000) return res.sendStatus(502);
+    if (bytes.length>2_000_000) { console.warn(`Bot avatar file exceeded size limit for ${bot.id}`);return res.sendStatus(502); }
     botAvatars.set(id,{bytes,type,expires:Date.now()+6*60*60_000});
     res.set('Cache-Control','private, max-age=3600');res.type(type);res.send(bytes);
   }));
