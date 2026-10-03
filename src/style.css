@@ -256,8 +256,18 @@ body:has(#workspace:not([hidden])){overflow:hidden}
 @media(max-width:480px){
   #editor .actions{position:static}
 }
-/* Robot names are available in the button tooltip and switch confirmation, not across columns. */
-.rail-bot-name{display:none}
+/* Show the selected bot name beside its avatar on desktop; keep the compact rail on mobile. */
+@media(min-width:701px){
+  #workspace:has(#chat:not([hidden])){grid-template-columns:188px minmax(0,1fr)}
+  #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:188px minmax(0,1fr)}
+  #workspace:not(:has(#chat:not([hidden]))) .app-rail,#workspace:has(#chat:not([hidden])) .app-rail{align-items:flex-start;padding-left:12px;padding-right:12px}
+  .rail-bots{width:164px;align-items:stretch}
+  .rail-bot{width:164px;border-radius:22px;text-align:left;padding-left:54px;white-space:nowrap}
+  .rail-bot-name{display:block;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:700}
+  .rail-bot img{right:auto;width:44px}
+  .rail-nav{align-self:center}
+}
+@media(max-width:700px){.rail-bot-name{display:none}}
 /* Responsive Telegram Web/Desktop shell: fixed rail/list columns and a single-pane Mini App. */
 :root{box-sizing:border-box}
 *,*::before,*::after{box-sizing:border-box}
@@ -266,7 +276,9 @@ body:has(#workspace:not([hidden])){overflow:hidden}
 #workspace:has(#chat:not([hidden])) .chat-list{width:320px;min-width:0}
 #workspace:has(#chat:not([hidden])) .chat-main{min-width:0}
 #workspace:has(#chat:not([hidden])) .rail-bot{width:48px;min-width:48px;height:48px;overflow:visible;padding:0}
-#workspace:has(#chat:not([hidden])) .rail-bots{width:48px;overflow-x:hidden;overflow-y:auto}
+#workspace:has(#chat:not([hidden])) .rail-bot-name{position:absolute;left:56px;top:50%;transform:translateY(-50%);display:block;width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tg-client-text);font-size:12px;font-weight:700;text-align:left;pointer-events:none;z-index:5}
+#workspace:has(#chat:not([hidden])) .rail-bot-name::first-letter{color:var(--tg-client-blue)}
+#workspace:has(#chat:not([hidden])) .rail-bots{width:48px;overflow:visible}
 #workspace:has(#chat:not([hidden])) .rail-nav{align-self:center}
 #workspace:has(#chat:not([hidden])) .chat-head{min-width:0}
 #workspace:has(#chat:not([hidden])) .chat-head #chatTitle{min-width:0;flex:1}
@@ -277,6 +289,7 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   #workspace:has(#chat:not([hidden])){grid-template-columns:64px 280px minmax(0,1fr)}
   #workspace:has(#chat:not([hidden])) .app-rail{width:64px;min-width:64px;padding-inline:8px}
   #workspace:has(#chat:not([hidden])) .chat-list{width:280px}
+  #workspace:has(#chat:not([hidden])) .rail-bot-name{left:50px;width:120px}
 }
 @media(max-width:899px){
   #workspace:has(#chat:not([hidden])){grid-template-columns:minmax(0,1fr);min-height:100dvh;height:100dvh}
@@ -300,43 +313,47 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   #workspace:has(#chat:not([hidden])) nav button{min-height:44px;font-size:12px}
   #workspace:has(#chat:not([hidden])):has(.chat-conversation.selected) nav{display:none!important}
 }
-
-/* Desktop workspace density; the existing Mini App shell remains unchanged. */
+/* Final desktop layout and custom-emoji state contract. */
+.custom-emoji[data-image-state="loading"],.custom-emoji[data-image-state="error"]{display:inline-grid;place-items:center;width:1.35em;height:1.35em;vertical-align:-.22em;border-radius:5px;background:#d9edf7;color:#6c9bb2;font-size:1em;line-height:1;overflow:hidden;text-indent:-9999px}
+.custom-emoji[data-image-state="loading"]::before{content:"";width:.52em;height:.52em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:emoji-spin .8s linear infinite}
+.custom-emoji[data-image-state="error"]::before{content:"✦";text-indent:0;font-size:.72em;color:#78a8bf}
+.custom-emoji[data-image-state="ready"]{display:inline-flex;align-items:center;justify-content:center;width:1.35em;height:1.35em;vertical-align:-.22em}
+.custom-emoji[data-image-state="ready"] img{display:block;width:100%;height:100%;object-fit:contain}
+.emoji-choice[data-image-state="loading"],.emoji-choice[data-image-state="error"]{position:relative;color:transparent;background:#e5f2f8}
+.emoji-choice[data-image-state="loading"]::before{content:"";width:20px;height:20px;border:2px solid #73aec8;border-right-color:transparent;border-radius:50%;animation:emoji-spin .8s linear infinite}
+.emoji-choice[data-image-state="error"]::before{content:"✦";color:#76a8bf;font-size:22px}
+.emoji-choice[data-image-state="ready"]{color:inherit}
+.emoji-choice img{width:42px;height:42px;object-fit:contain}
+.preview-emoji{margin-right:2px}
+@keyframes emoji-spin{to{transform:rotate(360deg)}}
 @media(min-width:900px){
+  #workspace{height:100dvh;min-width:0;overflow:hidden}
+  #workspace:has(#chat:not([hidden])){grid-template-columns:72px 320px minmax(0,1fr);min-width:0}
+  #workspace:has(#chat:not([hidden])) .app-rail{width:72px;min-width:72px;overflow-x:hidden;align-items:center;padding-inline:8px}
+  #workspace:has(#chat:not([hidden])) .chat-list{width:320px;min-width:0;overflow-y:auto;overflow-x:hidden}
+  #workspace:has(#chat:not([hidden])) .chat-main{min-width:0;overflow:hidden}
+  #workspace:has(#chat:not([hidden])) .rail-bots{width:48px;max-width:48px;overflow-x:hidden;overflow-y:auto;align-items:center}
+  #workspace:has(#chat:not([hidden])) .rail-bot{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;overflow:hidden}
+  #workspace:has(#chat:not([hidden])) .rail-bot-name{display:none;position:static}
   #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:72px minmax(0,1fr)}
-  #workspace .app-rail{align-items:center;min-width:0;overflow:hidden}
-  #workspace .rail-bots{width:50px;max-width:100%;min-width:0;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin}
-  #workspace .rail-bot{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:50%}
-  #workspace .rail-nav{align-self:center}
-  #workspace:has(#chat:not([hidden])) .chat-list{min-width:0;overflow-x:hidden}
-  #workspace:has(#chat:not([hidden])) .chat-main{min-width:0}
-  #chatConversations,.chat-list .section-title,#chatSearch,#inboxStatus{min-width:0;max-width:100%}
-  #inboxStatus{overflow-wrap:anywhere;white-space:normal;line-height:1.4}
-  #workspace:not(:has(#chat:not([hidden])))>.page{width:100%;max-width:1320px;padding:24px 28px 40px}
-  #workspace:not(:has(#chat:not([hidden]))) #settings{max-width:1040px;margin-inline:auto}
+  #workspace:not(:has(#chat:not([hidden]))) .app-rail{width:72px;min-width:72px;overflow-x:hidden;align-items:center;padding-inline:8px}
+  #workspace:not(:has(#chat:not([hidden])))>.page{max-width:1100px;width:100%;min-width:0;overflow-y:auto}
   #workspace:not(:has(#chat:not([hidden]))) #editor{max-width:1240px}
-  #workspace:not(:has(#chat:not([hidden])))>.page .card{padding:24px;margin:16px 0;border-radius:12px}
-  #workspace:not(:has(#chat:not([hidden])))>.page .card h3{font-size:17px}
-  #workspace:not(:has(#chat:not([hidden])))>.page :is(input,select,button){min-height:40px}
-  #workspace:not(:has(#chat:not([hidden])))>.page .actions{gap:10px}
-  #workspace:not(:has(#chat:not([hidden])))>.page .actions button{flex:0 0 auto;min-width:0}
-  #toolbar,#chatToolbar{min-height:40px;padding:4px 8px}
-  #toolbar button,#chatToolbar button{width:32px;height:32px;min-height:32px;padding:5px}
-  #toolbar button svg,#chatToolbar button svg{width:18px;height:18px}
+  #workspace:not(:has(#chat:not([hidden]))) :is(#players,#tasks,#logs){max-width:1320px}
+  #workspace:not(:has(#chat:not([hidden]))) #settings{max-width:1040px;margin-inline:auto}
+  #locked{width:min(480px,calc(100vw - 48px));padding:32px;margin: auto;}
+  #locked .login-form input{min-height:44px}
+  #locked .login-form button{width:max-content;min-width:120px;margin-inline:auto}
 }
 @media(min-width:900px) and (max-width:1199px){
+  #workspace:has(#chat:not([hidden])){grid-template-columns:64px 280px minmax(0,1fr)}
+  #workspace:has(#chat:not([hidden])) .app-rail{width:64px;min-width:64px}
+  #workspace:has(#chat:not([hidden])) .chat-list{width:280px}
   #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:64px minmax(0,1fr)}
-  #workspace:not(:has(#chat:not([hidden])))>.page{padding-inline:20px}
+  #workspace:not(:has(#chat:not([hidden]))) .app-rail{width:64px;min-width:64px}
 }
-body:has(#locked:not([hidden])){background:#f4f8fb;background-image:none;color:#253447}
-body:has(#locked:not([hidden])) #app{min-height:100dvh;display:grid;grid-template-rows:auto 1fr}
-body:has(#locked:not([hidden])) .app-header{padding:16px 28px;border-color:#dde7ef;box-shadow:none}
-body:has(#locked:not([hidden])) .app-header::after{background:none}
-body:has(#locked:not([hidden])) .brand-icon{background:#229ed9;border-radius:50%;box-shadow:0 4px 12px #229ed930}
-body:has(#locked:not([hidden])) #locked{grid-row:2;align-self:center;width:min(460px,calc(100% - 32px));max-width:none;margin:24px auto;padding:32px;text-align:left;border-color:#dde7ef;border-radius:14px;box-shadow:0 12px 32px #25344712}
-body:has(#locked:not([hidden])) #locked h2{font-size:24px;margin-bottom:8px}
-body:has(#locked:not([hidden])) #locked>p{font-size:13px;color:#718398}
-body:has(#locked:not([hidden])) .login-form label{margin-top:18px}
-body:has(#locked:not([hidden])) .login-form button{width:100%;min-height:44px;margin-top:20px}
-body:has(#locked:not([hidden])) #authError:not(:empty){margin-top:14px;padding:10px 12px;border-radius:8px;background:#fff0ee;color:#a92329}
-@media(max-width:480px){body:has(#locked:not([hidden])) #locked{padding:24px}}
+#workspace:has(#chat:not([hidden])) #inboxStatus{max-width:100%;overflow-wrap:anywhere;white-space:normal}
+@media(max-width:899px){
+  #workspace{min-width:0;overflow:hidden}
+  #workspace:has(#chat:not([hidden])) .rail-bot-name{display:none}
+}
