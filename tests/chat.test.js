@@ -143,3 +143,21 @@ test('browser link is one-time and session expires or logs out',async t=>{
   db.prepare('UPDATE browser_sessions SET expires_at=0').run();
   assert.equal(auth.authenticate({method:'GET',get:name=>name==='cookie'?cookie:''}),null);
 });
+
+test('browser login accepts multiple configured accounts with strict credentials', async t => {
+  const db = fixture(t), auth = createBrowserAuth(db, ['123'], 'https://example.test', {
+    accounts: [{ username: 'admin', password: 'first-password' }, { username: 'operator', password: 'second-password' }],
+    salt: 'test-salt'
+  });
+  const app = express(); app.use(express.json()); auth.routes(app);
+  const server = app.listen(0); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = (username, password) => fetch(base + '/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+    body: JSON.stringify({ username, password })
+  });
+  assert.equal((await login('admin', 'first-password')).status, 200);
+  assert.equal((await login('operator', 'second-password')).status, 200);
+  assert.equal((await login('unknown', 'second-password')).status, 401);
+  assert.equal((await login('operator', 'wrong-password')).status, 401);
+});

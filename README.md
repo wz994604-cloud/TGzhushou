@@ -7,7 +7,7 @@
 - `ENTRY_BOT_TOKEN`：Telegram 入口机器人 Token，从 BotFather 获取。
 - `ADMIN_TG_IDS`：允许管理后台的 Telegram 数字用户 ID。
 - `CONFIG_KEY`：32 字节 Base64 密钥，用于加密机器人 Token。
-- `ADMIN_LOGIN_USERNAME` / `ADMIN_LOGIN_PASSWORD`：浏览器登录账号密码；密码只来自环境变量，不写入数据库。
+- `ADMIN_LOGIN_USERNAME` / `ADMIN_LOGIN_PASSWORD`：兼容的单个浏览器登录账号密码。`ADMIN_LOGIN_ACCOUNTS` 可配置 JSON 数组（例如 `[{"username":"admin","password":"..."},{"username":"operator","password":"..."}]`）以启用多个严格校验的账号；密码只来自环境变量，不写入数据库。
 - `PUBLIC_URL`：Vercel 生产域名。
 - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`：Vercel Storage 的 Turso 集成面板获取。
 - `BLOB_READ_WRITE_TOKEN`：Vercel Blob Storage 面板获取；未配置时媒体上传明确返回配置错误。

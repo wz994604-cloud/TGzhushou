@@ -357,3 +357,23 @@ body:has(#workspace:not([hidden])){overflow:hidden}
   #workspace{min-width:0;overflow:hidden}
   #workspace:has(#chat:not([hidden])) .rail-bot-name{display:none}
 }
+
+/* Final UI contract: shared Telegram workbench tokens and bounded responsive surfaces. */
+:root{
+  --canvas:#EEF2F6;--surface:#FFFFFF;--subtle:#F7F9FC;--text:#172033;--muted:#667085;
+  --line:#DCE3EA;--primary:#229ED9;--primary-hover:#168AC1;--focus:#0B72B8;
+  --violet:#6D5CE7;--success:#17865B;--success-bg:#E8F7EF;--warning:#A86B00;--warning-bg:#FFF5DB;
+  --danger:#B42318;--danger-bg:#FFF0EE;--card-radius:14px;--control-radius:10px;
+  --shadow:0 4px 18px rgb(23 32 51 / .06);
+}
+body:has(#workspace:not([hidden])){background:var(--canvas);color:var(--text)}
+#workspace:not(:has(#chat:not([hidden])))>.page{max-width:1200px;padding:20px 24px 36px}
+#workspace:not(:has(#chat:not([hidden])))>.page>.section-title{min-height:72px;padding-top:4px}
+#workspace:not(:has(#chat:not([hidden])))>.page .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--card-radius);box-shadow:var(--shadow);padding:20px;margin:0 0 16px}
+#workspace:not(:has(#chat:not([hidden])))>.page :is(button,input,select){min-height:44px;border-radius:var(--control-radius)}
+#workspace:not(:has(#chat:not([hidden])))>.page .list-row{min-height:56px;padding:10px 0}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.status.ACTIVE{background:var(--success-bg);color:var(--success)}.status.PAUSED{background:var(--warning-bg);color:var(--warning)}
+@media (max-width:899px){#workspace:not(:has(#chat:not([hidden])))>.page{padding:16px 16px 32px}}
+@media (max-width:599px){#workspace:not(:has(#chat:not([hidden])))>.page{padding:12px 12px 32px}#workspace:not(:has(#chat:not([hidden])))>.page .grid{grid-template-columns:minmax(0,1fr)}dialog{width:calc(100vw - 24px);padding:24px}}
+@media (prefers-reduced-motion:reduce){.page{animation:none!important}}

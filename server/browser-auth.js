@@ -7,10 +7,11 @@ const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part 
 
 export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
   const base = String(publicUrl || '').replace(/\/$/, '');
-  const username = String(credentials.username || '').trim();
-  const password = String(credentials.password || '');
   const salt = String(credentials.salt || 'tgzhushou-browser-login');
-  const passwordKey = password ? crypto.scryptSync(password, salt, 32) : null;
+  const accounts = (Array.isArray(credentials.accounts) ? credentials.accounts : [{ username: credentials.username, password: credentials.password }])
+    .map(account => ({ username: String(account?.username || '').trim(), password: String(account?.password || '') }))
+    .filter(account => account.username && account.password)
+    .map(account => ({ username: account.username, passwordKey: crypto.scryptSync(account.password, salt, 32) }));
   const failures = new Map();
   const sameOrigin = req => {
     const origin = req.get('origin');
@@ -56,12 +57,13 @@ export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
     });
     app.post('/auth/login', (req,res) => {
       if (!sameOrigin(req)) return res.sendStatus(403);
-      if (!username || !passwordKey) return res.status(503).json({ error:'账号登录尚未配置，请联系管理员' });
+      if (!accounts.length) return res.status(503).json({ error:'账号登录尚未配置，请联系管理员' });
       const now = Date.now(), ip = req.ip || 'unknown', state = failures.get(ip) || { count:0, until:0 };
       if (state.until > now) return res.status(429).json({ error:'登录失败次数过多，请稍后再试' });
       const inputUser = String(req.body?.username || ''), inputPassword = String(req.body?.password || '');
       const inputKey = crypto.scryptSync(inputPassword, salt, 32);
-      const valid = inputUser === username && inputKey.length === passwordKey.length && crypto.timingSafeEqual(inputKey, passwordKey);
+      const account = accounts.find(candidate => candidate.username === inputUser);
+      const valid = Boolean(account && inputKey.length === account.passwordKey.length && crypto.timingSafeEqual(inputKey, account.passwordKey));
       if (!valid) {
         state.count += 1; if (state.count >= 5) { state.count = 0; state.until = now + 15*60_000; }
         failures.set(ip, state); return res.status(401).json({ error:'账号或密码错误' });
