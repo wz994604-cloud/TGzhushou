@@ -1,0 +1,31 @@
+Changed branch/fields: main; server/chat.js bot-avatar content sniffing and explicit webhook takeover; src/main.js inbox takeover control; src/style.css desktop rail/login/editor dimensions. The old immutable Vercel deployment URL in the screenshots points to commit 3bb965d, while current main was a6b9f23 before these changes.
+Original server/chat.js blob: a969fc6073bbc8bb35765adff8417fede381d399
+Modified server/chat.js blob: 03f3d72c96c449dafa4a532469ec5ff424925295
+MODIFIED_FILE: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\desktop-inbox-fixes-20261003\MODIFIED_FILE
+DIFF_FILE: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\desktop-inbox-fixes-20261003\DIFF_FILE
+VERIFICATION.txt: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\desktop-inbox-fixes-20261003\VERIFICATION.txt
+ROLLBACK.sh: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\desktop-inbox-fixes-20261003\ROLLBACK.sh
+
+BASELINE command: node --test --test-name-pattern='bot avatars' tests/chat.test.js
+BASELINE input: valid PNG file body with application/octet-stream response, original content-type-only server/chat.js branch.
+BASELINE literal output/result: Bot avatar file rejected for 123: type=application/octet-stream, size=unknown; tests 1; pass 0; fail 1; 502 !== 200.
+BASELINE exit status: 1
+BASELINE takeover command: node --test --test-name-pattern='external webhook' --test-reporter=spec tests/chat.test.js
+BASELINE takeover input: external webhook and explicit takeover=true; original 409-only branch.
+BASELINE takeover literal output/result: tests 1; pass 0; fail 1; 409 !== 200.
+BASELINE takeover exit status: 1
+
+MODIFIED command: node --test --test-name-pattern='external webhook|bot avatars' --test-reporter=spec tests/chat.test.js
+MODIFIED input: valid PNG/octet-stream bot avatar and external webhook takeover=true; fixed server/chat.js.
+MODIFIED literal output/result: tests 2; pass 2; fail 0.
+MODIFIED exit status: 0
+MODIFIED desktop command: npx playwright test tests/browser/desktop-layout.spec.js --reporter=line
+MODIFIED desktop input: 1280x800 desktop login/chat/editor and 390x844 Mini App layout after npm run build.
+MODIFIED desktop literal output/result: 1 passed (5.8s).
+MODIFIED desktop exit status: 0
+
+ROLLBACK command: C:\Program Files\Git\bin\bash.exe .design/desktop-inbox-fixes-20261003/ROLLBACK.sh C:\Users\win11\AppData\Local\Temp\tgzhushou-desktop-inbox-rollback-probe-20261003
+ROLLBACK input: separate copies of modified server/chat.js, src/main.js, src/style.css, tests/chat.test.js, and new tests/browser/desktop-layout.spec.js.
+ROLLBACK literal output/result: ROLLBACK_EXIT=0; server/chat.js hash a969fc6073bbc8bb35765adff8417fede381d399; src/main.js hash bc6d029d3f77b777144a930c695a0eb099798397; src/style.css hash 0be434ceb8a0abfc39e1d472d99aa491ecfee93e; tests/chat.test.js hash 6bb31aab448469b31e5ede3dd83671c1600baaec; new test removed=True.
+ROLLBACK exit status: 0
+Restored behavior/status: all four probe files match original HEAD blobs and the newly added desktop test is absent; original avatar 502 and external-webhook 409 behavior is restored in the probe. Working MODIFIED_FILE and modified source files remain changed.

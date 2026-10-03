@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
+import sharp from 'sharp';
 import { openDatabase, encryptToken } from '../server/db.js';
 import { saveIncoming, registerChatRoutes } from '../server/chat.js';
 import { createBrowserAuth } from '../server/browser-auth.js';
@@ -52,7 +53,7 @@ test('reply, rich text, custom emoji, buttons and media share formatted sender',
   assert.equal(calls[1].method,'sendPhoto');
 });
 
-test('external webhook is never overwritten, secret is required for own webhook',async t=>{
+test('external webhook requires explicit takeover, secret is required for own webhook',async t=>{
   const db=fixture(t), app=express(), calls=[];
   app.use(express.json());
   const bot={id:'123',token:'token'};
@@ -62,7 +63,12 @@ test('external webhook is never overwritten, secret is required for own webhook'
   const base=`http://127.0.0.1:${server.address().port}`;
   const conflict=await fetch(base+'/api/inbox/enable',{method:'POST'});
   assert.equal(conflict.status,409);
+  assert.equal((await conflict.json()).externalHost,'other.test');
   assert.deepEqual(calls,['getWebhookInfo']);
+  const takeover=await fetch(base+'/api/inbox/enable',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({takeover:true})});
+  assert.equal(takeover.status,200);
+  assert.equal((await takeover.json()).status,'READY');
+  assert.deepEqual(calls,['getWebhookInfo','getWebhookInfo','setWebhook']);
   const denied=await fetch(base+'/tg/publisher/123',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(incoming(1))});
   assert.equal(denied.status,403);
   db.prepare("INSERT OR REPLACE INTO publisher_inbox(bot_id,enabled,webhook_status,secret) VALUES('123',1,'READY',?)")
@@ -94,10 +100,11 @@ test('empty webhook can be enabled without altering another bot',async t=>{
 test('bot avatars load with their own selected context and missing photos fall back',async t=>{
   const db=fixture(t),app=express(),calls=[];
   const bots={123:{id:'123',token:'123:SECRET_TOKEN_A'},456:{id:'456',token:'456:SECRET_TOKEN_B'},678:{id:'678',token:'678:SECRET_TOKEN_MISSING'},789:{id:'789',token:'789:SECRET_TOKEN_C'}};
+  const avatarBytes=await sharp({create:{width:1,height:1,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toBuffer();
   const originalFetch=globalThis.fetch;
   t.after(()=>{globalThis.fetch=originalFetch;});
   globalThis.fetch=(url,options)=>String(url).startsWith('https://api.telegram.org/file/')
-    ? Promise.resolve(new Response(Buffer.from('avatar-a'),{headers:{'content-type':'image/jpeg'}}))
+    ? Promise.resolve(new Response(avatarBytes,{headers:{'content-type':String(url).includes('SECRET_TOKEN_A')?'application/octet-stream':'image/png'}}))
     : originalFetch(url,options);
   registerChatRoutes(app,{db,scheduler:{publisher:id=>bots[id||'123']},configKey,publicUrl:'https://example.test',
     botApi:async(token,method,payload)=>{calls.push({token,method,payload});
@@ -109,8 +116,8 @@ test('bot avatars load with their own selected context and missing photos fall b
   const server=app.listen(0);t.after(()=>server.close());
   const base=`http://127.0.0.1:${server.address().port}`;
   const ok=await originalFetch(base+'/api/chat/bot-avatars/123',{headers:{'x-publisher-id':'123'}});
-  assert.equal(ok.status,200);assert.equal(await ok.text(),'avatar-a');
-  assert.equal(ok.headers.get('content-type'),'image/jpeg');
+  assert.equal(ok.status,200);assert.deepEqual(Buffer.from(await ok.arrayBuffer()),avatarBytes);
+  assert.equal(ok.headers.get('content-type'),'image/png');
   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/123',{headers:{'x-publisher-id':'456'}})).status,404);
   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/456',{headers:{'x-publisher-id':'456'}})).status,200);
   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/678',{headers:{'x-publisher-id':'678'}})).status,404);
