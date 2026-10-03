@@ -1,41 +1,27 @@
-# TGzhushou 活动中枢
+# TGzhushou Vercel 部署
 
-Telegram Mini App 与浏览器/PWA 工作台。入口机器人负责登录，多个发布机器人在同一后台切换并分别收发消息。此项目与 PCJND28 下注项目分开，使用独立 Railway 服务和数据库。
+本项目运行于 Vercel Functions，数据库使用全新 Turso，媒体使用 Vercel Blob。旧 SQLite、Railway、Docker 和本地持久化数据不再使用，也不会迁移旧数据。
 
-## 本地工作区
+## 必需环境变量
 
-- 正式源码：`C:\Users\win11\Documents\GitHub\TGzhushou`
-- U 盘源码备份：`F:\机器人和下注程序\TGzhushou`
-- GitHub：<https://github.com/wz994604-cloud/TGzhushou>
+- `ENTRY_BOT_TOKEN`：Telegram 入口机器人 Token，从 BotFather 获取。
+- `ADMIN_TG_IDS`：允许管理后台的 Telegram 数字用户 ID。
+- `CONFIG_KEY`：32 字节 Base64 密钥，用于加密机器人 Token。
+- `ADMIN_LOGIN_USERNAME` / `ADMIN_LOGIN_PASSWORD`：浏览器登录账号密码；密码只来自环境变量，不写入数据库。
+- `PUBLIC_URL`：Vercel 生产域名。
+- `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`：Vercel Storage 的 Turso 集成面板获取。
+- `BLOB_READ_WRITE_TOKEN`：Vercel Blob Storage 面板获取；未配置时媒体上传明确返回配置错误。
+- `CRON_SECRET`：cron-job.org 请求 `POST /api/cron/tick` 时使用 `Authorization: Bearer <CRON_SECRET>`。
 
-## 开发与部署
+首次启动会按 `server/schema.sql` 在空 Turso 数据库初始化表结构。旧 SQLite 数据不读取、不迁移。
 
-使用 Node.js 24，执行 `npm ci`、`npm run build`。运行 `npm start` 前填写 `.env.example` 列出的环境变量。
+## 定时任务
 
-Railway 沿用现有独立服务及 `main` 分支，不创建第二套生产后台。新增发布机器人在后台「设置」中验证并保存 Token；仅在 Railway 增加任意 Token 环境变量不会自动注册机器人。
+使用 cron-job.org 每 5 分钟调用：`POST https://<PUBLIC_URL>/api/cron/tick`，请求头 `Authorization: Bearer <CRON_SECRET>`。接口执行一次幂等任务处理并返回 `{ "ok": true }`。
 
-数据库和图片位于 `DATA_DIR`；生产部署应挂载持久卷到同一目录，避免重部署后丢失配置和任务。不要更换现有 `CONFIG_KEY`，否则所有发布机器人 Token 解密会失败。部署前备份 SQLite 数据库和媒体目录；升级会将原发布机器人及其用户名单归入多机器人数据表，并保留旧表以便代码回退。
+## 验证
 
-U 盘备份保存 GitHub 当前源码，不含 Token、密码、生产数据库、`node_modules`、构建产物或旧测试副本。
-
-## 功能
-
-- 图文、文字链接、自定义表情、彩色跳转按钮和纯表情按钮。
-- 群/频道发布，手动、单次和每日时段定时任务。
-- 停止后可重新开始，任务支持确认删除；按目标查看发布结果。
-- 使用入口机器人的 Telegram 签名和 `ADMIN_TG_IDS` 管理员列表校验身份。
-- TG 风格会话列表、消息历史、未读和直接回复；聊天复用富文本、自定义 Emoji、Inline 按钮和图片发送，并支持视频/文件。
-- 浏览器可用入口机器人 `/login` 获取 5 分钟一次性链接登录；会话 Cookie 有效期 24 小时，可在设置中退出。Mini App 登录保持不变。
-- 浏览器支持安装 PWA；页面可见时约每 2 秒增量拉取消息变化。只记录启用收件箱后收到的新消息，不自动补齐旧历史。
-
-## 收件箱与手动上线
-
-发布机器人收件箱默认**不接管**现有 webhook。在聊天页点「启用收消息」时，服务器先查询该 Bot 的 `getWebhookInfo`；只有 URL 为空或属于本服务，才配置本服务独立 webhook 与每 Bot secret。外部 webhook 仅显示冲突，不覆盖。启用后，新消息写入同一 `DATA_DIR` 下 SQLite 的 `conversations`、`chat_messages` 等增量表。
-
-上线前备份生产 `DATA_DIR` 中数据库和媒体，保留原 `CONFIG_KEY` 与 Railway `/data` 持久卷。确认变更后再手动推送 `main`；若 Railway 监听该分支，推送会触发部署。部署后检查 `/healthz`、PWA 登录、现有群发/任务入口，再逐个发布机器人检查收件箱状态并启用。外部 webhook 冲突需由其原系统决定是否转发，不能强制接管。所有真实 Bot 状态须部署后读取，开发测试仅用模拟 Telegram。
-
-## 玩家同步与私信
-
-后台「玩家」页可使用发发娱乐玩家接口同步名单，也可上传 WPS 导出的 CSV 作为备用。接口 Token 只在服务器端使用现有 `CONFIG_KEY` 加密保存，字段只保存 Telegram ID、昵称、用户名、平台 ID 和状态。编辑页支持选择单个、多个或全部有效玩家，使用当前文案、自定义表情、图片和按钮通过发布机器人排队私信；发送结果记录在 SQLite 中。
-
-多机器人模式下，群、任务、用户、会话和发送记录按发布机器人隔离；队列按每条记录所属机器人取 Token。原机器人继续使用现有接口同步和 CSV 导入；新增机器人的用户来源暂未确定，因此不会自动登记、导入或同步用户，其私信发送链路已就绪，待确定名单来源后再接入。
+```bash
+npm run build
+npm run check
+```

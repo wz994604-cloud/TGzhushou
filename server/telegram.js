@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+async function readMedia(path){ if(String(path).startsWith('http')){const response=await fetch(path);if(!response.ok)throw new Error('media object unavailable');return Buffer.from(await response.arrayBuffer())} const fs=await import('node:fs/promises');return fs.readFile(path); }
 
 const API = 'https://api.telegram.org/bot';
 
@@ -28,7 +28,7 @@ export async function sendPhoto(token, chatId, path, mime, caption, captionEntit
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
-    const bytes = await fs.readFile(path);
+    const bytes = await readMedia(path);
     const form = new FormData();
     form.set('chat_id', String(chatId));
     form.set('photo', new Blob([bytes], { type: mime }), 'activity-image');
@@ -51,7 +51,7 @@ export async function sendMedia(token, chatId, media, caption, entities, markup,
   const field = method === 'sendVideo' ? 'video' : 'document';
   const form = new FormData();
   form.set('chat_id', String(chatId));
-  form.set(field, new Blob([await fs.readFile(media.file_path)], { type:media.mime }), `activity-${field}`);
+  form.set(field, new Blob([await readMedia(media.file_path)], { type:media.mime }), `activity-${field}`);
   if (caption) form.set('caption', caption);
   if (entities.length) form.set('caption_entities', JSON.stringify(multipartCaptionEntities(caption, entities)));
   if (markup) form.set('reply_markup', JSON.stringify(markup));
@@ -69,7 +69,7 @@ export function safeTelegramError(error) {
 export async function editPhoto(token, payload, media, caption, entities, replyMarkup) {
   const form=new FormData();
   form.set('chat_id',String(payload.chat_id));form.set('message_id',String(payload.message_id));
-  form.set('photo',new Blob([await fs.readFile(media.file_path)],{type:media.mime}),'edited-image');
+  form.set('photo',new Blob([await readMedia(media.file_path)],{type:media.mime}),'edited-image');
   form.set('media',JSON.stringify({type:'photo',media:'attach://photo',caption,caption_entities:multipartCaptionEntities(caption, entities)}));
   form.set('reply_markup',JSON.stringify(replyMarkup));
   const response=await fetch(`${API}${token}/editMessageMedia`,{method:'POST',body:form,signal:AbortSignal.timeout(30000)});

@@ -1,6 +1,7 @@
 import { sentActions } from './sent-actions.js';
 import express from 'express';
 import sharp from 'sharp';
+import { put } from '@vercel/blob';
 import { createAssetCache } from './asset-cache.js';
 import multer from 'multer';
 import fs from 'node:fs/promises';
@@ -20,12 +21,11 @@ import { registerChatRoutes } from './chat.js';
 
 const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
 for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
-const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS || process.env.ADMIN_TG_ID);
+const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS);
 if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
 if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
-const dataDir = path.resolve(process.env.DATA_DIR || './data');
 const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
-const db = openDatabase(dataDir);
+const db = openDatabase();
 const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
 const app = express();
 const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
@@ -61,6 +61,8 @@ app.post('/tg/entry', async (req, res) => {
       .catch(error => console.error('Browser login:',safeTelegramError(error)));
   }
 });
+
+app.post('/api/cron/tick', async (req,res,next) => { try { const auth=String(req.get('authorization')||''); if(!process.env.CRON_SECRET || auth !== ('Bearer ' + process.env.CRON_SECRET)) return res.sendStatus(401); await scheduler.tick(); res.json({ok:true}); } catch(error){ next(error); } });
 
 app.use('/api', (req, res, next) => {
   try {
@@ -428,8 +430,9 @@ app.post('/api/media', upload.single('image'), route(async (req, res) => {
   if (!mime) throw new Error('只支持 JPEG、PNG、WebP 图片');
   const sha = crypto.createHash('sha256').update(buffer).digest('hex');
   const ext = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : '.webp';
-  const filename = path.join(dataDir, 'media', sha + ext);
-  await fs.writeFile(filename, buffer, { flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+  if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('BLOB_READ_WRITE_TOKEN 未配置，媒体上传不可用');
+  const blob = await put(`media/${sha}${ext}`, buffer, { access:'public', addRandomSuffix:false });
+  const filename = blob.url
   db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)').run(sha, mime, buffer.length, filename, Date.now());
   res.json(db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
 }));
@@ -443,8 +446,9 @@ app.post('/api/chat/media', chatUpload.single('file'), route(async (req,res) => 
   const ext = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp'
     : mime === 'video/mp4' ? '.mp4' : mime === 'video/webm' ? '.webm' : '.bin';
   const sha = crypto.createHash('sha256').update(file.buffer).digest('hex');
-  const filename = path.join(dataDir,'media',sha+ext);
-  await fs.writeFile(filename,file.buffer,{ flag:'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+  if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('BLOB_READ_WRITE_TOKEN 未配置，媒体上传不可用');
+  const blob = await put(`media/${sha}${ext}`, file.buffer, { access:'public', addRandomSuffix:false });
+  const filename = blob.url
   db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)')
     .run(sha,mime,file.buffer.length,filename,Date.now());
   res.json(db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
@@ -457,20 +461,13 @@ app.get('/api/media/:id', route(async (req, res) => {
   if (req.query.preview === '1') {
     if (!media.mime.startsWith('image/')) return res.sendStatus(400);
     const bytes = await previewCache(media.sha256, async () => {
-      const directory = path.join(dataDir, 'previews');
-      const filename = path.join(directory, media.sha256 + '.webp');
-      try { return await fs.readFile(filename); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      const result = await sharp(media.file_path, { limitInputPixels:40000000 }).rotate()
+      const source = await fetch(media.file_path); if (!source.ok) throw new Error('媒体对象读取失败');
+      return sharp(Buffer.from(await source.arrayBuffer()), { limitInputPixels:40000000 }).rotate()
         .resize(720, 720, { fit:'inside', withoutEnlargement:true }).webp({ quality:75 }).toBuffer();
-      await fs.mkdir(directory, { recursive:true });
-      const temporary = filename + '.' + crypto.randomUUID() + '.tmp';
-      try { await fs.writeFile(temporary, result); await fs.rename(temporary, filename); }
-      finally { await fs.unlink(temporary).catch(() => {}); }
-      return result;
     });
     return res.type('image/webp').send(bytes);
   }
-  res.type(media.mime).sendFile(media.file_path);
+  const source = await fetch(media.file_path); if (!source.ok) return res.sendStatus(404); res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
 }));
 
 function taskPayload(body, bot) {
@@ -591,6 +588,9 @@ app.use((error, _req, res, _next) => {
 });
 
 const port = Number(process.env.PORT || 8080);
+export default app;
+
+if (process.env.VERCEL !== '1') {
 const server = app.listen(port, '0.0.0.0', async () => {
   console.log(`TGzhushou listening on ${port}`);
   scheduler.start();
@@ -605,3 +605,6 @@ const server = app.listen(port, '0.0.0.0', async () => {
 function shutdown() { scheduler.stop(); server.close(() => { db.close(); process.exit(0); }); setTimeout(() => process.exit(0), 25000).unref(); }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+}
+
+

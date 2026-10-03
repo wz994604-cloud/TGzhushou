@@ -210,7 +210,7 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     if (!row) return res.sendStatus(404);
     if (row.media_id) {
       const media = db.prepare('SELECT * FROM media WHERE id=?').get(row.media_id);
-      return media ? res.type(media.mime).sendFile(media.file_path) : res.sendStatus(404);
+      if (!media) return res.sendStatus(404); const source=await fetch(media.file_path); if(!source.ok)return res.sendStatus(404); return res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
     }
     if (!row.file_id) return res.sendStatus(404);
     const file = await botApi(bot.token,'getFile',{ file_id:row.file_id });

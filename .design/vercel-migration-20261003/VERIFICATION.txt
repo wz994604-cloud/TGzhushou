@@ -1,0 +1,11 @@
+OBJECT: TGzhushou Vercel + Turso migration
+BASE_COMMIT: 30fbeb86e1d503e98b807b1f256b0aea0c4d3d0c
+MODIFIED_FILE: .design/vercel-migration-20261003/MODIFIED_FILE.zip
+DIFF_FILE: .design/vercel-migration-20261003/DIFF_FILE.patch
+VERIFICATION.txt: .design/vercel-migration-20261003/VERIFICATION.txt
+ROLLBACK.sh: .design/vercel-migration-20261003/ROLLBACK.sh
+BASELINE: better-sqlite3/Railway package baseline at 30fbeb8
+MODIFIED: Turso worker DB, Vercel function entry, Blob URLs, cron endpoint, cleaned Railway/Docker config
+VERIFICATION: npm run check; npm run build; node --test tests/auth.test.js tests/format.test.js -> syntax/build passed, 3 tests passed
+TURSO: empty schema prepared in server/schema.sql; live initialization requires configured Vercel Turso credentials
+ROLLBACK: restore 30fbeb8 and remove migration-only files in a separate clone

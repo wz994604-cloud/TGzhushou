@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": null,
+  "functions": { "api/index.js": { "maxDuration": 60, "includeFiles": ["server/schema.sql"] } },
+  "rewrites": [
+    { "source": "/healthz", "destination": "/api/index" },
+    { "source": "/auth/:path*", "destination": "/api/index" },
+    { "source": "/tg/:path*", "destination": "/api/index" },
+    { "source": "/api/:path*", "destination": "/api/index" }
+  ]
+}
+
