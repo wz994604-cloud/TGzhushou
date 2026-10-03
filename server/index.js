@@ -38,8 +38,18 @@ async function kickScheduler(label) {
 }
 const app = express();
 const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
-  username: process.env.ADMIN_LOGIN_USERNAME || 'admin',
-  password: process.env.ADMIN_LOGIN_PASSWORD,
+  accounts: (() => {
+    if (process.env.ADMIN_LOGIN_ACCOUNTS) {
+      try {
+        const parsed = JSON.parse(process.env.ADMIN_LOGIN_ACCOUNTS);
+        if (!Array.isArray(parsed)) throw new Error('ADMIN_LOGIN_ACCOUNTS must be a JSON array');
+        return parsed;
+      } catch (error) {
+        throw new Error(`ADMIN_LOGIN_ACCOUNTS 配置无效: ${error.message}`);
+      }
+    }
+    return [{ username: process.env.ADMIN_LOGIN_USERNAME || 'admin', password: process.env.ADMIN_LOGIN_PASSWORD }];
+  })(),
   salt: process.env.CONFIG_KEY
 });
 app.disable('x-powered-by');
