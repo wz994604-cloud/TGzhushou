@@ -9,8 +9,8 @@ import { nextSlot } from '../server/schedule.js';
 
 test('stop cancels both queues, preserves in-flight delivery and restart never revives cancelled messages', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-stop-'));
-  const db = openDatabase(dir);
-  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const db = openDatabase({localFile:path.join(dir,'test.db')});
+  t.after(async () => { await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   db.prepare(`INSERT INTO tasks(id,name,delta_json,buttons_json,target_ids_json,schedule_json,bot_id,status,created_at,updated_at)
     VALUES(1,'fixture','[]','[]','[]','{"kind":"MANUAL"}','222222','DRAFT',0,0)`).run();
   for (const [id, source] of [[1, 'IMMEDIATE'], [2, 'SCHEDULED']]) {

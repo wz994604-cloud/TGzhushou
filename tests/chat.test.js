@@ -12,8 +12,8 @@ import { configKey } from './helpers.js';
 
 function fixture(t) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tg-chat-test-'));
-  const db=openDatabase(dir);
-  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  const db=openDatabase({localFile:path.join(dir,'test.db')});
+  t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
   return db;
 }
 const incoming=(id,chat=42,text='你好')=>({update_id:id,message:{message_id:id,date:1760000000+id,

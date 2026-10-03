@@ -16,6 +16,7 @@
   "dependencies": {
     "@libsql/client": "0.18.0",
     "@vercel/blob": "2.8.0",
+    "@vercel/functions": "^3.9.11",
     "express": "^5.2.1",
     "multer": "^2.4.0",
     "quill": "2.0.2",

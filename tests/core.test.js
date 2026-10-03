@@ -68,7 +68,7 @@ test('encrypted publisher credential and wrong-key rejection', () => {
 });
 function fixture(t, transport) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tgzhushou-unit-'));
-  const db=openDatabase(dir); t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  const db=openDatabase({localFile:path.join(dir,'test.db')}); t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
   setSetting(db,'publisher_token',encryptToken(publisherToken,configKey));setSetting(db,'publisher_id','222222');
   for(const id of [1,2])db.prepare('INSERT INTO targets(id,bot_id,chat_id,title,chat_type,can_publish) VALUES(?,?,?,?,?,1)').run(id,'222222',String(-1000-id),`target ${id}`,'channel');
   const result=db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,bot_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'DRAFT',?,?)`).run('test',JSON.stringify([{insert:'hello\n'}]),'[]','[1,2]','{"kind":"MANUAL"}','222222',Date.now(),Date.now());

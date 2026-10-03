@@ -2,6 +2,7 @@ import { sentActions } from './sent-actions.js';
 import express from 'express';
 import sharp from 'sharp';
 import { put } from '@vercel/blob';
+import { waitUntil } from '@vercel/functions';
 import { createAssetCache } from './asset-cache.js';
 import multer from 'multer';
 import fs from 'node:fs/promises';
@@ -25,8 +26,16 @@ const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS);
 if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
 if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
 const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
-const db = openDatabase();
+const db = openDatabase(process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_FILE
+  ? { localFile:process.env.TEST_DATABASE_FILE } : {});
 const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
+async function kickScheduler(label) {
+  if (process.env.VERCEL === '1') {
+    waitUntil(Promise.resolve().then(() => scheduler.tick()).catch(error => console.error(label, safeTelegramError(error))));
+    return;
+  }
+  await scheduler.tick();
+}
 const app = express();
 const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
   username: process.env.ADMIN_LOGIN_USERNAME || 'admin',
@@ -47,22 +56,53 @@ app.post('/tg/entry', async (req, res) => {
   const actual = Buffer.from(String(req.get('x-telegram-bot-api-secret-token') || ''));
   const expected = Buffer.from(crypto.createHash('sha256').update(`entry:${process.env.ENTRY_BOT_TOKEN}`).digest('hex'));
   if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return res.sendStatus(403);
-  res.sendStatus(200);
   const chat = req.body?.message?.chat;
-  if (chat?.type === 'private' && adminIds.includes(String(req.body.message.from?.id)) && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
-    const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
-    if (base) botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } })
-      .catch(error => console.error('Entry bot:', safeTelegramError(error)));
+  const handleEntry = async () => {
+    if (chat?.type === 'private' && adminIds.includes(String(req.body.message.from?.id)) && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+      const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
+      if (base) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } });
+    }
+    if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+      const link = browserAuth.issueLink(req.body.message.from?.id);
+      if (link) await botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
+        text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } });
+    }
+  };
+  if (process.env.VERCEL === '1') {
+    waitUntil(Promise.resolve().then(handleEntry).catch(error => console.error('Entry bot:', safeTelegramError(error))));
+    return res.sendStatus(200);
   }
-  if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
-    const link = browserAuth.issueLink(req.body.message.from?.id);
-    if (link) botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
-      text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } })
-      .catch(error => console.error('Browser login:',safeTelegramError(error)));
-  }
+  try { await handleEntry(); } catch (error) { console.error('Entry bot:', safeTelegramError(error)); }
+  res.sendStatus(200);
 });
 
-app.post('/api/cron/tick', async (req,res,next) => { try { const auth=String(req.get('authorization')||''); if(!process.env.CRON_SECRET || auth !== ('Bearer ' + process.env.CRON_SECRET)) return res.sendStatus(401); await scheduler.tick(); res.json({ok:true}); } catch(error){ next(error); } });
+async function ensureEntryBot() {
+  const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
+  if (!base) return;
+  const webhookUrl = `${base}/tg/entry`;
+  const secret = crypto.createHash('sha256').update(`entry:${process.env.ENTRY_BOT_TOKEN}`).digest('hex');
+  const marker = `${webhookUrl}|${secret}`;
+  if (getSetting(db, 'entry_webhook_config') === marker) return;
+  await botCall(process.env.ENTRY_BOT_TOKEN, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '打开活动后台', web_app: { url: base } } });
+  await botCall(process.env.ENTRY_BOT_TOKEN, 'setWebhook', { url: webhookUrl,
+    secret_token: secret, allowed_updates: ['message'] });
+  setSetting(db, 'entry_webhook_config', marker);
+}
+
+app.post('/api/cron/tick', async (req,res,next) => { try {
+  const auth = Buffer.from(String(req.get('authorization') || ''));
+  const expected = Buffer.from(`Bearer ${process.env.CRON_SECRET || ''}`);
+  if (!process.env.CRON_SECRET || auth.length !== expected.length || !crypto.timingSafeEqual(auth, expected)) return res.sendStatus(401);
+  const work = async () => {
+    try { await ensureEntryBot(); } catch (error) { console.error('Entry bot setup:', safeTelegramError(error)); }
+    await scheduler.tick();
+  };
+  if (process.env.VERCEL === '1') {
+    waitUntil(Promise.resolve().then(work).catch(error => console.error('Cron tick:', safeTelegramError(error))));
+    return res.json({ok:true,queued:true});
+  }
+  await work(); res.json({ok:true});
+} catch(error){ next(error); } });
 
 app.use('/api', (req, res, next) => {
   try {
@@ -249,7 +289,7 @@ app.post('/api/broadcasts', route(async (req, res) => {
   const players = db.prepare(`SELECT telegram_id AS telegramId,display_name AS displayName FROM bot_players WHERE bot_id=? AND active=1 AND telegram_id IN (${placeholders})`).all(bot.id,...ids);
   if (players.length !== ids.length) throw new Error('部分用户不存在或已停用，请刷新名单后重试');
   const broadcastId = scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players }, bot.id);
-  scheduler.tick().catch(error => console.error('Broadcast tick:', safeTelegramError(error)));
+  await kickScheduler('Broadcast tick:');
   res.json({ id: broadcastId, total: players.length });
 }));
 
@@ -551,7 +591,7 @@ app.post('/api/tasks/:id/status', route(async (req, res) => {
 
 app.post('/api/tasks/:id/send', route(async (req, res) => {
   const runId = scheduler.queueNow(Number(req.params.id), req.body?.requestKey, selectedBotId(req));
-  scheduler.tick().catch(error => console.error('Immediate tick:', safeTelegramError(error)));
+  await kickScheduler('Immediate tick:');
   res.json({ runId });
 }));
 
@@ -602,9 +642,7 @@ const server = app.listen(port, '0.0.0.0', async () => {
     console.log('Entry bot menu and webhook ready');
   } catch (error) { console.error('Entry bot setup:', safeTelegramError(error)); }
 });
-function shutdown() { scheduler.stop(); server.close(() => { db.close(); process.exit(0); }); setTimeout(() => process.exit(0), 25000).unref(); }
+function shutdown() { scheduler.stop(); server.close(async () => { await db.close(); process.exit(0); }); setTimeout(() => process.exit(0), 25000).unref(); }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 }
-
-

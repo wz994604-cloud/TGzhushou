@@ -7,8 +7,8 @@ import {openDatabase} from '../server/db.js';
 import {sentActions} from '../server/sent-actions.js';
 
 test('sent operations preserve templates, map recipients, persist edits/deletes and enforce eligibility',async t=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sent-actions-')),db=openDatabase(dir);
-  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sent-actions-')),db=openDatabase({localFile:path.join(dir,'test.db')});
+  t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
   const now=Date.now(),delta=JSON.stringify([{insert:'original\n'}]);
   db.prepare("INSERT INTO broadcasts(id,name,delta_json,buttons_json,bot_id,status,created_at) VALUES(1,'test',?,'[]','bot','COMPLETED',?)").run(delta,now);
   for(let id=1;id<=4;id++)db.prepare("INSERT INTO broadcast_deliveries(id,broadcast_id,telegram_id,display_name,status,telegram_message_id,started_at,completed_at) VALUES(?,1,?,'User','SUCCESS',?,?,?)").run(id,String(80000+id),String(100+id),id===3?now-49*3600000:now,now);

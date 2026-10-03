@@ -17,7 +17,7 @@
 
 ## 定时任务
 
-使用 cron-job.org 每 5 分钟调用：`POST https://<PUBLIC_URL>/api/cron/tick`，请求头 `Authorization: Bearer <CRON_SECRET>`。接口执行一次幂等任务处理并返回 `{ "ok": true }`。
+使用 cron-job.org **每 1 分钟**调用：`POST https://<PUBLIC_URL>/api/cron/tick`，请求头 `Authorization: Bearer <CRON_SECRET>`。Vercel 会先确认接收，再在函数后台执行一批发送；每批最多 5 条，剩余消息由后续调用继续处理。首次调用还会为入口机器人设置菜单和 Webhook。
 
 ## 验证
 

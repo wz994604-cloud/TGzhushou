@@ -40,11 +40,16 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     const players = Array.isArray(item.players) ? item.players : [];
     if (!players.length || players.length > 100000) throw new Error('请选择 1–100000 个有效用户');
     const now = Date.now();
-    const result = db.prepare(`INSERT INTO broadcasts(name,delta_json,buttons_json,media_id,bot_id,status,total_count,created_at)
-      VALUES(?,?,?,?,?,'PENDING',?,?)`).run(item.name, item.deltaJson, item.buttonsJson, item.mediaId || null, bot.id, players.length, now);
-    const add = db.prepare('INSERT INTO broadcast_deliveries(broadcast_id,telegram_id,display_name,status) VALUES(?,?,?,?)');
-    db.transaction(() => { for (const player of players) add.run(result.lastInsertRowid, String(player.telegramId), String(player.displayName || ''), 'PENDING'); })();
-    return Number(result.lastInsertRowid);
+    return db.transaction(() => {
+      const result = db.prepare(`INSERT INTO broadcasts(name,delta_json,buttons_json,media_id,bot_id,status,total_count,created_at)
+        VALUES(?,?,?,?,?,'PENDING',?,?)`).run(item.name, item.deltaJson, item.buttonsJson, item.mediaId || null, bot.id, players.length, now);
+      for (let offset = 0; offset < players.length; offset += 100) {
+        const chunk = players.slice(offset, offset + 100);
+        const values = chunk.flatMap(player => [result.lastInsertRowid, String(player.telegramId), String(player.displayName || '')]);
+        db.prepare(`INSERT INTO broadcast_deliveries(broadcast_id,telegram_id,display_name,status) VALUES ${chunk.map(() => "(?,?,?,'PENDING')").join(',')}`).run(...values);
+      }
+      return Number(result.lastInsertRowid);
+    })();
   }
 
   function queueDue(now) {
@@ -123,20 +128,28 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     }
   }
 
-  async function tick() {
+  async function tick({ maxDeliveries = 5, maxRuntimeMs = 20_000 } = {}) {
     if (running) return;
     running = true;
     try {
       const now = Date.now();
+      const deadline = now + maxRuntimeMs;
+      let sent = 0;
       db.prepare("UPDATE deliveries SET status='UNKNOWN',error_text='发送过程被中断，请到 Telegram 核实；未自动重发',completed_at=? WHERE status='SENDING' AND started_at<?")
         .run(now, now - 300_000);
       queueDue(now);
       const rows = db.prepare(`SELECT d.*,r.bot_id,r.delta_json,r.buttons_json,r.media_id FROM deliveries d
-        JOIN runs r ON r.id=d.run_id WHERE d.status='PENDING' ORDER BY d.id LIMIT 20`).all();
-      for (const row of rows) await sendOne(row, now);
+        JOIN runs r ON r.id=d.run_id WHERE d.status='PENDING' ORDER BY d.id LIMIT ?`).all(maxDeliveries);
+      for (const row of rows) {
+        if (sent >= maxDeliveries || Date.now() > deadline - 5_000) break;
+        await sendOne(row, Date.now()); sent++;
+      }
       const broadcasts = db.prepare(`SELECT d.*,b.bot_id,b.delta_json,b.buttons_json,b.media_id FROM broadcast_deliveries d
-        JOIN broadcasts b ON b.id=d.broadcast_id WHERE d.status='PENDING' ORDER BY d.id LIMIT 20`).all();
-      for (const row of broadcasts) await sendBroadcastOne(row, now);
+        JOIN broadcasts b ON b.id=d.broadcast_id WHERE d.status='PENDING' ORDER BY d.id LIMIT ?`).all(maxDeliveries - sent);
+      for (const row of broadcasts) {
+        if (sent >= maxDeliveries || Date.now() > deadline - 5_000) break;
+        await sendBroadcastOne(row, Date.now()); sent++;
+      }
       db.prepare(`UPDATE broadcasts SET status='RUNNING',started_at=COALESCE(started_at,?) WHERE status='PENDING' AND EXISTS
         (SELECT 1 FROM broadcast_deliveries d WHERE d.broadcast_id=broadcasts.id AND d.status IN ('SENDING','SUCCESS','FAILED','UNKNOWN'))`).run(now);
       db.prepare(`UPDATE broadcasts SET status='COMPLETED',completed_at=? WHERE status IN ('PENDING','RUNNING') AND NOT EXISTS
