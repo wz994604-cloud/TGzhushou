@@ -256,3 +256,15 @@ body:has(#workspace:not([hidden])){overflow:hidden}
 @media(max-width:480px){
   #editor .actions{position:static}
 }
+/* Show the selected bot name beside its avatar on desktop; keep the compact rail on mobile. */
+@media(min-width:701px){
+  #workspace:has(#chat:not([hidden])){grid-template-columns:188px minmax(0,1fr)}
+  #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:188px minmax(0,1fr)}
+  #workspace:not(:has(#chat:not([hidden]))) .app-rail,#workspace:has(#chat:not([hidden])) .app-rail{align-items:flex-start;padding-left:12px;padding-right:12px}
+  .rail-bots{width:164px;align-items:stretch}
+  .rail-bot{width:164px;border-radius:22px;text-align:left;padding-left:54px;white-space:nowrap}
+  .rail-bot-name{display:block;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:700}
+  .rail-bot img{right:auto;width:44px}
+  .rail-nav{align-self:center}
+}
+@media(max-width:700px){.rail-bot-name{display:none}}

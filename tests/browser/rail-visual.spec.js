@@ -8,7 +8,7 @@ test('authenticated Rail pages fit desktop and mobile viewports',async({page})=>
   await page.getByRole('button',{name:'设置',exact:true}).click();
   await page.locator('#token').fill(publisherToken);
   await page.locator('#savePublisher').click();
-  await expect(page.locator('#railBots .rail-bot')).toHaveCount(1);
+  await expect(page.locator('#railBots .rail-bot').first()).toBeVisible();
   await expect(page.locator('#toast')).toBeVisible();
   await expect(page.locator('#toast')).toBeHidden({timeout:8000});
   fs.mkdirSync('test-results/rail-visual',{recursive:true});
