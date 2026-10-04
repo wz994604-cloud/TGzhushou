@@ -57,7 +57,7 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
     const raw = cookies(req.get('cookie')).tgzhushou_session;
     if (!raw || !/^[A-Za-z0-9_-]{40,100}$/.test(raw)) return null;
     const row = await db.prepare('SELECT * FROM browser_sessions WHERE session_hash=? AND expires_at>?').get(digest(raw),Date.now());
-    if (!row || !adminIds.includes(row.admin_id)) return null;
+    if (!row || (!row.login_username && !adminIds.includes(row.admin_id))) return null;
     if (!['GET','HEAD','OPTIONS'].includes(req.method)) {
       const origin = req.get('origin');
       if (!origin || new URL(origin).host !== req.get('host')) return null;
@@ -110,7 +110,7 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
       if (!accounts.length && !(await storedAccounts()).length) return res.status(503).json({ error:'账号登录尚未配置，请联系管理员' });
       const now = Date.now(), ip = req.ip || 'unknown', state = failures.get(ip) || { count:0, until:0 };
       if (state.until > now) return res.status(429).json({ error:'登录失败次数过多，请稍后再试' });
-      const inputUser = String(req.body?.username || ''), inputPassword = String(req.body?.password || '');
+      const inputUser = String(req.body?.username || '').trim(), inputPassword = String(req.body?.password || '');
       if (inputPassword.length > 128) return res.status(401).json({error:'账号或密码错误'});
       const account = await findAccount(inputUser);
       const inputKey = crypto.scryptSync(inputPassword, account?.passwordSalt || salt, 32);
@@ -120,7 +120,7 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
         state.count += 1; if (state.count >= 5) { state.count = 0; state.until = now + 15*60_000; }
         failures.set(ip, state); return res.status(401).json({ error:'账号或密码错误' });
       }
-      failures.delete(ip); setSession(res, await createSession(adminIds[0], now, account.username)); res.json({ ok:true });
+      failures.delete(ip); setSession(res, await createSession(`account:${account.username}`, now, account.username)); res.json({ ok:true });
     });
     app.post('/auth/logout', async (req, res) => {
       if (!sameOrigin(req)) return res.sendStatus(403);

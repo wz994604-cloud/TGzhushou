@@ -119,9 +119,9 @@ app.post('/api/cron/tick', async (req,res,next) => { try {
 const canAccessBot = (admin, id) => !Array.isArray(admin.publisherIds) || admin.publisherIds.includes(String(id));
 app.use('/api', async (req, res, next) => {
   try {
-    req.admin = req.get('x-telegram-init-data')
+    req.admin = await browserAuth.authenticate(req) || (req.get('x-telegram-init-data')
       ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
-      : await browserAuth.authenticate(req);
+      : null);
     if (!req.admin) throw new Error('未授权');
     if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)
       return res.status(403).json({error:'仅 wz9946 可管理或配置机器人'});

@@ -19,6 +19,7 @@ test('browser sessions retain account identity; only exact owner has management 
  const req=cookie=>({method:'GET',get:key=>key==='cookie'?cookie:''});
  assert.equal((await auth.authenticate(req(owner))).username,'wz9946');assert.equal((await auth.authenticate(req(owner))).canManageBots,true);assert.equal((await auth.authenticate(req(owner))).canManageAccounts,true);assert.equal((await auth.authenticate(req(owner))).publisherIds,undefined);
  assert.equal((await auth.authenticate(req(operator))).canManageBots,false);assert.deepEqual((await auth.authenticate(req(operator))).publisherIds,['333333']);
+ const withoutTelegramIds=await createBrowserAuth(db,[],'https://test.local',{accounts});assert.equal((await withoutTelegramIds.authenticate(req(operator))).username,'operator');
  const removed=await createBrowserAuth(db,['123'],'https://test.local',{accounts:[accounts[0]]});assert.equal(await removed.authenticate(req(operator)),null);
  const changed=await createBrowserAuth(db,['123'],'https://test.local',{accounts:[accounts[0],{...accounts[1],publisherIds:[]}]});assert.deepEqual((await changed.authenticate(req(operator))).publisherIds,[]);
  assert.equal(await auth.authenticate({...req(owner),method:'POST'}),null);

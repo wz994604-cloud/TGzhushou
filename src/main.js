@@ -619,7 +619,7 @@ $('taskList').onclick = event => action(async () => {
 }, event.target);
 $('saveFfaToken').onclick = event => action(async()=>{const context=requirePlayerContext();await api('/ffa/token','POST',{token:$('ffaToken').value});if(!currentPlayerContext(context))return;$('ffaToken').value='';await loadFfaStatus();toast('当前机器人的用户源已连接');},event.currentTarget);
 $('savePublisher').onclick = event => action(async()=>{const result=await api('/publisher','POST',{token:$('token').value});$('token').value='';await switchPublisher(result.id);toast('发布机器人已验证并保存');},event.currentTarget);
-$('browserLogout').hidden=Boolean(initData);
+$('browserLogout').hidden=false;
 $('browserLogout').onclick=async()=>{await fetch('/auth/logout',{method:'POST'});location.reload();};
 $('loginForm').onsubmit=event=>action(async()=>{event.preventDefault();const response=await fetch('/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:$('loginUsername').value,password:$('loginPassword').value})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||`登录失败 (${response.status})`);location.reload();},event.submitter);
 $('addTarget').onclick = event => action(async()=>{const t=await api('/targets','POST',{reference:$('targetRef').value});$('targetRef').value='';await refresh();toast(t.can_publish?'目标已添加':t.last_error,!t.can_publish);},event.currentTarget);
@@ -660,7 +660,7 @@ async function accountRequest(method='GET',body) {
   return result;
 }
 async function loadAdminAccounts() {
-  const allowed=data?.admin?.canManageAccounts===true&&!initData;
+  const allowed=data?.admin?.canManageAccounts===true;
   $('accountManagement').hidden=!allowed;if(!allowed){$('accountForm').hidden=true;$('newAccountPassword').value='';return;}
   const result=await accountRequest();
   $('accountPublishers').innerHTML=result.publishers.map(bot=>`<label><input type="checkbox" name="accountPublisher" value="${esc(bot.id)}"> @${esc(bot.username||bot.id)}</label>`).join('')||'<p>请先绑定发布机器人。</p>';
