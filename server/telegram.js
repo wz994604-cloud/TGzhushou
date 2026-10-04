@@ -1,4 +1,4 @@
-async function readMedia(path){ if(String(path).startsWith('http')){const response=await fetch(path);if(!response.ok)throw new Error('media object unavailable');return Buffer.from(await response.arrayBuffer())} const fs=await import('node:fs/promises');return fs.readFile(path); }
+async function readMedia(path){ if(String(path).startsWith('http')){const response=await fetch(path,{signal:AbortSignal.timeout(20000)});if(!response.ok)throw new Error('media object unavailable');return Buffer.from(await response.arrayBuffer())} const fs=await import('node:fs/promises');return fs.readFile(path); }
 
 const API = 'https://api.telegram.org/bot';
 
@@ -58,7 +58,7 @@ export async function sendMedia(token, chatId, media, caption, entities, markup,
   if (replyTo) form.set('reply_parameters', JSON.stringify({ message_id:Number(replyTo) }));
   const response = await fetch(`${API}${token}/${method}`, { method:'POST', body:form, signal:AbortSignal.timeout(30000) });
   const body = await response.json();
-  if (!body.ok) throw Object.assign(new Error(String(body.description || `Telegram ${response.status}`)), { telegramCode:body.error_code || response.status });
+  if (!body.ok) throw Object.assign(new Error(String(body.description || `Telegram ${response.status}`)), { telegramCode:body.error_code||response.status });
   return body.result;
 }
 
