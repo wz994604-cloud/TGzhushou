@@ -159,7 +159,13 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     } finally { running = false; }
   }
 
-  function start() { return tick(); }
+  function start() {
+    if (timer) return;
+    const run = () => tick().catch(error => console.error('Scheduler tick:', safeTelegramError(error)));
+    run();
+    timer = setInterval(run, 15_000);
+    timer.unref?.();
+  }
   function stop() { if (timer) clearInterval(timer); timer = null; }
   return { start, stop, tick, queueNow, queueDue, queueBroadcast, publisher };
 }
