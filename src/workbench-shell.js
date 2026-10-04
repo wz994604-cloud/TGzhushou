@@ -34,7 +34,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
   workspace.className=mini?'mini-shell':'desktop-shell';
   document.documentElement.dataset.surface=mini?'mini':'web';
   let title, back, details, step=0, stepPanels=[], stepButtons=[], settingButtons=[];
-  let settingsOpen=false;
+  let settingsOpen=false,editorActions;
   const setStep=index=>{
     step=Math.max(0,Math.min(4,index));
     stepPanels.forEach((panel,i)=>panel.hidden=i!==step);
@@ -85,9 +85,9 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     top.append(toggle,search,publisher,account); content.prepend(top); workspace.replaceChildren(rail,content);
     details=node('aside','chat-details','<div class="details-heading"><h3>会话资料</h3></div><div class="details-avatar">?</div><h3 class="details-title">请选择会话</h3><dl></dl>');
     details.setAttribute('aria-label','会话资料');
-    const close=button('关闭会话资料','close',()=>{workspace.classList.remove('details-open');$('showChatDetails').focus();}); details.querySelector('.details-heading').append(close);
+    const close=button('关闭会话资料','close',()=>{workspace.classList.remove('details-open');$('showChatDetails').setAttribute('aria-expanded','false');$('showChatDetails').focus();}); details.querySelector('.details-heading').append(close);
     $('chat').querySelector('.chat-shell').append(details);
-    const info=button('查看会话资料','info',()=>{workspace.classList.toggle('details-open');if(workspace.classList.contains('details-open'))close.focus();});info.id='showChatDetails';$('chatHeader').append(info);
+    const info=button('查看会话资料','info',()=>{workspace.classList.toggle('details-open');info.setAttribute('aria-expanded',String(workspace.classList.contains('details-open')));if(workspace.classList.contains('details-open'))close.focus();});info.id='showChatDetails';$('chatHeader').append(info);
     workspace.addEventListener('keydown',e=>{if(e.key==='Escape'){workspace.classList.remove('details-open','navigation-open');}});
   }
 
@@ -95,7 +95,8 @@ export function mountWorkbench({ mini, navigate, backChat }) {
   const editor=$('editor');
   const cards=[...editor.querySelectorAll(':scope > .card')];
   const [message,buttons,delivery,users,preview]=cards;
-  const media=node('section','card'); media.append(node('h3','','附带图片'),message.querySelector('.file-label'),$('photoBox'));
+  const composeHeading=node('div','compose-heading');$('toggleWriting').before(composeHeading);composeHeading.append(message.querySelector('#composeArea>label'),$('toggleWriting'));
+  const media=node('section','card'); media.append(node('h3','','附件与素材'),message.querySelector('.file-label'),$('photoBox'));
   const time=node('section','card');
   const timeHeading=[...delivery.querySelectorAll('h3')][1];
   for(let current=timeHeading;current;) { const next=current.nextSibling;time.append(current);current=next; }
@@ -114,20 +115,24 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     $('miniPrevious').onclick=()=>setStep(step-1);$('miniNext').onclick=()=>setStep(step+1);setStep(0);
   } else {
     const workbench=node('div','editor-workbench'), left=node('div','editor-writing'), right=node('aside','editor-publishing');
-    preview.open=true;left.append(message,media,buttons,actions);right.append(preview,delivery,users,time);workbench.append(left,right);editor.querySelector('.section-title').after(workbench);
+    preview.open=true;const backdrop=node('div','telegram-preview-body');$('preview').before(backdrop);backdrop.append($('preview'));$('previewPanel').querySelector('summary').textContent='Telegram 消息预览';left.append(message,media,buttons);editorActions=actions;actions.classList.add('desktop-editor-actions');content.append(actions);actions.hidden=true;delivery.append(...time.childNodes);time.remove();right.append(preview,delivery,users);workbench.append(left,right);editor.querySelector('.section-title').after(workbench);
   }
 
+  $('save').textContent='保存草稿';
+  const previewAction=node('button','secondary','预览');previewAction.type='button';previewAction.onclick=()=>{if(mini)setStep(4);else{$('previewPanel').open=true;$('previewPanel').scrollIntoView({block:'nearest'});}};actions.prepend(previewAction);
+  const assetAction=node('button','quiet','从素材选择');assetAction.type='button';assetAction.onclick=()=>navigate('assets');media.append(assetAction);
   const settings=$('settings'), settingCards=[...settings.querySelectorAll(':scope > .card')];
   const settingNav=node('div',mini?'mini-settings-menu':'settings-categories');settingNav.setAttribute('aria-label','设置分类');
   const settingBody=node('div',mini?'mini-settings-forms':'settings-forms');
   function showSettings(index) {
     settingsOpen=index!==null;
     settings.classList.toggle('settings-form-open',settingsOpen);
-    settingCards.forEach((card,i)=>card.classList.toggle('category-inactive',mini&&i!==index));
+    settingCards.forEach((card,i)=>{
+      card.classList.toggle('category-inactive',i!==index);
+    });
     settingButtons.forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-pressed',String(i===index));});
     if(mini) settingNav.hidden=settingsOpen;
-    if(mini) viewport.scrollTop=0;
-    else if(index!==null) settingCards[index].scrollIntoView({block:'start'});
+    viewport.scrollTop=0;
   }
   settingCards.forEach((card,i)=>{
     const b=node('button','',`${icon(i===3?'players':'settings')}<span>${card.querySelector('h3').textContent}</span>`);b.type='button';b.onclick=()=>showSettings(i);settingNav.append(b);settingButtons.push(b);settingBody.append(card);
@@ -135,9 +140,12 @@ export function mountWorkbench({ mini, navigate, backChat }) {
   const settingsLayout=node('div',mini?'mini-settings':'settings-layout');settingsLayout.append(settingNav,settingBody);settings.append(settingsLayout);showSettings(mini?null:0);
   if(!mini) { const heading=settings.querySelector(':scope > h2');settingNav.prepend(heading,node('p','muted','配置机器人、接口、目标与管理账号。')); }
 
+  for(const [inputId,buttonId] of [['token','savePublisher'],['ffaToken','saveFfaToken']]){const label=$(inputId).parentElement,row=node('div','settings-input-row');label.before(row);row.append(label,$(buttonId));}
+  const records=node('div','task-filters');records.setAttribute('aria-label','记录分类');for(const [id,label] of [['runList','群组 / 频道'],['broadcastPanel','用户']]){const b=node('button',id==='runList'?'active':'',label);b.type='button';b.onclick=()=>{records.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));$('runList').hidden=id!=='runList';$('broadcastPanel').hidden=id!=='broadcastPanel';};records.append(b);}$('runList').before(records);$('logs').append($('broadcastPanel'));$('broadcastPanel').open=true;$('broadcastPanel').hidden=true;
+  const noTimed=node('p','hint','无定时任务');noTimed.id='noTimedTasks';$('taskList').before(noTimed);
   const players=$('players');$('usersPanel').open=true;$('selectedPanel').open=true;
   const continueWriting=node('button','primary','返回编写活动');continueWriting.type='button';continueWriting.onclick=()=>navigate('editor');$('selectedPanel').append(continueWriting);
-  if(!mini) { const userLayout=node('div','users-workbench');userLayout.append($('usersPanel'),$('selectedPanel'));players.querySelector('.user-actions').after(userLayout); }
+  if(!mini) { const userLayout=node('div','users-workbench');userLayout.append($('usersPanel'),$('selectedPanel'));players.querySelector('.section-title').append(players.querySelector('.user-actions'));players.querySelector('.section-title').after(userLayout); }
   const tools=$('chatComposer').querySelector('.chat-tools');
   for(const [id,glyph] of [['chatEmoji','emoji'],['chatLink','link'],['chatAddButton','plus']]) {const b=$(id);b.innerHTML=icon(glyph);b.className='icon-button';}
   const file=$('chatFile'), attachment=file.parentElement;attachment.replaceChildren(node('span','',icon('attach')),file);attachment.setAttribute('aria-label','添加附件');attachment.className='file-button icon-button';
@@ -147,7 +155,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
   $('chatMessages').innerHTML='<p class="chat-empty">选择左侧会话，开始处理消息</p>';
 
   const filter=node('div','task-filters');filter.setAttribute('aria-label','筛选任务');
-  for(const [value,label] of [['','全部任务'],['ACTIVE','运行中'],['PAUSED','已暂停'],['COMPLETED','已完成']]) {
+  for(const [value,label] of [['','全部任务'],['DRAFT','草稿'],['ACTIVE','运行中'],['PAUSED','已暂停'],['STOPPED','已停止'],['COMPLETED','已完成']]) {
     const b=node('button',value?'':'active',label);b.type='button';b.onclick=()=>{filter.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));$('taskList').dataset.filter=value;applyFilter();};filter.append(b);
   }
   $('taskList').before(filter);
@@ -158,10 +166,11 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     if(section.id==='chat')section.querySelector('.chat-list').prepend(status);else section.prepend(status);
     feedback.set(section.id,status);
   }
+  function sectionLoading(id,busy){$(id)?.setAttribute('aria-busy',String(busy));}
   return {
     mini,
     activate(id) {
-      workspace.dataset.page=id;
+      workspace.dataset.page=id;if(editorActions)editorActions.hidden=id!=='editor';
       if(title)title.textContent=pages[id]||'活动中枢';
       if(back)back.disabled=id==='chat'&&workspace.dataset.chatOpen!=='true';
       workspace.querySelectorAll('[data-tab],[data-rail-tab]').forEach(b=>{const active=(b.dataset.tab||b.dataset.railTab)===(mini&&id==='logs'?'tasks':id);b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
@@ -170,21 +179,22 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     account(data) {
       const info=$('railAccountId');if(info)info.textContent=`${data.admin.name} · ID ${data.admin.id}`;
       const top=workspace.querySelector('.topbar-account');if(top)top.textContent=data.admin.name||'管理账号';
-      settingButtons[1].hidden=!data.publisher?.legacy;
-      if(!data.publisher?.legacy&&settingButtons[1].classList.contains('active'))showSettings(mini?null:0);
+
     },
     chat(chat) {
       workspace.dataset.chatOpen=String(Boolean(chat));
       workspace.classList.toggle('chat-empty-state', !chat);
+      $('chatComposer').hidden=!chat;
+      if(!chat)$('chatOlder').hidden=true;
       if(back&&workspace.dataset.page==='chat')back.disabled=!chat;
-      if(!chat)workspace.classList.remove('details-open');
+      if(!chat)workspace.classList.remove('details-open');$('showChatDetails')?.setAttribute('aria-expanded',String(workspace.classList.contains('details-open')));
       if(!chat && $('chatMessages')) $('chatMessages').innerHTML='<p class="chat-empty">选择左侧会话，开始处理消息</p>';
       if(!details)return;
       details.hidden=!chat;
       details.querySelector('.details-title').textContent=chat?.title||'请选择会话';
       details.querySelector('.details-avatar').textContent=(chat?.title||'?').slice(0,1);
       const dl=details.querySelector('dl');dl.replaceChildren();
-      const fields=[['会话 ID',chat?.chat_id||'—'],['未读消息',chat?String(chat.unread_count||0):'—'],['最近消息',chat?.last_message_text||'暂无消息'],['备注','暂无备注'],['标签','暂无标签'],['共同群组','暂无数据']];
+      const fields=chat ? [['会话 ID',chat.chat_id],['未读消息',String(chat.unread_count||0)],...(chat.last_message_text?[['最近消息',chat.last_message_text]]:[])] : [];
       for(const [label,value] of fields){const dt=node('dt',''),dd=node('dd','');dt.textContent=label;dd.textContent=value;dl.append(dt,dd);}
     },
     applyFilter,
@@ -192,12 +202,12 @@ export function mountWorkbench({ mini, navigate, backChat }) {
       const status=feedback.get(id);
       if(!status)return read();
       status.replaceChildren(node('span','loading-indicator','正在加载…'));status.hidden=false;
-      try { const result=await read();status.hidden=true;return result; }
+      sectionLoading(id,true);try { const result=await read();status.hidden=true;return result; }
       catch(error) {
-        const message=node('span','error-state');message.textContent=`加载失败：${error.message}`;
+        const message=node('span','error-state');message.textContent=`${[401,403].includes(error.status)?'无访问权限':'加载失败'}：${error.message}`;
         const retry=node('button','secondary','重试');retry.type='button';retry.onclick=()=>{this.load(id,read).catch(()=>{});};
         status.replaceChildren(message,retry);throw error;
-      }
+      }finally{sectionLoading(id,false);}
     },
     resetEditor:()=>{if(mini)setStep(0);}
   };

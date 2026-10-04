@@ -5,6 +5,7 @@ import { installLinkEditor } from './link-editor.js';
 import 'quill/dist/quill.snow.css';
 import './style.css';
 import { mountWorkbench } from './workbench-shell.js';
+import { defaultButtonRow, normalizeButtonRows, reflowAutomaticButtonRows, emojiPopoverPosition, emojiMatches } from './workbench-utils.js';
 import { installSentEditor } from './sent-editor.js';
 
 const tg = window.Telegram?.WebApp;
@@ -16,7 +17,9 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;'
 const fmt = value => value ? new Date(value).toLocaleString('zh-CN', { timeZone:'Asia/Shanghai', hour12:false }) : '—';
 const labels = { DRAFT:'草稿', ACTIVE:'运行中', PAUSED:'已暂停', STOPPED:'已停止', COMPLETED:'已完成', SUCCESS:'成功', FAILED:'失败', UNKNOWN:'待核实', PENDING:'排队中', SENDING:'发送中', CANCELLED:'已取消', EDITED:'已编辑', DELETED:'已删除', RUNNING:'发送中' };
 let data, taskId = null, buttons = [], mediaId = null, imageUrl = '', pickerTarget = null, savedRange = null, pendingSend = null, ready = false, insertedEmbedPending = false;
-let assetItems = [];
+let activePack=null,publisherChanging=false;
+let assetItems = [], mediaInfo=null, assetFilter='all', pickerAnchor=null, emojiHoverTimer, pickerOpenedByHover=false;
+let playerConversations=[],lastEditorTarget='body';
 let selectedPublisherId = localStorage.getItem('tgzhushou:selected-publisher') || '';
 let chatQuill, chatRange = null, activeChat = null, chatCursor = 0, chatButtons = [], chatMedia = null, chatReply = null, chatPolling, hiddenPollTicks = 0, chatRows = [], chatOlderCursor = null, conversationRows = [], conversationNext = null;
 let draftDirty = false, draftTimer, previewTimer, previewDirty = true, serverSnapshot = null;
@@ -46,8 +49,8 @@ function renderSavedPackTabs() {
 async function loadSavedPacks() {
   readRecentEmojis(); renderSavedPackTabs();
   if (!stickers.size && recentEmojis.length) displayPack({ title:'最近使用', stickers:recentEmojis });
-  const r = await api('/sticker-packs/saved');
-  savedPacks = r.packs || []; renderSavedPackTabs();
+  const bot=selectedPublisherId,r = await api('/sticker-packs/saved');if(bot!==selectedPublisherId)return;
+  savedPacks = r.packs || []; renderSavedPackTabs();renderAssetPacks();
 }
 async function api(url, method = 'GET', body) {
   const headers = { 'x-telegram-init-data':initData };
@@ -55,7 +58,7 @@ async function api(url, method = 'GET', body) {
   if (body && !(body instanceof FormData)) headers['content-type'] = 'application/json';
   const response = await fetch(`/api${url}`, { method, headers, body:body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || `请求失败 (${response.status})`);
+  if (!response.ok) throw Object.assign(new Error(result.error || `请求失败 (${response.status})`),{status:response.status});
   return result;
 }
 function toast(message, error = false) { $('toast').textContent = message; $('toast').className = error ? 'toast error' : 'toast'; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').hidden = true, 6000); }
@@ -86,7 +89,7 @@ async function loadRailBotAvatars() {
 }
 function replacePhoto(url = '') { if (imageUrl) URL.revokeObjectURL(imageUrl); imageUrl = url; }
 function displayImage(node, url, alt, label = '') {
-  if (!node.isConnected) { URL.revokeObjectURL(url); return; }
+  if (!node?.isConnected) { URL.revokeObjectURL(url); return; }
   const img = document.createElement('img'); img.alt = ''; img.setAttribute('aria-hidden', 'true');
   img.onload = () => { node.dataset.imageState = 'ready'; URL.revokeObjectURL(url); };
   img.onerror = () => { node.dataset.imageState = 'error'; URL.revokeObjectURL(url); };
@@ -107,28 +110,28 @@ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hi
 <nav aria-label="功能导航"><button data-tab="chat" class="active">聊天</button><button data-tab="editor">编写活动</button><button data-tab="assets">素材管理</button><button data-tab="players">用户</button><button data-tab="tasks">自动化任务</button><button data-tab="logs">发布记录</button><button data-tab="settings">系统设置</button></nav>
 <section id="chat" class="page"><div class="chat-shell"><aside class="chat-list"><div class="section-title"><h2>会话</h2><span id="chatUnread" class="status">0 未读</span></div><input id="chatSearch" placeholder="搜索会话"><div id="inboxStatus" class="hint"></div><button id="enableInbox" class="quiet" hidden>启用收消息</button><div id="chatConversations"></div><button id="chatMore" class="quiet" hidden>加载更多会话</button></aside><div class="chat-main"><div id="chatHeader" class="chat-head"><button id="chatBack" class="chat-back" type="button" aria-label="返回会话列表" title="返回会话列表">‹</button><span id="chatTitle">请选择会话</span><button id="mobileBotSwitch" class="mobile-bot-switch" type="button" aria-label="切换机器人" title="切换机器人"></button></div><button id="chatOlder" class="quiet" hidden>加载更早消息</button><div id="chatMessages" class="chat-messages"></div><div id="chatComposer" hidden><div id="chatReply" class="hint" hidden></div><div id="chatToolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="chatInput"></div><div class="chat-tools"><button id="chatEmoji" class="quiet" title="打开表情键盘" aria-label="打开表情键盘">✦ 表情</button><button id="chatLink" class="quiet" title="添加链接" aria-label="添加链接">链接</button><button id="chatAddButton" class="quiet" title="添加按钮" aria-label="添加按钮">＋ 按钮</button><label class="file-button quiet" title="添加附件">附件<input id="chatFile" type="file" accept="image/*,video/mp4,video/webm,.pdf,.txt,.zip,.docx,.xlsx" hidden></label><button id="chatSend" class="primary" title="发送消息">发送</button></div><div id="chatButtons"></div><p id="chatMedia" class="hint"></p><p id="chatSendStatus" class="hint" role="status"></p></div></div></div></section>
 <section id="assets" class="page" hidden>
-<div class="section-title"><div><h2>素材管理</h2><p>集中管理本次工作区上传的图片、视频和文件；素材仍由现有媒体接口保存。</p></div><button id="openAssetEditor" class="primary" type="button">去编写活动</button></div>
+<div class="section-title"><div><h2>素材管理</h2><p>复用本次上传的图片、视频、文件和已保存的 Telegram 专属表情。</p></div><button id="openAssetEditor" class="primary" type="button">去编写活动</button></div>
 <div class="card asset-upload-card"><div><h3>上传素材</h3><p class="hint">支持图片、视频和常用文件，单个不超过 20 MB。上传后可在聊天或活动编辑中复用。</p></div><label class="file-button primary asset-upload-button">选择文件<input id="assetUpload" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,application/pdf,text/plain,application/zip,.docx,.xlsx" multiple hidden></label></div>
-<div id="assetList" class="asset-grid"><div class="empty-state"><strong>还没有素材</strong><br>上传后，真实返回的媒体 ID 和类型会显示在这里；系统没有媒体列表接口时不会伪造历史数据。</div></div>
-<div class="card asset-emoji-card"><div><h3>Telegram 专属表情</h3><p class="hint">沿用现有表情包加载、保存、缩略图回退和 custom emoji 能力。</p></div><button id="openAssetEmoji" class="quiet" type="button">在编辑器中打开表情选择器</button></div>
+<div id="assetFilters" class="task-filters" aria-label="素材类型"><button data-asset-filter="all" class="active">全部</button><button data-asset-filter="image">图片</button><button data-asset-filter="video">视频</button><button data-asset-filter="file">文件</button><button data-asset-filter="emoji">专属表情</button></div><p class="hint">媒体列表仅包含本次打开页面后上传的素材；上传文件已保存到服务器，但历史媒体列表尚未接入。</p><div id="assetList" class="asset-grid"><div class="empty-state"><strong>还没有素材</strong><br>上传后，真实返回的媒体 ID 和类型会显示在这里；系统没有媒体列表接口时不会伪造历史数据。</div></div>
+<div class="card asset-emoji-card"><div><h3>Telegram 专属表情</h3><p class="hint">从已保存表情包选择，或添加 t.me/addemoji 链接。仅提供专属表情，不包含普通 Emoji / GIF。</p></div><button id="openAssetEmoji" class="quiet" type="button">添加 / 选择专属表情</button></div><div id="assetPacks" class="asset-grid"></div>
 </section><section id="editor" class="page" hidden>
 <div class="section-title"><div><h2 id="editorTitle">新建活动</h2><p id="saveStatus" role="status">内容尚未保存到服务器</p></div><button id="reset" class="quiet">新建</button></div>
 <div class="card"><label>活动名称<input id="name" maxlength="100" placeholder="例如：每日活动介绍"></label><div id="composeArea"><label>消息内容</label><button id="toggleWriting" class="quiet" type="button">编辑文案</button><div id="toolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="message"></div><div class="editor-footer"><button id="bodyEmoji" class="quiet">✦ 专属表情</button><button id="editLink" class="quiet">添加 / 编辑链接</button><span id="textCount" class="muted">0 / 4096</span></div></div><details class="editor-help"><summary>编辑说明</summary><p class="hint">点击「添加链接」填写显示文字和地址；选中链接后点击「添加 / 编辑链接」修改。跨应用粘贴可能丢失专属表情身份，请从表情包选择器添加。</p></details>
-<label class="file-label">附带图片 <span class="muted">JPEG / PNG / WebP，最多 5 MB</span><input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="photoBox" hidden><img id="photoPreview" alt="活动图片"><button id="removePhoto" class="quiet">移除图片</button></div></div>
+<label class="file-label">附带图片 <span class="muted">JPEG / PNG / WebP，最多 5 MB</span><input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><div id="photoBox" hidden><img id="photoPreview" alt="活动图片"><p id="photoMeta" class="hint"></p><button id="removePhoto" class="quiet">移除附件</button></div></div>
 <div class="card"><div class="section-title"><h3>跳转按钮</h3><button id="addButton" class="quiet">＋ 添加按钮</button></div><div id="buttons"></div><p class="hint">同一行号的按钮并排显示。专属表情和颜色以 Telegram 客户端实际支持为准。</p></div>
 <div class="card"><h3>发布目标</h3><div id="targetChecks" class="check-list"></div><h3>发布方式</h3><select id="kind"><option value="MANUAL">手动立即发布</option><option value="ONCE">指定时间发布</option><option value="DAILY">每天按时段重复发布</option></select><div id="onceFields" hidden><label>指定时间（北京时间）<input id="at" type="datetime-local"></label></div><div id="dailyFields" hidden><div class="grid"><label>开始时间<input id="start" type="time" value="01:00"></label><label>结束时间<input id="end" type="time" value="05:00"></label></div><div class="grid"><label>发送间隔<input id="interval" type="number" min="1" value="30"></label><label>单位<select id="unit"><option value="1">分钟</option><option value="60">小时</option></select></label></div><p class="hint">支持跨午夜；起点发送，终点恰好落在间隔上时发送。暂停恢复后从下一个时间点继续，不补发过去时段。</p></div></div>
 <div class="card"><div class="section-title"><h3>私信用户</h3><button id="openPlayers" class="quiet">选择用户</button></div><p id="selectedPlayersHint" class="muted">尚未选择用户</p><p class="hint">使用当前文案和自定义表情，发送给用户页中选中的用户。</p></div>
-<details id="previewPanel" class="card"><summary>消息预览</summary><div id="preview" class="message-preview"></div><p class="hint">专属表情以替代字符标记展示；发布结果会检查 Telegram 返回的专属表情数量。</p></details>
+<details id="previewPanel" class="card"><summary>消息预览</summary><div id="preview" class="message-preview"></div><p class="hint">此处是本地排版预览；专属表情最终以 Telegram 客户端实际渲染为准。</p></details>
 <div class="actions"><button id="save" class="secondary">保存</button><button id="send" class="primary">保存并立即发布</button><button id="sendBroadcast" class="primary">群发给用户</button><button id="activate" class="primary" hidden>保存并启用定时</button></div><p class="hint center">编辑内容自动暂存于当前设备；Token 不存入浏览器。</p></section>
 <section id="players" class="page" hidden><div class="section-title"><div><h2>用户</h2><p>选择用户后，从编写页发送私信。</p></div></div><div class="wrap-actions user-actions"><button id="syncPlayers" class="quiet">同步用户</button><button id="importPlayers" class="quiet">导入 WPS CSV</button><input id="playerCsv" type="file" accept=".csv,text/csv" hidden></div>
 <details id="selectedPanel" class="card"><summary id="playerSelectionCount">已选用户 · 0 人</summary><button id="clearPlayers" class="quiet">清空选择</button><div id="selectedPlayerList" class="user-scroll"></div></details>
-<details id="usersPanel" class="card"><summary>用户名单 <span id="userTotal" class="muted"></span></summary><div class="inline"><input id="playerSearch" placeholder="搜索 ID、昵称或用户名"><button id="refreshPlayers" class="quiet">搜索</button></div><button id="selectAllPlayers" class="quiet">全选全部有效用户</button><div id="playerList" class="check-list user-scroll"></div><div class="wrap-actions"><button id="prevPlayers" class="quiet">上一页</button><button id="nextPlayers" class="quiet">下一页</button></div><p id="playerStats" class="hint"></p></details>
+<details id="usersPanel" class="card"><summary>用户名单 <span id="userTotal" class="muted"></span></summary><div class="inline"><input id="playerSearch" placeholder="搜索 ID、昵称或用户名"><button id="refreshPlayers" class="quiet">搜索</button></div><button id="selectAllPlayers" class="quiet">全选全部有效用户</button><p class="hint">最近互动取自已有会话记录；名单更新时间不视为聊天时间。用户删除接口尚未接入，取消选择不会删除用户。</p><div id="playerList" class="check-list user-scroll"></div><div class="wrap-actions"><button id="prevPlayers" class="quiet">上一页</button><button id="nextPlayers" class="quiet">下一页</button></div><p id="playerStats" class="hint"></p></details>
 <details id="broadcastPanel" class="card"><summary>私信记录</summary><button id="refreshBroadcasts" class="quiet">刷新</button><div id="broadcastList"></div></details></section>
 <section id="tasks" class="page" hidden><div class="section-title"><div><h2>发布任务</h2><p>查看状态与下次发送时间。</p></div><button id="refreshTasks" class="quiet">刷新</button></div><div id="taskList"></div></section>
 <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
-<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>发布机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">同一后台管理多个发布机器人，原任务继续运行。发布机器人 webhook 仅在收件箱安全启用时配置；外部 webhook 不会被覆盖。</p></div><div id="ffaCard" class="card"><h3>发发娱乐用户接口</h3><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从发发娱乐后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">身份绑定使用 环境变量 ADMIN_TG_IDS；接口验证 Telegram 签名或浏览器安全会话。</p><button id="browserLogout" class="quiet" hidden>退出浏览器登录</button></div></section>
+<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>绑定机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p class="hint">同一后台可管理多个发布机器人；当前机器人由顶部上下文切换。Webhook 仅在收件箱安全启用时配置。</p><div id="boundPublisherList"></div><p class="hint">入口机器人用于管理员登录，与当前绑定机器人独立。当前后端尚未返回入口机器人资料，页面不推测其用户名或收消息状态。</p></div><div id="ffaCard" class="card"><h3>用户导入</h3><p id="importSourceHint" class="hint"></p><button id="settingsImportUsers" class="secondary" type="button">去用户页导入名单</button><div id="legacyImportSettings"><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从用户数据后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p class="hint">当前账号信息来自真实登录会话。添加账号或修改密码需要后端管理账号接口，这些操作暂未接入。</p><button id="browserLogout" class="quiet" hidden>退出浏览器登录</button></div></section>
 </main><div id="toast" class="toast" role="status" hidden></div>
-<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button><button id="savePack" class="quiet">保存</button></div><div id="savedPackTabs" class="pack-tabs"></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><div id="emojiGrid"></div></dialog>`;
+<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button><button id="savePack" class="quiet" disabled title="请先加载真实表情包">保存</button></div><div id="savedPackTabs" class="pack-tabs"></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><p id="packError" class="inline-error" role="alert" hidden></p><input id="emojiSearch" type="search" aria-label="搜索专属表情" placeholder="搜索当前表情包的表情或 ID"><div id="emojiGrid"></div></dialog>`;
 
 const ui = mountWorkbench({ mini:Boolean(initData), navigate:changeTab, backChat:()=> $('chatBack').click() });
 
@@ -191,41 +194,42 @@ function renderChatRows(rows) {
     const day=m.sent_at ? new Date(m.sent_at).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'long',day:'numeric'}) : '';
     const divider=day&&day!==previousDay?`<div class="chat-date-divider" role="separator" aria-label="${esc(day)}"><span>${esc(day)}</span></div>`:'';
     if(day)previousDay=day;
-    return `${divider}<article class="chat-bubble ${m.direction==='OUT'?'out':''}" data-message="${m.id}">${m.reply_to_message_id?`<small class="chat-quoted">↩ ${esc((byTelegramId.get(m.reply_to_message_id)?.text||`消息 #${m.reply_to_message_id}`).slice(0,80))}</small>`:''}${m.media_kind?`<button class="chat-attachment quiet" data-file="${m.id}">${m.media_kind==='photo'?'🖼 图片':m.media_kind==='video'?'▶ 视频':'📎 文件'}</button>`:''}${m.media_kind==='photo'?`<div class="chat-photo" data-photo-id="${m.id}"></div>`:''}<div>${m.status==='DELETED'?'[已删除]':esc(m.text).replace(/\n/g,'<br>')}</div><small>${fmt(m.sent_at)}${m.edited_at?' · 已编辑':''}</small><button class="chat-reply-btn" data-reply="${esc(m.telegram_message_id)}" title="回复">↩</button>${m.direction==='OUT'&&m.status==='SUCCESS'?`<button class="chat-delete-btn" data-manage-chat="${m.id}" title="编辑或删除">⋯</button>`:''}</article>`;
+    return `${divider}<article class="chat-bubble ${m.direction==='OUT'?'out':''}" data-message="${m.id}">${m.reply_to_message_id?`<small class="chat-quoted">↩ ${esc((byTelegramId.get(m.reply_to_message_id)?.text||`消息 #${m.reply_to_message_id}`).slice(0,80))}</small>`:''}${m.media_kind?`<button class="chat-attachment quiet" data-file="${m.id}">${m.media_kind==='photo'?'🖼 图片':m.media_kind==='video'?'▶ 视频':'📎 文件'}</button>`:''}${m.media_kind==='photo'?`<div class="chat-photo" data-photo-id="${m.id}"></div>`:''}<div>${m.status==='DELETED'?'[已删除]':esc(m.text).replace(/\n/g,'<br>')}</div><small>${new Date(m.sent_at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false})}${m.edited_at?' · 已编辑':''}</small><button class="chat-reply-btn" data-reply="${esc(m.telegram_message_id)}" title="回复">↩</button>${m.direction==='OUT'&&m.status==='SUCCESS'?`<button class="chat-delete-btn" data-manage-chat="${m.id}" title="编辑或删除">⋯</button>`:''}</article>`;
   }).join('')||'<p class="chat-empty muted center">还没有消息</p>';
   for(const node of $('chatMessages').querySelectorAll('[data-photo-id]'))authenticatedImage(`/chat/files/${node.dataset.photoId}`).then(url=>displayImage(node,url,'聊天图片')).catch(()=>{node.textContent='图片暂不可预览';});
   $('chatMessages').scrollTop=$('chatMessages').scrollHeight;
 }
 async function loadChat() {
-  ui.chat(activeChat);
-  if(!activeChat)return;
-  const result=await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/messages`);
+  const chat=activeChat, bot=selectedPublisherId;ui.chat(chat);if(!chat)return;
+  const result=await api(`/chat/conversations/${encodeURIComponent(chat.chat_id)}/messages`);
+  if(bot!==selectedPublisherId||chat.chat_id!==activeChat?.chat_id)return;
   chatRows=result.rows;chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows);
-  await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/read`,'POST',{});
-  await loadConversations();
+  await api(`/chat/conversations/${encodeURIComponent(chat.chat_id)}/read`,'POST',{});
+  if(bot===selectedPublisherId)await loadConversations();
 }
-$('chatOlder').onclick=event=>action(async()=>{if(!activeChat||!chatOlderCursor)return;const result=await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/messages?before=${chatOlderCursor}`);chatRows=[...result.rows,...chatRows];chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows);$('chatMessages').scrollTop=0;},event.currentTarget);
+$('chatOlder').onclick=event=>action(async()=>{if(!activeChat||!chatOlderCursor)return;const chat=activeChat,bot=selectedPublisherId;const result=await api(`/chat/conversations/${encodeURIComponent(chat.chat_id)}/messages?before=${chatOlderCursor}`);if(bot!==selectedPublisherId||chat.chat_id!==activeChat?.chat_id)return;chatRows=[...result.rows,...chatRows];chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows);$('chatMessages').scrollTop=0;},event.currentTarget);
 async function loadConversations(more=false) {
-  const result=await api('/chat/conversations?q='+encodeURIComponent($('chatSearch').value)+(more&&conversationNext?'&before='+encodeURIComponent(conversationNext):''));
+  const bot=selectedPublisherId;const result=await api('/chat/conversations?q='+encodeURIComponent($('chatSearch').value)+(more&&conversationNext?'&before='+encodeURIComponent(conversationNext):''));
+  if(bot!==selectedPublisherId)return;
   if(chatCursor===0)chatCursor=result.cursor;
   conversationRows=more?[...conversationRows,...result.rows]:result.rows;
   conversationNext=result.next;$('chatMore').hidden=!conversationNext;
   const rows=conversationRows; $('chatUnread').textContent=`${result.totalUnread} 未读`;
   const avatarBotId = selectedPublisherId || data?.publisher?.id || '';
-  $('chatConversations').innerHTML=rows.map(c=>`<button class="chat-conversation ${activeChat?.chat_id===c.chat_id?'selected':''}" data-chat-id="${esc(c.chat_id)}"><span class="chat-avatar"><img hidden data-avatar-path="/chat/avatars/${encodeURIComponent(avatarBotId)}/${encodeURIComponent(c.chat_id)}" alt=""><span>${esc((c.title||'?').slice(0,1))}</span></span><span class="chat-summary"><strong>${esc(c.title||c.chat_id)}</strong><small>${esc(c.last_message_text||'新会话')}</small></span><span class="chat-meta"><small>${c.last_message_at?fmt(c.last_message_at):''}</small>${c.unread_count?`<b>${c.unread_count}</b>`:''}</span></button>`).join('')||'<p class="empty-state">暂无会话。启用收消息后，新消息会显示在这里。</p>';
+  $('chatConversations').innerHTML=rows.map(c=>`<button class="chat-conversation ${activeChat?.chat_id===c.chat_id?'selected':''}" data-chat-id="${esc(c.chat_id)}"><span class="chat-avatar"><img hidden data-avatar-path="/chat/avatars/${encodeURIComponent(avatarBotId)}/${encodeURIComponent(c.chat_id)}" alt=""><span>${esc((c.title||'?').slice(0,1))}</span></span><span class="chat-summary"><strong>${esc(c.title||c.chat_id)}</strong><small>${esc(c.last_message_text||'新会话')}</small></span><span class="chat-meta"><small>${c.last_message_at?new Date(c.last_message_at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}):''}</small>${c.unread_count?`<b>${c.unread_count}</b>`:''}</span></button>`).join('')||'<p class="empty-state">暂无会话。启用收消息后，新消息会显示在这里。</p>';
   loadConversationAvatars();
   if(activeChat){activeChat=rows.find(c=>c.chat_id===activeChat.chat_id)||activeChat;$('chatTitle').textContent=activeChat.title;}
   ui.chat(activeChat);
 }
 $('chatMore').onclick=event=>action(()=>loadConversations(true),event.currentTarget);
-$('chatConversations').onclick=event=>action(async()=>{const id=event.target.closest('[data-chat-id]')?.dataset.chatId;if(!id)return;activeChat=conversationRows.find(c=>c.chat_id===id);if(!activeChat)return;$('chatTitle').textContent=activeChat.title;$('chatComposer').hidden=false;await loadChat();});
+$('chatConversations').onclick=event=>action(async()=>{const id=event.target.closest('[data-chat-id]')?.dataset.chatId;if(!id)return;if($('chatSend').disabled)throw new Error('消息正在发送，请稍后切换会话');chatRows=[];$('chatMessages').innerHTML='<p class="chat-empty">正在加载消息…</p>';activeChat=conversationRows.find(c=>c.chat_id===id);if(!activeChat)return;$('chatTitle').textContent=activeChat.title;$('chatComposer').hidden=false;await ui.load('chat',loadChat);});
 $('chatBack').onclick=()=>{activeChat=null;ui.chat(null);$('chatConversations').querySelector('.chat-conversation.selected')?.classList.remove('selected');$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';action(loadConversations);};
 $('chatMessages').onclick=event=>action(async()=>{const reply=event.target.dataset.reply, file=event.target.dataset.file, manage=event.target.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReply').textContent=`回复 #${reply} · 点击取消`;}if(manage){await openSent('chat',manage);$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file){const response=await fetch(`/api/chat/files/${file}`,{headers:{'x-telegram-init-data':initData,...(selectedPublisherId?{'x-publisher-id':selectedPublisherId}:{})}});if(!response.ok)throw new Error('附件读取失败');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);}},event.target);
 $('chatReply').onclick=()=>{chatReply=null;$('chatReply').hidden=true;};
 $('chatSend').onclick=event=>action(async()=>{if(!activeChat)throw new Error('请选择会话');$('chatSendStatus').textContent='发送中…';try{await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/send`,'POST',{delta:chatQuill.getContents(),buttons:chatButtons,mediaId:chatMedia?.id,replyTo:chatReply});chatQuill.setText('');chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatFile').value='';$('chatSendStatus').textContent='已发送';await loadChat();await loadConversations();}catch(error){$('chatSendStatus').textContent=`发送失败或结果待核实：${error.message}`;throw error;}},event.currentTarget);
 async function loadInboxStatus(){if(!data?.publisher)return;try{const s=await api('/inbox/status');const external=s.status==='EXTERNAL';$('inboxStatus').textContent=external?'已有外部 webhook；不会覆盖，当前无法接收新消息':s.status==='READY'?'可正常接收新消息':s.status==='AVAILABLE'?'尚未启用收消息':s.status==='NO_PUBLIC_URL'?'需要配置 PUBLIC_URL':'收消息状态：'+s.status;$('inboxStatus').hidden=false;$('inboxStatus').className='hint inbox-status '+(s.status==='READY'?'is-ready':s.status==='AVAILABLE'?'is-available':external?'is-warning':'is-error');$('enableInbox').hidden=!external&&s.status!=='AVAILABLE';$('enableInbox').dataset.takeover=external?'true':'false';$('enableInbox').textContent=external?'接管到当前服务器':'启用收消息';}catch(error){$('inboxStatus').hidden=false;$('inboxStatus').textContent=`状态检查失败：${error.message}`;$('inboxStatus').className='hint inbox-status is-error';$('enableInbox').hidden=true;}}
 async function pollChats(){if(!data?.publisher)return;try{const result=await api('/chat/updates?after='+chatCursor);if(result.rows.length){chatCursor=result.cursor;await loadConversations();if(activeChat&&result.rows.some(m=>m.chat_id===activeChat.chat_id))await loadChat();}}catch{/* Keep the UI usable and retry on the next interval. */}}
-function changeTab(id) { if (!['chat','editor','assets','players','tasks','logs','settings'].includes(id)) id='chat'; ui.activate(id); closePicker(); sessionStorage.setItem('tgzhushou:tab',id); document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); if (id === 'logs') action(()=>ui.load('logs',loadRuns)); if (id === 'players') action(()=>ui.load('players',loadPlayers)); if(id==='chat')action(()=>ui.load('chat',loadConversations)); }
+function changeTab(id) { if (!['chat','editor','assets','players','tasks','logs','settings'].includes(id)) id='chat'; if(id==='editor')lastEditorTarget='body';else if(id==='chat'&&activeChat)lastEditorTarget='chat';ui.activate(id); closePicker(); sessionStorage.setItem('tgzhushou:tab',id); document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); if (id === 'logs') action(()=>ui.load('logs',async()=>{await loadRuns();await loadBroadcasts();})); if (id === 'players') action(()=>ui.load('players',loadPlayers)); if(id==='assets')action(()=>ui.load('assets',loadSavedPacks)); if(id==='chat')action(()=>ui.load('chat',loadConversations)); }
 
 
 function updatePlayerSelection() {
@@ -235,20 +239,31 @@ function updatePlayerSelection() {
   document.querySelectorAll('[data-player-id]').forEach(n=>n.checked=selectedPlayerIds.has(n.dataset.playerId));
 }
 async function loadPlayers() {
-  const q=$('playerSearch').value.trim(), result=await api('/players?q='+encodeURIComponent(q)+'&page='+playerPage+'&size=50');
-  for(const p of result.rows) playerCache.set(p.telegram_id,p);
-  $('userTotal').textContent='· 共 '+result.total+' 人';
-  $('playerStats').textContent='第 '+playerPage+' 页 · 共 '+result.total+' 名用户';
-  $('prevPlayers').disabled=playerPage<=1; $('nextPlayers').disabled=playerPage*50>=result.total;
-  $('playerList').innerHTML=result.rows.length ? (ui.mini ? result.rows.map(p=>`<label class="check"><input type="checkbox" data-player-id="${esc(p.telegram_id)}" ${p.active?'':'disabled'}><span>${esc(p.display_name||'未命名')}<small>${esc(p.telegram_id)}${p.username?' · @'+esc(p.username):''}</small></span></label>`).join('') : `<div class="user-table"><div class="user-table-heading"><span>选择</span><span>昵称</span><span>Telegram ID</span><span>用户名</span><span>状态</span></div>${result.rows.map(p=>`<label class="user-table-row"><input type="checkbox" data-player-id="${esc(p.telegram_id)}" aria-label="选择 ${esc(p.display_name||p.telegram_id)}" ${p.active?'':'disabled'}><strong>${esc(p.display_name||'未命名')}</strong><span>${esc(p.telegram_id)}</span><span>${p.username?'@'+esc(p.username):'—'}</span><span class="status ${p.active?'ACTIVE':'STOPPED'}">${p.active?'有效':'停用'}</span></label>`).join('')}</div>`) : `<p class="empty-state">${data?.publisher?.legacy?'暂无用户，请同步或导入名单。':'此机器人的用户来源尚未配置，私信发送流程已就绪。'}</p>`;
-  updatePlayerSelection(); await loadBroadcasts();
+  const bot=selectedPublisherId,q=$('playerSearch').value.trim();
+  const result=await api('/players?q='+encodeURIComponent(q)+'&page='+playerPage+'&size=50');
+  if(bot!==selectedPublisherId)return;
+  playerConversations=conversationRows;
+  for(const p of result.rows)playerCache.set(p.telegram_id,p);
+  $('userTotal').textContent='· 共 '+result.total+' 人';$('playerStats').textContent='第 '+playerPage+' 页 · 共 '+result.total+' 名用户';
+  $('prevPlayers').disabled=playerPage<=1;$('nextPlayers').disabled=playerPage*50>=result.total;
+  const cells=p=>{const c=playerConversations.find(c=>String(c.chat_id)===String(p.telegram_id));return `<span>${esc(p.telegram_id)}</span><span>${p.username?'@'+esc(p.username):'—'}</span><span class="status ${p.active?'ACTIVE':'STOPPED'}">${p.active?'有效':'停用'}</span><span>${c?.last_message_at?fmt(c.last_message_at):'—'}</span><button type="button" class="quiet" data-player-chat="${esc(p.telegram_id)}">会话</button>`;};
+  $('playerList').innerHTML=result.rows.length ? `<div class="${ui.mini?'mini-user-list':'user-table'}">${ui.mini?'':'<div class="user-table-heading"><span>选择</span><span>昵称</span><span>Telegram ID</span><span>用户名</span><span>状态</span><span>最近互动</span><span>操作</span></div>'}${result.rows.map(p=>`<div class="${ui.mini?'mini-user-row':'user-table-row'}"><label class="user-selection"><input type="checkbox" data-player-id="${esc(p.telegram_id)}" aria-label="选择 ${esc(p.display_name||p.telegram_id)}" ${p.active?'':'disabled'}></label><strong>${esc(p.display_name||'未命名')}</strong>${cells(p)}</div>`).join('')}</div>` : `<p class="empty-state">${q?'没有匹配的用户，请修改关键词。':'暂无用户；通过收消息建立会话，或使用支持的用户导入来源。'}</p>`;
+  updatePlayerSelection();
 }
+$('settingsImportUsers').onclick=()=>changeTab('players');
+$('playerList').onclick=event=>action(async()=>{
+  const id=event.target.closest('[data-player-chat]')?.dataset.playerChat;if(!id)return;
+  const result=await api('/chat/conversations?q='+encodeURIComponent(id));
+  const chat=result.rows.find(c=>String(c.chat_id)===id);
+  if($('chatSend').disabled)throw new Error('消息正在发送，请稍后切换会话');if(!chat)throw new Error('此用户尚无会话记录。请让用户先向当前机器人发送消息，再打开会话。');
+  activeChat=chat;changeTab('chat');$('chatTitle').textContent=chat.title||id;await ui.load('chat',loadChat);
+},event.target);
 $('importPlayers').onclick=()=>$('playerCsv').click();
 $('selectedPlayerList').onclick=e=>{const id=e.target.dataset.unselect;if(id){selectedPlayerIds.delete(id);updatePlayerSelection();}};
 $('prevPlayers').onclick=()=>{playerPage--;action(loadPlayers);};$('nextPlayers').onclick=()=>{playerPage++;action(loadPlayers);};
 $('selectedPlayersHint').onclick=()=>{changeTab('players');$('selectedPanel').open=true;};
-async function loadBroadcasts() { const rows=await api('/broadcasts'); $('broadcastList').innerHTML=rows.map(r=>`<div class="list-row"><div><strong>${esc(r.name)} · ${esc(r.status)}</strong><small>成功 ${r.success_count||0} · 失败 ${r.failed_count||0} · 排队 ${r.pending_count||0} · ${fmt(r.created_at)}</small></div><button class="quiet" data-sent-broadcast="${r.id}">查看 / 编辑 / 删除</button>${['PENDING','RUNNING'].includes(r.status)?`<button class="quiet danger-text" data-stop-broadcast="${r.id}">停止</button>`:''}</div>`).join('')||'<p class="muted">暂无私信记录</p>'; }
-$('playerList').addEventListener('change',e=>{const id=e.target.dataset.playerId;if(!id)return;e.target.checked?selectedPlayerIds.add(id):selectedPlayerIds.delete(id);updatePlayerSelection();}); $('refreshPlayers').onclick=e=>{playerPage=1;action(loadPlayers,e.currentTarget);}; $('playerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){playerPage=1;action(loadPlayers);}}); $('clearPlayers').onclick=()=>{selectedPlayerIds.clear();loadPlayers();}; $('selectAllPlayers').onclick=e=>action(async()=>{const r=await api('/players/ids');for(const p of r.rows)playerCache.set(p.telegram_id,p);selectedPlayerIds=new Set(r.rows.map(x=>x.telegram_id));await loadPlayers();toast(`已选择 ${selectedPlayerIds.size} 名有效用户`);},e.currentTarget); $('playerCsv').onchange=e=>action(async()=>{const f=e.target.files[0];if(!f)return;const form=new FormData();form.set('file',f);const r=await api('/players/import','POST',form);e.target.value='';await loadPlayers();toast(`导入完成：新增 ${r.created}，更新 ${r.updated}，无效 ${r.invalid}`);},e.currentTarget); $('refreshBroadcasts').onclick=e=>action(loadBroadcasts,e.currentTarget); $('broadcastList').onclick=e=>action(async()=>{if(e.target.dataset.sentBroadcast){await openSent('broadcasts',e.target.dataset.sentBroadcast);return;}const id=e.target.dataset.stopBroadcast;if(id&&confirm('停止尚未发送的私信？')){await api(`/broadcasts/${id}/stop`,'POST');await loadBroadcasts();toast('已停止剩余发送');}},e.target); $('openPlayers').onclick=()=>{changeTab('players');$('usersPanel').open=true;};
+async function loadBroadcasts() { const rows=await api('/broadcasts'); $('broadcastList').innerHTML=rows.map(r=>`<div class="list-row"><div><strong>${esc(r.name)} · ${esc(labels[r.status]||r.status)}</strong><small>成功 ${r.success_count||0} · 失败 ${r.failed_count||0} · 排队 ${r.pending_count||0} · ${fmt(r.created_at)}</small></div><button class="quiet" data-sent-broadcast="${r.id}">查看 / 编辑 / 删除</button>${['PENDING','RUNNING'].includes(r.status)?`<button class="quiet danger-text" data-stop-broadcast="${r.id}">停止</button>`:''}</div>`).join('')||'<p class="muted">暂无私信记录</p>'; }
+$('playerList').addEventListener('change',e=>{const id=e.target.dataset.playerId;if(!id)return;e.target.checked?selectedPlayerIds.add(id):selectedPlayerIds.delete(id);updatePlayerSelection();}); $('refreshPlayers').onclick=e=>{playerPage=1;action(()=>ui.load('players',loadPlayers),e.currentTarget);}; $('playerSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){playerPage=1;action(loadPlayers);}}); $('clearPlayers').onclick=()=>{selectedPlayerIds.clear();updatePlayerSelection();}; $('selectAllPlayers').onclick=e=>action(async()=>{const r=await api('/players/ids');for(const p of r.rows)playerCache.set(p.telegram_id,p);selectedPlayerIds=new Set(r.rows.map(x=>x.telegram_id));await loadPlayers();toast(`已选择 ${selectedPlayerIds.size} 名有效用户`);},e.currentTarget); $('playerCsv').onchange=e=>action(async()=>{const f=e.target.files[0];if(!f)return;const form=new FormData();form.set('file',f);const r=await api('/players/import','POST',form);e.target.value='';await loadPlayers();toast(`导入完成：新增 ${r.created}，更新 ${r.updated}，无效 ${r.invalid}`);},e.currentTarget); $('refreshBroadcasts').onclick=e=>action(loadBroadcasts,e.currentTarget); $('broadcastList').onclick=e=>action(async()=>{if(e.target.dataset.sentBroadcast){await openSent('broadcasts',e.target.dataset.sentBroadcast);return;}const id=e.target.dataset.stopBroadcast;if(id&&confirm('停止尚未发送的私信？')){await api(`/broadcasts/${id}/stop`,'POST');await loadBroadcasts();toast('已停止剩余发送');}},e.target); $('openPlayers').onclick=()=>{changeTab('players');$('usersPanel').open=true;};
 async function sendBroadcast(){if(!selectedPlayerIds.size)throw new Error('请先在「用户」页选择发送对象');const r=await api('/broadcasts','POST',{name:$('name').value||'用户私信',delta:quill.getContents(),buttons,mediaId,playerIds:[...selectedPlayerIds]});toast(`已加入私信队列，共 ${r.total} 人`);} $('sendBroadcast').onclick=e=>action(sendBroadcast,e.currentTarget); $('syncPlayers').onclick=e=>action(async()=>{const r=await api('/ffa/sync','POST');await loadPlayers();toast(`同步完成：新增 ${r.created}，更新 ${r.updated}`);},e.currentTarget);
 function scheduleFields() { const kind = $('kind').value; $('onceFields').hidden = kind !== 'ONCE'; $('dailyFields').hidden = kind !== 'DAILY'; $('activate').hidden = kind === 'MANUAL'; }
 function collect() { return { name:$('name').value, delta:quill.getContents(), buttons, mediaId, targetIds:[...document.querySelectorAll('[name=target]:checked')].map(x => Number(x.value)), schedule: $('kind').value === 'DAILY' ? { kind:'DAILY', start:$('start').value, end:$('end').value, interval:Number($('interval').value)*Number($('unit').value) } : $('kind').value === 'ONCE' ? { kind:'ONCE', at:Date.parse(`${$('at').value}:00+08:00`) } : { kind:'MANUAL' } }; }
@@ -258,7 +273,7 @@ function saveStatus(local = true) {
 function flushDraft(force = false) {
   clearTimeout(draftTimer);
   if (!ready || (!draftDirty && !force)) return;
-  try { localStorage.setItem(draftKey(), JSON.stringify({ ...collect(), taskId })); draftDirty = false; saveStatus(); }
+  try { localStorage.setItem(draftKey(), JSON.stringify({ ...collect(), taskId, mediaInfo })); draftDirty = false; saveStatus(); }
   catch { $('saveStatus').textContent = serverSnapshot === JSON.stringify(collect()) ? '服务器已保存 · 本机暂存失败' : '本机暂存失败，请点击保存到服务器'; }
 }
 function remember() {
@@ -273,22 +288,9 @@ function showButtons() {
   $('buttons').innerHTML = buttons.map((b,i) => `<div class="button-editor" data-index="${i}"><div class="section-title"><strong>按钮 ${i+1}</strong><button data-remove="${i}" class="quiet danger-text">删除</button></div><label>按钮文字<input data-field="text" value="${esc(b.text)}" maxlength="64" placeholder="留空 = 仅显示专属表情"></label><label>跳转链接<input data-field="url" value="${esc(b.url)}" placeholder="https://t.me/…"></label><div class="grid"><label>颜色<select data-field="style">${[['default','默认'],['primary','蓝色'],['success','绿色'],['danger','红色']].map(([v,t])=>`<option value="${v}" ${b.style===v?'selected':''}>${t}</option>`).join('')}</select></label><label>行号<input data-field="row" type="number" min="1" max="12" value="${b.row+1}"></label></div><button data-emoji="${i}" class="quiet">${esc(b.iconAlt || '✦')} ${b.iconId ? '更换专属表情' : '选择专属表情'}</button>${b.iconId?`<button data-clear="${i}" class="quiet">移除表情</button>`:''}</div>`).join('') || '<p class="muted">暂未添加跳转按钮</p>';
   preview();
 }
-function defaultButtonRow(index) { return Math.floor(index / 2); }
-function normalizeButtonRows(list) {
-  let autoIndex = 0;
-  list.forEach((button, index) => {
-    if (!Number.isInteger(button.row) || button.row < 0) button.row = defaultButtonRow(index);
-    if (button.rowExplicit === undefined) button.rowExplicit = button.row !== defaultButtonRow(index);
-    if (!button.rowExplicit) button.row = defaultButtonRow(autoIndex++);
-  });
-}
-function reflowAutomaticButtonRows(list) {
-  let autoIndex = 0;
-  list.forEach(button => { if (!button.rowExplicit) button.row = defaultButtonRow(autoIndex++); });
-}
 $('buttons').addEventListener('input', event => { const wrap = event.target.closest('[data-index]'); if (!wrap || !event.target.dataset.field) return; const field = event.target.dataset.field; const button = buttons[Number(wrap.dataset.index)]; button[field] = field === 'row' ? Math.max(0, Number(event.target.value)-1) : event.target.value; if (field === 'row') button.rowExplicit = true; remember(); preview(); });
 $('buttons').addEventListener('click', event => { if (event.target.dataset.remove !== undefined) { buttons.splice(Number(event.target.dataset.remove),1); reflowAutomaticButtonRows(buttons); showButtons(); remember(); } if (event.target.dataset.emoji !== undefined) openPicker(Number(event.target.dataset.emoji)); if (event.target.dataset.clear !== undefined) { Object.assign(buttons[Number(event.target.dataset.clear)], { iconId:'',iconAlt:'',iconThumbId:'' }); showButtons(); remember(); } });
-$('addButton').onclick = () => { if (buttons.length >= 12) return toast('最多添加 12 个按钮'); const autoIndex = buttons.filter(button => !button.rowExplicit).length; buttons.push({text:'立即进入',url:'https://t.me/',style:'default',row:defaultButtonRow(autoIndex),rowExplicit:false,iconId:'',iconAlt:''}); showButtons(); remember(); };
+$('addButton').onclick = () => { if (buttons.length >= 12) return toast('最多添加 12 个按钮'); buttons.push({text:'立即进入',url:'https://t.me/',style:'default',row:defaultButtonRow(buttons.length),rowExplicit:false,iconId:'',iconAlt:''}); showButtons(); remember(); };
 function preview() {
   previewDirty = true; clearTimeout(previewTimer);
   if ($('previewPanel').open) previewTimer = setTimeout(renderPreview, 100);
@@ -301,6 +303,7 @@ function renderPreview() {
   if (!$('previewPanel').open) return;
   previewDirty = false;
   const container = $('preview'); container.replaceChildren();
+  if(mediaId&&!imageUrl){const file=document.createElement('p');file.className='preview-file';file.textContent=`${mediaInfo?.mime?.startsWith('video/')?'▶ 视频':'附件'} · ${mediaInfo?.name||'媒体 #'+mediaId}`;container.append(file);}
   if (imageUrl) { const img = document.createElement('img'); img.src = imageUrl; img.alt = '消息图片'; container.append(img); }
   const text = document.createElement('div'); text.className='preview-text';
   for (const op of quill.getContents().ops) { let node = document.createElement('span'); const custom = op.insert?.customEmoji; node.textContent = typeof op.insert === 'string' ? op.insert : custom?.alt || ''; const a = op.attributes || {}; if (custom) { node.className='custom-emoji'; node.dataset.emojiId=custom.id; node.dataset.thumbId=custom.thumbId || ''; node.dataset.alt=custom.alt || ''; node.dataset.imageState='loading'; node.setAttribute('aria-label', custom.alt || `专属表情 ${custom.id}`); } if (a.bold) node.style.fontWeight='700'; if (a.italic) node.style.fontStyle='italic'; if (a.underline) node.style.textDecoration='underline'; if (a.link) { const link=document.createElement('a'); link.textContent=node.textContent; link.href=/^(https:|tg:)/i.test(a.link)?a.link:'#'; link.target='_blank'; link.rel='noopener noreferrer'; node=link; } text.append(node); } container.append(text);
@@ -322,21 +325,25 @@ function closePicker() {
   stopDeleting();
   $('emojiDialog').close();
   document.body.classList.remove('emoji-open', 'emoji-body-open');
+  $('emojiDialog').classList.remove('desktop-emoji-popover');$('emojiDialog').removeAttribute('style');pickerAnchor=null;clearTimeout(emojiHoverTimer);
   quill.root.removeAttribute('inputmode');
   chatQuill?.root.removeAttribute('inputmode');
-  $('bodyEmoji').setAttribute('aria-expanded', 'false');
+  $('bodyEmoji').setAttribute('aria-expanded', 'false');$('chatEmoji').setAttribute('aria-expanded','false');
 }
-function openPicker(target) {
-  if ($('emojiDialog').open && pickerTarget === target) { closePicker(); return; }
+function openPicker(target, anchor, hover=false) {
+  if($('emojiDialog').open&&pickerTarget===target){if(hover)return;if(pickerOpenedByHover){pickerOpenedByHover=false;return;}closePicker();return;}
   const caret = target === 'chat' ? chatRange && { ...chatRange } : savedRange && { ...savedRange };
   stopDeleting();
-  pickerTarget = target;
+  pickerTarget=target;pickerOpenedByHover=hover;pickerAnchor=anchor||(target==='body'?$('bodyEmoji'):target==='chat'?$('chatEmoji'):document.activeElement);
+  const desktop=!ui.mini&&innerWidth>=900;
+  $('emojiDialog').classList.toggle('desktop-emoji-popover',desktop);
   $('emojiBackspace').hidden = target !== 'body';
   document.body.classList.add('emoji-open');
-  document.body.classList.toggle('emoji-body-open', target === 'body');
-  (target === 'chat' ? chatQuill : quill).root.setAttribute('inputmode', 'none');
+  document.body.classList.toggle('emoji-body-open', target === 'body'&&!desktop);
+  if(!desktop)(target === 'chat' ? chatQuill : quill).root.setAttribute('inputmode', 'none');
   if (!$('emojiDialog').open) $('emojiDialog').show();
-  $('bodyEmoji').setAttribute('aria-expanded', String(target === 'body')); loadSavedPacks().catch(error=>toast(error.message,true));
+  positionEmojiPicker();
+  $('bodyEmoji').setAttribute('aria-expanded', String(target === 'body'));$('chatEmoji').setAttribute('aria-expanded',String(target==='chat')); loadSavedPacks().catch(error=>packError(error.message));
   if (target === 'body' || target === 'chat') {
     // Opening the non-modal dialog may focus its controls; restore the caret.
     const editor = target === 'chat' ? chatQuill : quill;
@@ -384,7 +391,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) stopD
 const stickers = new Map();
 let visibleStickers = 0;
 function appendEmojiBatch() {
-  const batch = [...stickers.values()].slice(visibleStickers, visibleStickers + 24);
+  const batch = [...stickers.values()].filter(s=>emojiMatches(s,$('emojiSearch').value)).slice(visibleStickers, visibleStickers + 24);
   for (const sticker of batch) {
     const button = document.createElement('button'); button.className = 'emoji-choice';
     button.dataset.emojiId = sticker.id; button.dataset.alt = sticker.alt || ''; button.dataset.imageState = 'loading'; button.setAttribute('aria-label', sticker.alt || `专属表情 ${sticker.id}`); button.title = sticker.alt || sticker.id;
@@ -392,7 +399,7 @@ function appendEmojiBatch() {
       button.classList.add('selected');
       if (pickerTarget === 'chat') {
         const at=Math.min(chatRange?.index??chatQuill.getLength()-1,chatQuill.getLength()-1);
-        chatQuill.insertEmbed(at,'customEmoji',{id:sticker.id,alt:sticker.alt,thumbId:sticker.thumbnailId||''},'user');
+        chatQuill.enable(true);chatQuill.insertEmbed(at,'customEmoji',{id:sticker.id,alt:sticker.alt,thumbId:sticker.thumbnailId||''},'user');
         chatQuill.setSelection(at+1,0);chatRange={index:at+1,length:0};hydrateEmojiImages(chatQuill.root);
       } else if (String(pickerTarget).startsWith('chat-button-')) {
         const index=Number(String(pickerTarget).slice('chat-button-'.length));
@@ -400,7 +407,7 @@ function appendEmojiBatch() {
         Object.assign(chatButtons[index],{iconId:sticker.id,iconAlt:sticker.alt,iconThumbId:sticker.thumbnailId||''});chatButtonEditor();
       } else if (pickerTarget === 'body') {
         const at = Math.min(savedRange?.index ?? quill.getLength()-1, quill.getLength()-1);
-        quill.insertEmbed(at, 'customEmoji', { id:sticker.id, alt:sticker.alt, thumbId:sticker.thumbnailId || '' }, 'user');
+        quill.enable(true);$('toggleWriting').textContent='完成编辑';quill.insertEmbed(at, 'customEmoji', { id:sticker.id, alt:sticker.alt, thumbId:sticker.thumbnailId || '' }, 'user');
         quill.setSelection(at+1, 0); savedRange = { index:at+1, length:0 }; insertedEmbedPending=true; hydrateEmojiImages(quill.root);
       } else if (buttons[pickerTarget]) {
         Object.assign(buttons[pickerTarget], { iconId:sticker.id, iconAlt:sticker.alt, iconThumbId:sticker.thumbnailId || '' });
@@ -420,7 +427,7 @@ function queueMoreEmoji() {
   cancelAnimationFrame(emojiScrollFrame);
   emojiScrollFrame = requestAnimationFrame(() => {
     const grid = $('emojiGrid');
-    if ($('emojiDialog').open && grid.clientHeight > 0 && visibleStickers < stickers.size
+    if ($('emojiDialog').open && grid.clientHeight > 0 && visibleStickers < [...stickers.values()].filter(s=>emojiMatches(s,$('emojiSearch').value)).length
         && grid.scrollHeight - grid.scrollTop - grid.clientHeight < 80) appendEmojiBatch();
   });
 }
@@ -428,65 +435,92 @@ $('emojiGrid').addEventListener('scroll', queueMoreEmoji, { passive:true });
 new ResizeObserver(queueMoreEmoji).observe($('emojiGrid'));
 const loadedPacks = new Map();
 function displayPack(pack) {
+  activePack=pack;$('savePack').disabled=!pack.name;$('savePack').title=pack.name?'保存当前已加载表情包':'请先加载真实表情包';
   cancelAnimationFrame(emojiScrollFrame);
-  stickers.clear(); visibleStickers = 0; $('emojiGrid').replaceChildren(); $('emojiGrid').scrollTop = 0;
+  $('emojiSearch').value='';stickers.clear(); visibleStickers = 0; $('emojiGrid').replaceChildren(); $('emojiGrid').scrollTop = 0;
   for (const sticker of pack.stickers) stickers.set(sticker.id, sticker);
   $('packTitle').textContent = pack.title + ' · ' + stickers.size + ' 个';
   $('packSettings').open = false;
-  appendEmojiBatch();
+  appendEmojiBatch();if(!stickers.size)$('emojiGrid').innerHTML='<p class="empty-state">此表情包没有专属表情。</p>';
 }
+$('emojiSearch').oninput=()=>{visibleStickers=0;$('emojiGrid').replaceChildren();appendEmojiBatch();if(!$('emojiGrid').children.length)$('emojiGrid').innerHTML='<p class="empty-state">没有匹配的专属表情。</p>';};
 $('packHistory').onchange = () => displayPack(loadedPacks.get($('packHistory').value));
 $('savedPackTabs').addEventListener('click', e => {
   if (e.target.dataset.recent) return displayPack({ title:'最近使用', stickers:recentEmojis });
   const i = e.target.dataset.packIndex;
   if (i !== undefined) displayPack(savedPacks[Number(i)]);
 });
-$('savePack').onclick=event=>action(async()=>{const key=$('pack').value.trim();const name=key.split('/').filter(Boolean).pop();const pack=loadedPacks.get(key);if(!pack)throw new Error('请先加载表情包');await api('/sticker-packs/saved','POST',{name,title:pack.title,stickers:pack.stickers});await loadSavedPacks();toast('表情包已保存');},event.currentTarget);
-$('loadPack').onclick = event => action(async () => {
-  const key = $('pack').value.trim();
-  const pack = loadedPacks.get(key) || await api('/sticker-packs', 'POST', { pack:key });
-  loadedPacks.delete(key); loadedPacks.set(key, pack);
-  if (loadedPacks.size > 8) loadedPacks.delete(loadedPacks.keys().next().value);
-  $('packHistory').replaceChildren(...[...loadedPacks].map(([value, item]) => new Option(item.title, value)));
-  $('packHistory').value = key; $('packHistory').hidden = loadedPacks.size < 2;
-  displayPack(pack); $('pack').blur();
-}, event.currentTarget);
-$('photo').onchange = event => action(async () => { const file=event.target.files[0]; if(!file)return; const form=new FormData(); form.set('image',file); const media=await api('/media','POST',form); mediaId=media.id; replacePhoto(await authenticatedImage(`/media/${mediaId}?preview=1`).catch(() => { toast('图片已上传，缩略图暂不可用', true); return ''; })); showPhoto(); remember(); },event.currentTarget);
-function showPhoto() { $('photoBox').hidden=!mediaId; $('photoPreview').src=imageUrl; $('textCount').textContent=`${quill.getText().trimEnd().length} / ${mediaId?1024:4096}`; preview(); }
-$('removePhoto').onclick = () => {mediaId=null;replacePhoto();$('photo').value='';showPhoto();remember();};
-function renderAssets() {
-  const list=$('assetList'); if(!list)return;
-  if(!assetItems.length){ list.innerHTML='<div class="empty-state"><strong>还没有素材</strong><br>上传后，真实返回的媒体 ID 和类型会显示在这里；系统没有媒体列表接口时不会伪造历史数据。</div>'; return; }
-  list.innerHTML=assetItems.map(item=>`<article class="asset-card" data-asset-id="${item.id}"><div class="asset-preview ${item.mime.startsWith('image/')?'asset-image':'asset-file'}" data-asset-preview="${item.id}">${item.mime.startsWith('image/')?'':'<span aria-hidden="true">'+(item.mime.startsWith('video/')?'▶':'📎')+'</span>'}</div><div class="asset-card-body"><strong>${esc(item.name)}</strong><small>${esc(item.mime)} · ${(item.size/1024/1024).toFixed(2)} MB · ID ${item.id}</small><div class="wrap-actions"><button class="quiet" type="button" data-asset-use="${item.id}" ${item.mime.startsWith('image/')?'':'disabled'}>${item.mime.startsWith('image/')?'用于活动':'暂不支持活动预览'}</button><button class="quiet" type="button" data-asset-chat="${item.id}">用于聊天</button></div></div></article>`).join('');
-  for(const item of assetItems.filter(item=>item.mime.startsWith('image/'))) authenticatedImage(`/media/${item.id}?preview=1`).then(url=>displayImage($(`[data-asset-preview="${item.id}"]`),url,item.name)).catch(()=>{});
+function packError(message=''){$('packError').textContent=message;$('packError').hidden=!message;}
+$('savePack').onclick=event=>action(async()=>{packError();try{const pack=activePack,name=pack?.name;if(!name)throw new Error('请先加载表情包');await api('/sticker-packs/saved','POST',{name,title:pack.title,stickers:pack.stickers});await loadSavedPacks();toast('表情包已保存');}catch(error){packError(error.message);throw error;}},event.currentTarget);
+$('loadPack').onclick=event=>action(async()=>{packError();try{
+  const key=$('pack').value.trim(),bot=selectedPublisherId,pack=loadedPacks.get(key)||await api('/sticker-packs','POST',{pack:key});if(bot!==selectedPublisherId)return;
+  loadedPacks.delete(key);loadedPacks.set(key,pack);if(loadedPacks.size>8)loadedPacks.delete(loadedPacks.keys().next().value);
+  $('packHistory').replaceChildren(...[...loadedPacks].map(([value,item])=>new Option(item.title,value)));
+  $('packHistory').value=key;$('packHistory').hidden=loadedPacks.size<2;displayPack(pack);$('pack').blur();
+}catch(error){packError(error.message);throw error;}},event.currentTarget);
+function positionEmojiPicker(){
+  const dialog=$('emojiDialog');if(!dialog.open||!dialog.classList.contains('desktop-emoji-popover')||!pickerAnchor?.isConnected)return;
+  const p=emojiPopoverPosition(pickerAnchor.getBoundingClientRect(),{width:innerWidth,height:window.visualViewport?.height||innerHeight});
+  Object.assign(dialog.style,{left:p.left+'px',top:p.top+'px',width:p.width+'px',height:p.height+'px'});
 }
-$('assetUpload').onchange=event=>action(async()=>{for(const file of [...event.target.files]){const form=new FormData();form.set('file',file);const media=await api('/chat/media','POST',form);assetItems.unshift({id:media.id,mime:media.mime,size:media.size,name:file.name});}event.target.value='';renderAssets();toast(`已上传 ${assetItems.length ? '素材' : ''}`);},event.currentTarget);
-$('assetList').onclick=event=>action(async()=>{const use=event.target.dataset.assetUse, chat=event.target.dataset.assetChat;if(use){const item=assetItems.find(x=>String(x.id)===String(use));if(!item)return;mediaId=item.id;replacePhoto(await authenticatedImage(`/media/${mediaId}?preview=1`).catch(()=>''));showPhoto();changeTab('editor');toast('素材已挂载到活动编辑');}if(chat){changeTab('chat');toast('请在聊天编辑器中选择附件后发送');}},event.target);
-$('openAssetEditor').onclick=()=>changeTab('editor');
-$('openAssetEmoji').onclick=()=>{changeTab('editor');$('bodyEmoji').click();};
+for(const name of ['resize','scroll'])window.addEventListener(name,positionEmojiPicker,{capture:true,passive:true});
+document.addEventListener('pointerdown',event=>{if($('emojiDialog').open&&!event.target.closest('#emojiDialog')&&!event.target.closest('#bodyEmoji,#chatEmoji,[data-emoji],[data-chat-icon]'))closePicker();});
+for(const [id,target] of [['bodyEmoji','body'],['chatEmoji','chat']]){
+  $(id).addEventListener('mouseenter',()=>{if(ui.mini||innerWidth<900||$('emojiDialog').open)return;emojiHoverTimer=setTimeout(()=>openPicker(target,$(id),true),250);});
+  $(id).addEventListener('mouseleave',()=>clearTimeout(emojiHoverTimer));
+}
+$('photo').onchange = event => action(async () => { const file=event.target.files[0]; if(!file)return; const form=new FormData(); form.set('image',file); const media=await api('/media','POST',form); mediaId=media.id;mediaInfo={...media,name:file.name}; replacePhoto(await authenticatedImage(`/media/${mediaId}?preview=1`).catch(() => { toast('图片已上传，缩略图暂不可用', true); return ''; })); showPhoto(); remember(); },event.currentTarget);
+function showPhoto() { $('photoBox').hidden=!mediaId; $('photoPreview').hidden=!imageUrl;$('photoPreview').src=imageUrl;$('photoMeta').textContent=mediaId?`${mediaInfo?.name||'附件 #'+mediaId} · ${mediaInfo?.mime||'媒体'}`:''; $('textCount').textContent=`${quill.getText().trimEnd().length} / ${mediaId?1024:4096}`; preview(); }
+$('removePhoto').onclick = () => {mediaId=null;mediaInfo=null;replacePhoto();$('photo').value='';showPhoto();remember();};
+function assetKind(item){return item.mime.startsWith('image/')?'image':item.mime.startsWith('video/')?'video':'file';}
+function renderAssets(){
+  const items=assetItems.filter(item=>assetFilter==='all'||assetKind(item)===assetFilter),list=$('assetList');list.hidden=assetFilter==='emoji';
+  list.innerHTML=items.length?items.map(item=>`<article class="asset-card"><div class="asset-preview ${assetKind(item)==='image'?'asset-image':'asset-file'}" data-asset-preview="${item.id}">${assetKind(item)==='image'?'':assetKind(item)==='video'?'▶':'附件'}</div><div class="asset-card-body"><strong>${esc(item.name)}</strong><small>${esc(item.mime)} · ${(item.size/1024/1024).toFixed(2)} MB · ID ${item.id}</small><div class="wrap-actions"><button class="quiet" type="button" data-asset-use="${item.id}">用于活动</button><button class="quiet" type="button" data-asset-chat="${item.id}">用于聊天</button></div></div></article>`).join(''):'<div class="empty-state">本次会话还没有此类型的素材，请先上传。</div>';
+  for(const item of items.filter(item=>assetKind(item)==='image'))authenticatedImage(`/media/${item.id}?preview=1`).then(url=>displayImage(document.querySelector(`[data-asset-preview="${item.id}"]`),url,item.name)).catch(()=>{const el=document.querySelector(`[data-asset-preview="${item.id}"]`);if(el)el.textContent='缩略图暂不可用，已上传文件仍可复用';});
+  renderAssetPacks();
+}
+function renderAssetPacks(){
+  const el=$('assetPacks');el.hidden=!['all','emoji'].includes(assetFilter);document.querySelector('.asset-emoji-card').hidden=el.hidden;
+  el.innerHTML=savedPacks.length?savedPacks.map((pack,i)=>`<article class="asset-card asset-pack"><strong>${esc(pack.title)}</strong><small>${pack.stickers.length} 个专属表情</small><div class="wrap-actions"><button class="quiet" data-asset-pack="${i}" data-pack-target="body" type="button">用于活动</button><button class="quiet" data-asset-pack="${i}" data-pack-target="chat" type="button" ${activeChat?'':'disabled title="请先选择会话"'}>用于聊天</button></div></article>`).join(''):'<p class="empty-state">还没有已保存的专属表情包。添加真实表情包链接，加载成功后保存。</p>';
+}
+$('assetFilters').onclick=event=>{const kind=event.target.dataset.assetFilter;if(!kind)return;assetFilter=kind;$('assetFilters').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===event.target));renderAssets();};
+const assetUploadButton=$('assetUpload').parentElement;assetUploadButton.tabIndex=0;assetUploadButton.setAttribute('role','button');assetUploadButton.setAttribute('aria-label','选择上传素材');assetUploadButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('assetUpload').click();}};
+$('assetUpload').onchange=event=>action(async()=>{let count=0;try{for(const file of [...event.target.files]){if(file.size>20*1024*1024)throw new Error(`${file.name} 超过 20 MB`);const form=new FormData();form.set('file',file);const media=await api('/chat/media','POST',form);assetItems.unshift({...media,name:file.name});count++;renderAssets();}toast(`已上传 ${count} 个素材`);}finally{event.target.value='';renderAssets();}},event.currentTarget);
+$('assetList').onclick=event=>action(async()=>{const use=event.target.dataset.assetUse,chat=event.target.dataset.assetChat,item=assetItems.find(x=>String(x.id)===String(use||chat));if(!item)return;
+  if(use){mediaId=item.id;mediaInfo=item;replacePhoto(assetKind(item)==='image'?await authenticatedImage(`/media/${mediaId}?preview=1`).catch(()=> ''):'');showPhoto();remember();changeTab('editor');toast('素材已附加；正文、目标和时间设置保持不变');}
+  if(chat){chatMedia=item;$('chatMedia').textContent=`已附加：${item.name}`;changeTab('chat');toast('素材已附加，选择会话后发送');}
+},event.target);
+$('assetPacks').onclick=event=>{const i=event.target.dataset.assetPack;if(i===undefined)return;const target=event.target.dataset.packTarget||'body';openAssetPicker(target);displayPack(savedPacks[Number(i)]);};
+function openAssetPicker(target){if(target==='chat'&&!activeChat)target='body';changeTab(target==='chat'?'chat':'editor');openPicker(target,$(target==='chat'?'chatEmoji':'bodyEmoji'));}
+$('openAssetEditor').onclick=()=>changeTab('editor');$('openAssetEmoji').onclick=()=>{openAssetPicker(lastEditorTarget);$('packSettings').open=true;};
 function populateTargets(selected = []) { $('targetChecks').innerHTML=data.targets.map(t=>`<label class="check"><input type="checkbox" name="target" value="${t.id}" ${selected.includes(t.id)?'checked':''} ${t.can_publish?'':'disabled'}><span>${esc(t.title)}<small>${esc(t.last_error || t.chat_id)}</small></span></label>`).join('')||'<p class="muted">请先在「设置」中添加群或频道。</p>'; }
-async function refresh() { const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); data=await api('/bootstrap'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=`${data.admin.name} · ID ${data.admin.id}`;ui.account(data); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length; if($('railBots')) $('railBots').innerHTML=data.publishers.map(p=>`<button type="button" class="rail-bot ${p.id===data.publisher?.id?'active':''}" data-bot-id="${esc(p.id)}" title="切换到 @${esc(p.username||p.id)}" aria-label="切换到 @${esc(p.username||p.id)}" aria-pressed="${p.id===data.publisher?.id}"><span aria-hidden="true">${esc((p.username||p.id).replace(/^@/,'').slice(0,1).toUpperCase())}</span><span class="rail-bot-name">@${esc(p.username||p.id)}</span></button>`).join(''); loadRailBotAvatars(); updateMobileBotSwitch(); $('ffaCard').hidden=!data.publisher?.legacy; $('syncPlayers').hidden=!data.publisher?.legacy; $('importPlayers').hidden=!data.publisher?.legacy; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
+async function refresh() { const requestedBot=selectedPublisherId;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); const result=await api('/bootstrap');if(requestedBot!==selectedPublisherId)return;data=result;selectedPublisherId=data.publisher?.id||''; $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=`${data.admin.name} · ID ${data.admin.id}`;ui.account(data); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length; if($('railBots')) $('railBots').innerHTML=data.publishers.filter(p=>p.id===data.publisher?.id).map(p=>`<button type="button" class="rail-bot ${p.id===data.publisher?.id?'active':''}" data-bot-id="${esc(p.id)}" title="切换到 @${esc(p.username||p.id)}" aria-label="切换到 @${esc(p.username||p.id)}" aria-pressed="${p.id===data.publisher?.id}"><span aria-hidden="true">${esc((p.username||p.id).replace(/^@/,'').slice(0,1).toUpperCase())}</span><span class="rail-bot-name">@${esc(p.username||p.id)}</span></button>`).join(''); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher?.legacy;$('importSourceHint').textContent=data.publisher?.legacy?'CSV 名单和已配置用户源均使用现有导入接口。':'当前机器人支持收消息建立会话；后端 CSV/同步仅支持原始用户源机器人。';$('settingsImportUsers').textContent=data.publisher?.legacy?'去用户页导入名单':'查看用户与会话';$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher?.legacy; $('importPlayers').hidden=!data.publisher?.legacy; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
 function publisherLabel(id) { return data?.publishers?.find(p=>String(p.id)===String(id))?.username || id; }
 function updateMobileBotSwitch() { const node=$('mobileBotSwitch'); if(!node)return; const current=data?.publisher?.id||selectedPublisherId; node.textContent=(publisherLabel(current)||'?').replace(/^@/,'').slice(0,1).toUpperCase(); node.title=`切换到 @${publisherLabel(current)}`; node.setAttribute('aria-label',node.title); }
 
 async function switchPublisher(id) {
-  if (savePromise) throw new Error('正在保存活动，请稍后切换机器人');
+  if(publisherChanging)throw new Error('机器人正在切换，请稍候');publisherChanging=true;
+  try{
+  if (savePromise||$('chatSend').disabled) throw new Error('正在保存或发送，请稍后切换机器人');
   flushDraft();
   selectedPublisherId=id;
   localStorage.setItem('tgzhushou:selected-publisher',id);
   activeChat=null;ui.chat(null);chatCursor=0;$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';
-  selectedPlayerIds.clear(); playerCache.clear(); playerPage=1; savedPacks=[]; pendingSend=null;
+  selectedPlayerIds.clear();playerCache.clear();playerPage=1;savedPacks=[];activePack=null;$('savePack').disabled=true;loadedPacks.clear();stickers.clear();$('emojiGrid').replaceChildren();$('pack').value='';$('packTitle').textContent='添加或切换';packError();pendingSend=null;conversationRows=[];chatRows=[];chatOlderCursor=null;chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;chatQuill.setText('');$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatSendStatus').textContent='';
   await refresh();
   let draft; try { draft=JSON.parse(localStorage.getItem(draftKey())||'null'); } catch { draft=null; }
   await fill(draft||{});
   await loadPlayers(); await loadRuns();
   if (data.publisher?.legacy) await loadFfaStatus();
   await loadConversations();await loadInboxStatus();
+  }finally{publisherChanging=false;}
 }
+$('boundPublisherList').onclick=event=>{const id=event.target.dataset.boundBot;if(id)action(()=>switchPublisher(id),event.target);};
 $('publisherSelect').onchange=event=>action(async()=>{await switchPublisher(event.target.value);toast(`已切换到 @${publisherLabel(event.target.value)}`);},event.currentTarget);
 if($('railBots')) $('railBots').onclick=event=>{const button=event.target.closest('[data-bot-id]'),id=button?.dataset.botId;if(id)action(async()=>{await switchPublisher(id);toast(`已切换到 @${publisherLabel(id)}`);});};
 $('mobileBotSwitch').onclick=event=>action(async()=>{const current=data?.publisher?.id||selectedPublisherId;const next=data?.publishers?.find(p=>String(p.id)!==String(current));if(next){await switchPublisher(next.id);toast(`已切换到 @${publisherLabel(next.id)}`);}},event.currentTarget);
 function showTasks() {
+  $('noTimedTasks').hidden=data.tasks.some(t=>JSON.parse(t.schedule_json).kind!=='MANUAL');
   $('taskList').innerHTML = data.tasks.length ? `<div class="${ui.mini?'mini-task-list':'card ops-table'}">${ui.mini?'':'<div class="ops-table-head"><span>任务</span><span>状态</span><span>类型</span><span>下次执行</span><span>操作</span></div>'}${data.tasks.map(t => {
     const stopped = t.status === 'STOPPED', timed = JSON.parse(t.schedule_json).kind !== 'MANUAL';
     const controls = stopped
@@ -496,7 +530,7 @@ function showTasks() {
   }).join('')}</div><p id="taskFilterEmpty" class="empty-state" hidden>该状态下暂无任务，请切换筛选。</p>` : '<div class="empty-state">还没有发布任务，请从编写活动开始。</div>';
   ui.applyFilter();
 }
-async function fill(item) { ui.resetEditor(); closePicker();quill.enable(false);$('toggleWriting').textContent='编辑文案'; clearTimeout(draftTimer); draftDirty=false; serverSnapshot=null; ready=false; taskId=item.taskId || null; $('name').value=item.name||''; quill.setContents(item.delta || {ops:[{insert:'\n'}]}); hydrateEmojiImages(quill.root); buttons=item.buttons||[];mediaId=item.mediaId||null; replacePhoto();if(mediaId)replacePhoto(await authenticatedImage(`/media/${mediaId}?preview=1`).catch(()=> '')); const s=item.schedule||{kind:'MANUAL'}; $('kind').value=s.kind;$('start').value=s.start||'01:00';$('end').value=s.end||'05:00';$('interval').value=s.interval||30;$('unit').value='1';$('at').value=s.at?new Date(s.at+8*3600000).toISOString().slice(0,16):'';populateTargets(item.targetIds||[]);$('editorTitle').textContent=taskId?`编辑活动 #${taskId}`:'新建活动';showButtons();showPhoto();scheduleFields();ready=true; $('saveStatus').textContent=item.taskId || item.name ? '已恢复本机草稿 · 请保存到服务器' : '内容尚未保存到服务器'; }
+async function fill(item) { ui.resetEditor(); closePicker();quill.enable(false);$('toggleWriting').textContent='编辑文案'; clearTimeout(draftTimer); draftDirty=false; serverSnapshot=null; ready=false; taskId=item.taskId || null; $('name').value=item.name||''; quill.setContents(item.delta || {ops:[{insert:'\n'}]}); hydrateEmojiImages(quill.root); buttons=item.buttons||[];mediaId=item.mediaId||null;mediaInfo=item.mediaInfo||null;replacePhoto();if(mediaId){try{const blob=await loadImage(`/media/${mediaId}`);mediaInfo={...mediaInfo,id:mediaId,mime:blob.type,size:blob.size};if(blob.type.startsWith('image/'))replacePhoto(URL.createObjectURL(blob));}catch{toast('附件预览加载失败；保留原媒体 ID',true);}} const s=item.schedule||{kind:'MANUAL'}; $('kind').value=s.kind;$('start').value=s.start||'01:00';$('end').value=s.end||'05:00';$('interval').value=s.interval||30;$('unit').value='1';$('at').value=s.at?new Date(s.at+8*3600000).toISOString().slice(0,16):'';populateTargets(item.targetIds||[]);$('editorTitle').textContent=taskId?`编辑活动 #${taskId}`:'新建活动';showButtons();showPhoto();scheduleFields();ready=true; $('saveStatus').textContent=item.taskId || item.name ? '已恢复本机草稿 · 请保存到服务器' : '内容尚未保存到服务器'; }
 let savePromise;
 function save() {
   if (savePromise) return savePromise;
@@ -559,7 +593,7 @@ async function loadRuns() {
   }).join('')}</div>` : '<div class="empty-state">还没有发布记录，发布后的结果会显示在这里。</div>';
 }
 $('runList').onclick = event => action(async()=>{const id=event.target.dataset.runDetail;if(!id)return;await openSent('runs',id);},event.target);
-$('refreshTasks').onclick=event=>action(()=>ui.load('tasks',refresh),event.currentTarget);$('refreshLogs').onclick=event=>action(()=>ui.load('logs',loadRuns),event.currentTarget); updatePlayerSelection(); async function loadFfaStatus(){const r=await api('/ffa');$('ffaStatus').textContent=r.configured?`已配置：${r.baseUrl}`:`未配置（接口：${r.baseUrl}）`;}
+$('refreshTasks').onclick=event=>action(()=>ui.load('tasks',refresh),event.currentTarget);$('refreshLogs').onclick=event=>action(()=>ui.load('logs',async()=>{await loadRuns();await loadBroadcasts();}),event.currentTarget); updatePlayerSelection(); async function loadFfaStatus(){const r=await api('/ffa');$('ffaStatus').textContent=r.configured?`已配置：${r.baseUrl}`:`未配置（接口：${r.baseUrl}）`;}
 $('editor').addEventListener('input', event => { if (!event.target.closest('#message, #buttons')) remember(); });$('kind').onchange=()=>{scheduleFields();remember();};
 async function boot() { try{const token=location.hash.match(/^#login=([A-Za-z0-9_-]+)$/)?.[1];if(token){const response=await fetch('/auth/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});history.replaceState(null,'',location.pathname);if(!response.ok)throw new Error('登录链接已过期或已使用');}await refresh();if(data.publisher?.legacy)await loadFfaStatus();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){$('locked').hidden=false;$('authError').textContent=error.message;} }
 boot();
