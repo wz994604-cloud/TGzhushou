@@ -144,6 +144,18 @@ function stickerImage(url) {
 const openSent = installSentEditor({ Quill, api, esc, toast, action, image: stickerImage, hydrateEmojiImages });
 const quill = new Quill('#message', { theme:'snow', placeholder:'输入活动文案…', modules:{ toolbar:'#toolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
 installLinkEditor(Quill, quill);
+// Telegram desktop may copy a rich-text anchor whose URL is not retained by
+// Quill's default clipboard matcher. Normalize supported anchors explicitly so
+// the Delta keeps the URL as a Telegram-compatible `text_link` later.
+quill.clipboard.addMatcher('A', (node, delta) => {
+  const href = String(node.getAttribute('href') || '').trim();
+  if (!/^(?:https?:|tg:)/i.test(href)) return delta;
+  const Delta = Quill.import('delta');
+  return new Delta(delta.ops.map(op => ({
+    ...op,
+    ...(typeof op.insert === 'string' ? { attributes: { ...(op.attributes || {}), link: href } } : {})
+  })));
+});
 quill.enable(false);
 $('toggleWriting').onclick=()=>{const edit=!quill.isEnabled();quill.enable(edit);$('toggleWriting').textContent=edit?'完成编辑':'编辑文案';if(edit)quill.focus();else{quill.blur();closePicker();}};
 quill.on('selection-change', range => { if (range) savedRange = range; });
