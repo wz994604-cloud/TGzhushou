@@ -1,0 +1,45 @@
+name: audit-postgres-verify-once
+on:
+  push:
+    branches: [audit-20261005-code-health]
+    paths: [.github/workflows/audit-postgres-verify-once.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit-20261005-code-health
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Run suite with PostgreSQL integration enabled
+        env:
+          TEST_POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: npm test
+      - name: Remove temporary workflow after success
+        run: |
+          git rm .github/workflows/audit-postgres-verify-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "chore: complete isolated postgres verification"
+          git push origin HEAD:audit-20261005-code-health
