@@ -22,12 +22,15 @@ async function serve(t,app) {
   return 'http://127.0.0.1:'+server.address().port;
 }
 test('only wz9946 creates accounts; hashed password, scope, duplicate, CSRF and restart',async t=>{
-  const {db}=await fixture(t),accounts=[{username:'wz9946',password:'owner-password'},{username:'wz994604',password:'other-password'}];
+  const {db}=await fixture(t),accounts=[{username:'wz9946',password:'owner-password',publisherIds:[]},{username:'wz994604',password:'other-password'}];
   await db.prepare('INSERT INTO publishers(id,username,token,created_at,updated_at) VALUES(?,?,?,?,?)').run('222222','test','encrypted',1,1);
   const app=express();app.use(express.json());let auth=await createBrowserAuth(db,['123'],'https://test.local',{accounts});auth.routes(app);
   const base=await serve(t,app);
   const login=async(username,password)=>{const r=await fetch(base+'/auth/login',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({username,password})});return {status:r.status,cookie:r.headers.get('set-cookie')?.split(';')[0]};};
   const owner=await login('wz9946','owner-password'),other=await login('wz994604','other-password');
+  const ownerIdentity=await auth.authenticate({method:'GET',get:key=>key==='cookie'?owner.cookie:''});
+  assert.equal(ownerIdentity.canManageBots,true);assert.equal(ownerIdentity.canManageAccounts,true);assert.equal(ownerIdentity.publisherIds,undefined);
+  assert.equal((await auth.authenticate({method:'GET',get:key=>key==='cookie'?other.cookie:''})).canManageBots,false);
   const input={username:'newoperator',password:'synthetic-password',publisherIds:['222222']};
   const create=(cookie,body=input,origin=base)=>fetch(base+'/auth/admin-accounts',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal((await create(other.cookie)).status,403);

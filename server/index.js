@@ -124,7 +124,7 @@ app.use('/api', async (req, res, next) => {
       : await browserAuth.authenticate(req);
     if (!req.admin) throw new Error('未授权');
     if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)
-      return res.status(403).json({error:'仅 wz994604 可管理或配置机器人'});
+      return res.status(403).json({error:'仅 wz9946 可管理或配置机器人'});
     const selected = String(req.get('x-publisher-id') || '');
     if (selected && !canAccessBot(req.admin, selected)) return res.status(403).json({error:'没有此机器人的操作权限'});
     const defaultBot = await scheduler.publisher();

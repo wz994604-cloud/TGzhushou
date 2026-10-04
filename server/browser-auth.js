@@ -66,9 +66,9 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
     const account = row.login_username ? await findAccount(row.login_username) : null;
     if (row.login_username && !account) return null;
     return {id:row.admin_id, name:account?.username || '管理员', username:account?.username || '',
-      canManageBots:account?.username === 'wz994604',
+      canManageBots:account?.username === 'wz9946',
       canManageAccounts:account?.username === 'wz9946',
-      ...(account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
+      ...(account?.username !== 'wz9946' && account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
   }
   function routes(app) {
     app.get('/auth/admin-accounts', async (req, res) => {
