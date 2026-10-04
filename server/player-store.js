@@ -1,7 +1,13 @@
 import {getSetting, setSetting} from './db.js';
 
 const migrationKey = 'player_import_scope_v1';
-const tableExists = (db, name) => Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+const tableExists = (db, name) => {
+  try {
+    return Boolean(db.prepare("SELECT 1 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=?").get(name));
+  } catch {
+    return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+  }
+};
 
 // Additive, one-time migration. The legacy singleton is evidence for one bot only.
 // Never overwrite existing scoped rows, assign an unknown list, or remove legacy data.
