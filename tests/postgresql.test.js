@@ -54,6 +54,8 @@ test('PostgreSQL isolated schema: initialization, IDs, conflict, transactions, a
       const row = db.prepare(`SELECT b.*,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count
         FROM broadcasts b LEFT JOIN broadcast_deliveries d ON d.broadcast_id=b.id GROUP BY b.id`).get();
       assert.equal(row.success_count, 1);
+      db.prepare(`SELECT r.id,t.name,COUNT(d.id) total FROM runs r JOIN tasks t ON t.id=r.task_id
+        LEFT JOIN deliveries d ON d.run_id=r.id WHERE r.bot_id=? GROUP BY r.id,t.name`).all('test');
       await db.close(); db = openDatabase();
       assert.equal(getSetting(db, 'committed'), 'yes');
       assert.equal(getSetting(db, 'rolled_back'), '');

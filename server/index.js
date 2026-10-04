@@ -609,7 +609,7 @@ app.get('/api/runs', route(async (req, res) => {
   res.json(db.prepare(`SELECT r.id,r.task_id,r.source,r.slot_at,r.status,r.created_at,t.name,
     COUNT(d.id) total,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count,SUM(CASE WHEN d.status='FAILED' THEN 1 ELSE 0 END) failed_count,SUM(CASE WHEN d.status='UNKNOWN' THEN 1 ELSE 0 END) unknown_count
     FROM runs r JOIN tasks t ON t.id=r.task_id LEFT JOIN deliveries d ON d.run_id=r.id
-    WHERE r.bot_id=? GROUP BY r.id ORDER BY r.id DESC LIMIT 50`).all(selectedBotId(req)));
+    WHERE r.bot_id=? GROUP BY r.id,t.name ORDER BY r.id DESC LIMIT 50`).all(selectedBotId(req)));
 }));
 
 app.get('/api/runs/:id', route(async (req, res) => {
