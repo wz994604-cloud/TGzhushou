@@ -36,10 +36,18 @@ function isDbMember(node, name) {
 function isDbPrepareCall(node) {
   return node?.type === 'CallExpression' && isDbMember(node.callee, 'prepare');
 }
+function isAssertRejectsArgument(path) {
+  const parent = path.parent?.node;
+  const callee = parent?.callee;
+  return parent?.type === 'CallExpression' && parent.arguments?.[0] === path.node &&
+    callee?.type === 'MemberExpression' && !callee.computed &&
+    callee.object?.type === 'Identifier' && callee.object.name === 'assert' && callee.property?.name === 'rejects';
+}
 function isPromiseHandled(path) {
   const parent = path.parent?.node;
   if (parent?.type === 'AwaitExpression') return true;
   if (parent?.type === 'UnaryExpression' && parent.operator === 'void') return true;
+  if (isAssertRejectsArgument(path)) return true;
   if (parent?.type === 'MemberExpression' && parent.object === path.node && !parent.computed &&
       ['catch','then','finally'].includes(parent.property?.name)) return true;
   return false;
@@ -65,13 +73,28 @@ function awaitCall(path, { allowHandled = false } = {}) {
   markAsync(path);
   return true;
 }
+function bindingScope(path, name) {
+  return path.scope?.lookup(name) || path.scope || null;
+}
+function addScoped(map, path, name, value = true) {
+  const scope = bindingScope(path, name);
+  const key = scope?.path?.node;
+  if (!key) return;
+  let entries = map.get(key);
+  if (!entries) { entries = new Map(); map.set(key, entries); }
+  entries.set(name, value);
+}
+function getScoped(map, path, name) {
+  const scope = bindingScope(path, name);
+  return scope?.path?.node ? map.get(scope.path.node)?.get(name) : undefined;
+}
 
 module.exports = function transform(fileInfo, api) {
   j = api.jscodeshift.withParser('babel');
   const root = j(fileInfo.source);
   const prepared = new Set();
   const transactions = new Set();
-  const factoryObjects = new Map();
+  const factoryObjects = new WeakMap();
 
   root.find(j.VariableDeclarator).forEach(path => {
     if (path.node.id.type !== 'Identifier') return;
@@ -79,13 +102,13 @@ module.exports = function transform(fileInfo, api) {
     if (isDbPrepareCall(init)) prepared.add(path.node.id.name);
     if (init?.type === 'CallExpression' && isDbMember(init.callee, 'transaction')) transactions.add(path.node.id.name);
     if (init?.type === 'CallExpression' && init.callee?.type === 'Identifier' && factoryMethods.has(init.callee.name)) {
-      factoryObjects.set(path.node.id.name, factoryMethods.get(init.callee.name));
+      addScoped(factoryObjects, path, path.node.id.name, factoryMethods.get(init.callee.name));
     }
   });
   root.find(j.AssignmentExpression).forEach(path => {
     const {left,right} = path.node;
     if (left?.type === 'Identifier' && right?.type === 'CallExpression' && right.callee?.type === 'Identifier' && factoryMethods.has(right.callee.name)) {
-      factoryObjects.set(left.name, factoryMethods.get(right.callee.name));
+      addScoped(factoryObjects, path, left.name, factoryMethods.get(right.callee.name));
     }
   });
 
@@ -114,7 +137,7 @@ module.exports = function transform(fileInfo, api) {
         shouldAwait = true; allowHandled = true;
       } else if (label && knownAsyncMembers.get(label)?.has(prop)) {
         shouldAwait = true;
-      } else if (callee.object?.type === 'Identifier' && factoryObjects.get(callee.object.name)?.has(prop)) {
+      } else if (callee.object?.type === 'Identifier' && getScoped(factoryObjects, path, callee.object.name)?.has(prop)) {
         shouldAwait = true;
       }
     }
@@ -133,18 +156,18 @@ module.exports = function transform(fileInfo, api) {
   let changed = true;
   while (changed) {
     changed = false;
-    const asyncLocals = new Set();
+    const asyncBindings = new WeakMap();
     root.find(j.FunctionDeclaration).forEach(path => {
-      if (path.node.async && path.node.id?.name) asyncLocals.add(path.node.id.name);
+      if (path.node.async && path.node.id?.name) addScoped(asyncBindings, path, path.node.id.name);
     });
     root.find(j.VariableDeclarator).forEach(path => {
       if (path.node.id.type === 'Identifier' && path.node.init &&
           ['ArrowFunctionExpression','FunctionExpression'].includes(path.node.init.type) && path.node.init.async) {
-        asyncLocals.add(path.node.id.name);
+        addScoped(asyncBindings, path, path.node.id.name);
       }
     });
     root.find(j.CallExpression).forEach(path => {
-      if (path.node.callee?.type === 'Identifier' && asyncLocals.has(path.node.callee.name)) {
+      if (path.node.callee?.type === 'Identifier' && getScoped(asyncBindings, path, path.node.callee.name)) {
         if (awaitCall(path)) changed = true;
       }
     });
