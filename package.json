@@ -19,6 +19,7 @@
     "@vercel/functions": "^3.9.11",
     "express": "^5.2.1",
     "multer": "^2.4.0",
+    "pg": "^8.16.3",
     "quill": "2.0.2",
     "sharp": "0.35.5"
   },

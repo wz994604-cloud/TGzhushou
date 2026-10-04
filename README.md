@@ -1,6 +1,6 @@
 # TGzhushou Vercel 部署
 
-本项目运行于 Vercel Functions，数据库使用全新 Turso，媒体使用 Vercel Blob。旧 SQLite、Railway、Docker 和本地持久化数据不再使用，也不会迁移旧数据。
+本项目运行于 Railway，数据库使用同项目 PostgreSQL，媒体继续使用 Vercel Blob。此次使用新数据库，不迁移旧 Turso 数据。本地自动化测试保留 SQLite。
 
 ## 必需环境变量
 
@@ -9,11 +9,11 @@
 - `CONFIG_KEY`：32 字节 Base64 密钥，用于加密机器人 Token。
 - `ADMIN_LOGIN_USERNAME` / `ADMIN_LOGIN_PASSWORD`：兼容的单个浏览器登录账号密码。`ADMIN_LOGIN_ACCOUNTS` 可配置 JSON 数组（例如 `[{"username":"admin","password":"..."},{"username":"operator","password":"..."}]`）以启用多个严格校验的账号；密码只来自环境变量，不写入数据库。
 - `PUBLIC_URL`：Vercel 生产域名。
-- `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`：Vercel Storage 的 Turso 集成面板获取。
+- `DATABASE_URL`：Railway 应用服务填写 `${{Postgres.DATABASE_URL}}`，使用 PostgreSQL 内网连接。
 - `BLOB_READ_WRITE_TOKEN`：Vercel Blob Storage 面板获取；未配置时媒体上传明确返回配置错误。
 - `CRON_SECRET`：cron-job.org 请求 `POST /api/cron/tick` 时使用 `Authorization: Bearer <CRON_SECRET>`。
 
-首次启动会按 `server/schema.sql` 在空 Turso 数据库初始化表结构。旧 SQLite 数据不读取、不迁移。
+首次启动会按 `server/schema.sql` 在 PostgreSQL 初始化表结构，自动适配自增 ID 和毫秒时间戳。确认部署、健康检查和数据库验证通过后，删除应用的 `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`；旧库本身另行确认后删除。
 
 ## 定时任务
 

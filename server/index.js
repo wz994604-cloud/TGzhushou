@@ -273,8 +273,8 @@ app.get('/api/players/ids', route(async (req, res) => {
 }));
 
 app.get('/api/broadcasts', route(async (req, res) => {
-  res.json(db.prepare(`SELECT b.*,SUM(d.status='SUCCESS') success_count,SUM(d.status='FAILED') failed_count,
-    SUM(d.status IN ('PENDING','SENDING')) pending_count FROM broadcasts b
+  res.json(db.prepare(`SELECT b.*,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count,SUM(CASE WHEN d.status='FAILED' THEN 1 ELSE 0 END) failed_count,
+    SUM(CASE WHEN d.status IN ('PENDING','SENDING') THEN 1 ELSE 0 END) pending_count FROM broadcasts b
     LEFT JOIN broadcast_deliveries d ON d.broadcast_id=b.id WHERE b.bot_id=? GROUP BY b.id ORDER BY b.id DESC LIMIT 50`).all(selectedBotId(req)));
 }));
 
@@ -607,7 +607,7 @@ app.post('/api/tasks/:id/send', route(async (req, res) => {
 
 app.get('/api/runs', route(async (req, res) => {
   res.json(db.prepare(`SELECT r.id,r.task_id,r.source,r.slot_at,r.status,r.created_at,t.name,
-    COUNT(d.id) total,SUM(d.status='SUCCESS') success_count,SUM(d.status='FAILED') failed_count,SUM(d.status='UNKNOWN') unknown_count
+    COUNT(d.id) total,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count,SUM(CASE WHEN d.status='FAILED' THEN 1 ELSE 0 END) failed_count,SUM(CASE WHEN d.status='UNKNOWN' THEN 1 ELSE 0 END) unknown_count
     FROM runs r JOIN tasks t ON t.id=r.task_id LEFT JOIN deliveries d ON d.run_id=r.id
     WHERE r.bot_id=? GROUP BY r.id ORDER BY r.id DESC LIMIT 50`).all(selectedBotId(req)));
 }));
