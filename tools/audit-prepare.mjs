@@ -27,6 +27,20 @@ replaceOnce('server/browser-auth.js',
   "      if (!/^[A-Za-z0-9_-]{3,64}$/.test(username) || password.length < 10 || password.length > 128 ||\n          !Array.isArray(publisherIds) || !publisherIds.length || publisherIds.length > 100 ||\n          publisherIds.some(id => typeof id !== 'string' || !/^\\d+$/.test(id) || !db.prepare('SELECT 1 FROM publishers WHERE id=?').get(id)))\n        return res.status(400).json({error:'账号须为 3–64 位字母数字或下划线，密码须为 10–128 位，并选择有效机器人'});\n",
   "      const validPublisherIds = new Set(db.prepare('SELECT id FROM publishers').all().map(row => String(row.id)));\n      if (!/^[A-Za-z0-9_-]{3,64}$/.test(username) || password.length < 10 || password.length > 128 ||\n          !Array.isArray(publisherIds) || !publisherIds.length || publisherIds.length > 100 ||\n          publisherIds.some(id => typeof id !== 'string' || !/^\\d+$/.test(id) || !validPublisherIds.has(id)))\n        return res.status(400).json({error:'账号须为 3–64 位字母数字或下划线，密码须为 10–128 位，并选择有效机器人'});\n");
 
+replaceOnce('tests/entry.test.js',
+  "    app: { post: (_path, fn) => { handler = fn; } },\n",
+  "    app: { post: (route, fn) => { if (route === '/tg/entry') handler = fn; } },\n");
+
+replaceOnce('tests/publisher-selection.test.js',
+  "function request(path, method = 'GET', authenticated = true, selected = 'old-bot') {\n",
+  "async function request(path, method = 'GET', authenticated = true, selected = 'old-bot') {\n");
+replaceOnce('tests/publisher-selection.test.js',
+  "  handler(req, { status(code) { status = code; return this; }, json(body) { error = body.error; } }, () => { next = true; });\n",
+  "  await handler(req, { status(code) { status = code; return this; }, json(body) { error = body.error; } }, () => { next = true; });\n");
+replaceOnce('tests/publisher-selection.test.js',
+  "test('authenticated bootstrap recovers a stale selection without bypassing other routes', () => {\n  const recovered = request('/bootstrap');\n  assert.equal(recovered.next, true);\n  assert.equal(recovered.req.get('x-publisher-id'), undefined);\n  assert.equal(request('/bootstrap','GET',false).status, 401);\n  assert.equal(request('/publisher','POST').status, 401);\n  assert.equal(request('/players').status, 401);\n  const valid = request('/bootstrap','GET',true,'valid-bot');\n  assert.equal(valid.next, true);\n  assert.equal(valid.req.get('x-publisher-id'), 'valid-bot');\n});\n",
+  "test('authenticated bootstrap recovers a stale selection without bypassing other routes', async () => {\n  const recovered = await request('/bootstrap');\n  assert.equal(recovered.next, true);\n  assert.equal(recovered.req.get('x-publisher-id'), undefined);\n  assert.equal((await request('/bootstrap','GET',false)).status, 401);\n  assert.equal((await request('/publisher','POST')).status, 401);\n  assert.equal((await request('/players')).status, 401);\n  const valid = await request('/bootstrap','GET',true,'valid-bot');\n  assert.equal(valid.next, true);\n  assert.equal(valid.req.get('x-publisher-id'), 'valid-bot');\n});\n");
+
 const readme = [
   '# TGzhushou Railway 部署',
   '',
