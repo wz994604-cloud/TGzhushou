@@ -7,6 +7,10 @@ on:
     paths:
       - .github/workflows/audit-fix-once.yml
 
+concurrency:
+  group: audit-fix-audit-20261005-code-health
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -14,6 +18,7 @@ jobs:
   fix:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,9 +53,9 @@ jobs:
           node --check server/publishers.js
           node --check server/scheduler.js
           node --check server/sent-actions.js
-          npm test
-          npm run check
-          npm run build
+          timeout 120s npm test
+          timeout 60s npm run check
+          timeout 120s npm run build
       - name: Commit verified fixes to audit branch only
         run: |
           git rm tools/audit-prepare.mjs tools/audit-prepatch.mjs tools/audit-async-transform.cjs .github/workflows/audit-fix-once.yml
@@ -61,4 +66,4 @@ jobs:
           git commit -m "fix: harden scheduler database and runtime health"
           git push origin HEAD:audit-20261005-code-health
 
-# rerun: 2
+# rerun: 3
