@@ -121,10 +121,22 @@ test('bot avatars load with their own selected context and missing photos fall b
   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/123',{headers:{'x-publisher-id':'456'}})).status,404);
   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/456',{headers:{'x-publisher-id':'456'}})).status,200);
   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/678',{headers:{'x-publisher-id':'678'}})).status,404);
+  const realNow=Date.now;
+  const beforeMissingCalls=calls.filter(call=>call.token===bots[678].token).length;
+  try {
+    const start=realNow();
+    Date.now=()=>start+5*60*60_000;
+    assert.equal((await originalFetch(base+'/api/chat/bot-avatars/678',{headers:{'x-publisher-id':'678'}})).status,404);
+    assert.equal(calls.filter(call=>call.token===bots[678].token).length,beforeMissingCalls,'missing avatar stays cached for six hours');
+    Date.now=()=>start+6*60*60_000+1000;
+    assert.equal((await originalFetch(base+'/api/chat/bot-avatars/678',{headers:{'x-publisher-id':'678'}})).status,404);
+    assert.equal(calls.filter(call=>call.token===bots[678].token).length,beforeMissingCalls+1,'cache expires after six hours');
+  } finally { Date.now=realNow; }
+
   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/999',{headers:{'x-publisher-id':'123'}})).status,404);
   const failed=await originalFetch(base+'/api/chat/bot-avatars/789',{headers:{'x-publisher-id':'789'}});
   assert.equal(failed.status,502);assert.ok(!(await failed.text()).includes('SECRET_TOKEN_C'));
-  assert.equal(calls.filter(call=>call.method==='getUserProfilePhotos').length,4);
+  assert.equal(calls.filter(call=>call.method==='getUserProfilePhotos').length,5);
   assert.equal(calls[0].payload.user_id,123);
   assert.equal(calls.find(call=>call.token===bots[456].token).payload.user_id,456);
   assert.ok(!JSON.stringify(calls.map(({method,payload})=>({method,payload}))).includes('SECRET_TOKEN'));

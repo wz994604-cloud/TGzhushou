@@ -516,13 +516,13 @@ app.get('/api/media/:id', route(async (req, res) => {
   if (req.query.preview === '1') {
     if (!media.mime.startsWith('image/')) return res.sendStatus(400);
     const bytes = await previewCache(media.sha256, async () => {
-      const source = await fetch(media.file_path); if (!source.ok) throw new Error('媒体对象读取失败');
+      const source = await fetch(media.file_path, { signal:AbortSignal.timeout(20000) }); if (!source.ok) throw new Error('媒体对象读取失败');
       return sharp(Buffer.from(await source.arrayBuffer()), { limitInputPixels:40000000 }).rotate()
         .resize(720, 720, { fit:'inside', withoutEnlargement:true }).webp({ quality:75 }).toBuffer();
     });
     return res.type('image/webp').send(bytes);
   }
-  const source = await fetch(media.file_path); if (!source.ok) return res.sendStatus(404); res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
+  const source = await fetch(media.file_path, { signal:AbortSignal.timeout(20000) }); if (!source.ok) return res.sendStatus(404); res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
 }));
 
 async function taskPayload(body, bot) {

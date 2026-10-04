@@ -24,3 +24,16 @@ test('remote media download is protected by an abort signal before Telegram uplo
   assert.equal(result.message_id, 1);
   assert.equal(calls, 2);
 });
+
+
+test('all direct remote media fetches in HTTP routes have a timeout signal', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const filename of ['server/index.js','server/chat.js']) {
+    const source = await readFile(new URL('../'+filename, import.meta.url), 'utf8');
+    const mediaFetches = [...source.matchAll(/fetch\((media\.file_path|`https:\/\/api\.telegram\.org\/file[^`]*`)([^;]*);/g)];
+    assert.ok(mediaFetches.length > 0, filename);
+    for (const call of mediaFetches) {
+      assert.match(call[0], /signal\s*:\s*AbortSignal\.timeout\(\d+\)/, filename+' '+call[1]);
+    }
+  }
+});

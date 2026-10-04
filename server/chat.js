@@ -161,7 +161,7 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     const photos = await avatarBotCall(bot,'getUserProfilePhotos',{user_id:Number(id),limit:1});
     const photo = photos?.photos?.[0]?.[0];
     if (!photo?.file_id) {
-      botAvatars.set(id,{expires:Date.now()+5*60_000});
+      botAvatars.set(id,{expires:Date.now()+6*60*60_000});
       return res.sendStatus(404);
     }
     const file = await avatarBotCall(bot,'getFile',{file_id:photo.file_id});
@@ -190,7 +190,7 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     const row = (await inbox(bot.id)) && (await db.prepare('SELECT avatar_file_id FROM conversations WHERE bot_id=? AND chat_id=?').get(bot.id,String(req.params.chatId)));
     if (!row?.avatar_file_id) return res.sendStatus(404);
     const file = await botApi(bot.token,'getFile',{ file_id:row.avatar_file_id });
-    const response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`);
+    const response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`, { signal:AbortSignal.timeout(20000) });
     if (!response.ok) return res.sendStatus(404);
     res.set('Cache-Control','public, max-age=86400');
     res.type(response.headers.get('content-type') || 'image/jpeg');
@@ -240,7 +240,7 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     if (!row) return res.sendStatus(404);
     if (row.media_id) {
       const media = await db.prepare('SELECT * FROM media WHERE id=?').get(row.media_id);
-      if (!media) return res.sendStatus(404); const source=await fetch(media.file_path); if(!source.ok)return res.sendStatus(404); return res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
+      if (!media) return res.sendStatus(404); const source=await fetch(media.file_path, { signal:AbortSignal.timeout(20000) }); if(!source.ok)return res.sendStatus(404); return res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
     }
     if (!row.file_id) return res.sendStatus(404);
     const file = await botApi(bot.token,'getFile',{ file_id:row.file_id });
