@@ -32,11 +32,13 @@ jobs:
         run: |
           node --check tools/audit-prepare.mjs
           node --check tools/audit-prepatch.mjs
+          node --check tools/audit-test-fixes.mjs
           node --check tools/audit-async-transform.cjs
       - name: Apply focused source patches
         run: |
           node tools/audit-prepare.mjs
           node tools/audit-prepatch.mjs
+          node tools/audit-test-fixes.mjs
       - name: Convert database call sites to async
         run: |
           FILES=$(find server tests -name '*.js' ! -path 'server/db.js' -print)
@@ -58,7 +60,7 @@ jobs:
           timeout 120s npm run build
       - name: Commit verified fixes to audit branch only
         run: |
-          git rm tools/audit-prepare.mjs tools/audit-prepatch.mjs tools/audit-async-transform.cjs .github/workflows/audit-fix-once.yml
+          git rm tools/audit-prepare.mjs tools/audit-prepatch.mjs tools/audit-test-fixes.mjs tools/audit-async-transform.cjs .github/workflows/audit-fix-once.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
@@ -66,4 +68,4 @@ jobs:
           git commit -m "fix: harden scheduler database and runtime health"
           git push origin HEAD:audit-20261005-code-health
 
-# rerun: 5
+# rerun: 6
