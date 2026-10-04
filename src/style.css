@@ -895,15 +895,16 @@ dialog::backdrop {
 .desktop-shell {
   display:grid;
   grid-template-columns:232px minmax(0,1fr);
-  height:100dvh;
+  min-height:100dvh;
+  height:auto;
   min-width:0;
-  overflow:hidden;
+  overflow:visible;
 }
 .desktop-content {
   display:grid;
   grid-template-rows:64px minmax(0,1fr);
   min-width:0;
-  min-height:0;
+  min-height:100dvh;
 }
 .desktop-topbar {
   display:flex;
@@ -956,8 +957,7 @@ dialog::backdrop {
 .desktop-viewport {
   min-width:0;
   min-height:0;
-  overflow:auto;
-  overscroll-behavior:contain;
+  overflow:visible;
 }
 .desktop-viewport>.page {
   width:100%;
@@ -983,7 +983,8 @@ dialog::backdrop {
   flex-direction:column;
   gap:16px;
   min-width:0;
-  min-height:0;
+  min-height:100dvh;
+  height:auto;
   padding:16px 14px;
   background:#111827;
   color:#c7d1df;
@@ -1029,9 +1030,9 @@ dialog::backdrop {
   display:flex;
   flex-direction:column;
   gap:6px;
-  max-height:168px;
+  max-height:none;
   min-height:48px;
-  overflow:auto;
+  overflow:visible;
   flex-shrink:0;
 }
 .rail-bot {
@@ -1077,8 +1078,8 @@ dialog::backdrop {
   display:flex;
   flex-direction:column;
   gap:4px;
-  overflow:auto;
-  min-height:0;
+  overflow:visible;
+  min-height:auto;
 }
 .rail-nav button {
   display:flex;
