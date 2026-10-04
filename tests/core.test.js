@@ -66,40 +66,40 @@ test('encrypted publisher credential and wrong-key rejection', () => {
   const value=encryptToken(publisherToken,configKey);assert.notEqual(value,publisherToken);assert.equal(decryptToken(value,configKey),publisherToken);
   assert.throws(()=>decryptToken(value,Buffer.alloc(32,9).toString('base64')));
 });
-function fixture(t, transport) {
+async function fixture(t, transport) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tgzhushou-unit-'));
-  const db=openDatabase({localFile:path.join(dir,'test.db')}); t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
-  setSetting(db,'publisher_token',encryptToken(publisherToken,configKey));setSetting(db,'publisher_id','222222');
-  for(const id of [1,2])db.prepare('INSERT INTO targets(id,bot_id,chat_id,title,chat_type,can_publish) VALUES(?,?,?,?,?,1)').run(id,'222222',String(-1000-id),`target ${id}`,'channel');
-  const result=db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,bot_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'DRAFT',?,?)`).run('test',JSON.stringify([{insert:'hello\n'}]),'[]','[1,2]','{"kind":"MANUAL"}','222222',Date.now(),Date.now());
+  const db=await openDatabase({localFile:path.join(dir,'test.db')}); t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  await setSetting(db,'publisher_token',encryptToken(publisherToken,configKey));await setSetting(db,'publisher_id','222222');
+  for(const id of [1,2])await db.prepare('INSERT INTO targets(id,bot_id,chat_id,title,chat_type,can_publish) VALUES(?,?,?,?,?,1)').run(id,'222222',String(-1000-id),`target ${id}`,'channel');
+  const result=await db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,bot_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'DRAFT',?,?)`).run('test',JSON.stringify([{insert:'hello\n'}]),'[]','[1,2]','{"kind":"MANUAL"}','222222',Date.now(),Date.now());
   const api={botCall:async(_token,method,payload)=> method==='getChatMember'?{status:'administrator',can_post_messages:true}:transport(payload),sendPhoto:async()=>({message_id:8,caption_entities:[]})};
   return {db,id:Number(result.lastInsertRowid),scheduler:createScheduler(db,{configKey},api),dir,api};
 }
 test('immediate idempotency and isolated per-target failure',async t=>{
-  const calls=[];const {db,id,scheduler}=fixture(t,async p=>{calls.push(p.chat_id);if(p.chat_id==='-1002')throw Object.assign(new Error('Forbidden'),{telegramCode:403});return {message_id:1};});
-  const key=crypto.randomUUID();assert.equal(scheduler.queueNow(id,key),scheduler.queueNow(id,key));await scheduler.tick();await scheduler.tick();
-  assert.deepEqual(calls,['-1001','-1002']);assert.deepEqual(db.prepare('SELECT status FROM deliveries ORDER BY id').all().map(x=>x.status),['SUCCESS','FAILED']);
+  const calls=[];const {db,id,scheduler}=await fixture(t,async p=>{calls.push(p.chat_id);if(p.chat_id==='-1002')throw Object.assign(new Error('Forbidden'),{telegramCode:403});return {message_id:1};});
+  const key=crypto.randomUUID();assert.equal(await scheduler.queueNow(id,key),await scheduler.queueNow(id,key));await scheduler.tick();await scheduler.tick();
+  assert.deepEqual(calls,['-1001','-1002']);assert.deepEqual((await db.prepare('SELECT status FROM deliveries ORDER BY id').all()).map(x=>x.status),['SUCCESS','FAILED']);
 });
 test('network ambiguity is UNKNOWN, not retried after scheduler restart',async t=>{
-  let count=0;const f=fixture(t,async()=>{count++;throw new Error('socket closed');});f.scheduler.queueNow(f.id,crypto.randomUUID());await f.scheduler.tick();
+  let count=0;const f=await fixture(t,async()=>{count++;throw new Error('socket closed');});await f.scheduler.queueNow(f.id,crypto.randomUUID());await f.scheduler.tick();
   await createScheduler(f.db,{configKey},f.api).tick();assert.equal(count,2);assert.equal(f.db.prepare("SELECT COUNT(*) n FROM deliveries WHERE status='UNKNOWN'").get().n,2);
 });
 test('schedule slot deduplication and missed-slot record',async t=>{
-  const f=fixture(t,async()=>({message_id:1}));const now=Date.now();
+  const f=await fixture(t,async()=>({message_id:1}));const now=Date.now();
   f.db.prepare("UPDATE tasks SET status='ACTIVE',next_at=?,schedule_json=? WHERE id=?").run(now,JSON.stringify({kind:'ONCE',at:now}),f.id);
-  f.scheduler.queueDue(now);f.scheduler.queueDue(now);assert.equal(f.db.prepare('SELECT COUNT(*) n FROM runs').get().n,1);
+  await f.scheduler.queueDue(now);await f.scheduler.queueDue(now);assert.equal(f.db.prepare('SELECT COUNT(*) n FROM runs').get().n,1);
   assert.equal(f.db.prepare('SELECT status FROM tasks').get().status,'COMPLETED');
   await createScheduler(f.db,{configKey},f.api).tick();assert.equal(f.db.prepare("SELECT COUNT(*) n FROM deliveries WHERE status='SUCCESS'").get().n,2);
   f.db.prepare("UPDATE tasks SET status='ACTIVE',next_at=?,schedule_json=? WHERE id=?").run(now-3600000,JSON.stringify({kind:'DAILY',start:'01:00',end:'05:00',interval:30}),f.id);
-  f.scheduler.queueDue(now);assert.equal(f.db.prepare("SELECT COUNT(*) n FROM deliveries WHERE status='SKIPPED'").get().n,2);
+  await f.scheduler.queueDue(now);assert.equal(f.db.prepare("SELECT COUNT(*) n FROM deliveries WHERE status='SKIPPED'").get().n,2);
 });
 test('interrupted in-flight and removed targets are visible, never silent success',async t=>{
-  const f=fixture(t,async()=>({message_id:1}));f.scheduler.queueNow(f.id,crypto.randomUUID());
+  const f=await fixture(t,async()=>({message_id:1}));await f.scheduler.queueNow(f.id,crypto.randomUUID());
   f.db.prepare("UPDATE deliveries SET status='SENDING',started_at=?").run(Date.now()-360000);await f.scheduler.tick();assert.equal(f.db.prepare("SELECT COUNT(*) n FROM deliveries WHERE status='UNKNOWN'").get().n,2);
-  f.db.prepare('DELETE FROM targets WHERE id=2').run();f.scheduler.queueNow(f.id,crypto.randomUUID());await f.scheduler.tick();assert.equal(f.db.prepare("SELECT COUNT(*) n FROM deliveries WHERE status='FAILED'").get().n,1);
+  f.db.prepare('DELETE FROM targets WHERE id=2').run();await f.scheduler.queueNow(f.id,crypto.randomUUID());await f.scheduler.tick();assert.equal(f.db.prepare("SELECT COUNT(*) n FROM deliveries WHERE status='FAILED'").get().n,1);
 });
 test('custom emoji loss is recorded for both text and button',async t=>{
-  const f=fixture(t,async()=>({message_id:1,entities:[],reply_markup:{inline_keyboard:[]}}));
+  const f=await fixture(t,async()=>({message_id:1,entities:[],reply_markup:{inline_keyboard:[]}}));
   f.db.prepare('UPDATE tasks SET delta_json=?,buttons_json=?').run(JSON.stringify([{insert:{customEmoji:{id:'5432101234567890123',alt:'🔥'}}},{insert:'\n'}]),JSON.stringify(normalizeButtons([{text:'go',url:'https://example.com',iconId:'5432101234567890123',iconAlt:'🔥'}])));
-  f.scheduler.queueNow(f.id,crypto.randomUUID());await f.scheduler.tick();const d=f.db.prepare('SELECT error_text FROM deliveries LIMIT 1').get();assert.match(d.error_text,/0\/1/);assert.match(d.error_text,/按钮专属表情/);
+  await f.scheduler.queueNow(f.id,crypto.randomUUID());await f.scheduler.tick();const d=f.db.prepare('SELECT error_text FROM deliveries LIMIT 1').get();assert.match(d.error_text,/0\/1/);assert.match(d.error_text,/按钮专属表情/);
 });

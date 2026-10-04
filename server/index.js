@@ -27,19 +27,19 @@ const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS);
 if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
 if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
 const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
-const db = openDatabase(process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_FILE
+const db = await openDatabase(process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_FILE
   ? { localFile:process.env.TEST_DATABASE_FILE } : {});
-initializePlayerImports(db);
+await initializePlayerImports(db);
 const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
 async function kickScheduler(label) {
   if (process.env.VERCEL === '1') {
-    waitUntil(Promise.resolve().then(() => scheduler.tick()).catch(error => console.error(label, safeTelegramError(error))));
+    waitUntil(Promise.resolve().then(async () => await scheduler.tick()).catch(error => console.error(label, safeTelegramError(error))));
     return;
   }
   await scheduler.tick();
 }
 const app = express();
-const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
+const browserAuth = await createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
   accounts: (() => {
     if (process.env.ADMIN_LOGIN_ACCOUNTS) {
       try {
@@ -59,8 +59,8 @@ app.use(express.json({ limit: '512kb' }));
 app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 browserAuth.routes(app);
 
-app.get('/healthz', (_req, res) => {
-  try { db.prepare('SELECT 1').get(); res.json({ ok: true, database: true }); }
+app.get('/healthz', async (_req, res) => {
+  try { await db.prepare('SELECT 1').get(); res.json({ ok: true, database: true }); }
   catch { res.status(503).json({ ok: false, database: false }); }
 });
 
@@ -75,7 +75,7 @@ app.post('/tg/entry', async (req, res) => {
       if (base) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } });
     }
     if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
-      const link = browserAuth.issueLink(req.body.message.from?.id);
+      const link = await browserAuth.issueLink(req.body.message.from?.id);
       if (link) await botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
         text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } });
     }
@@ -94,11 +94,11 @@ async function ensureEntryBot() {
   const webhookUrl = `${base}/tg/entry`;
   const secret = crypto.createHash('sha256').update(`entry:${process.env.ENTRY_BOT_TOKEN}`).digest('hex');
   const marker = `${webhookUrl}|${secret}`;
-  if (getSetting(db, 'entry_webhook_config') === marker) return;
+  if ((await getSetting(db, 'entry_webhook_config')) === marker) return;
   await botCall(process.env.ENTRY_BOT_TOKEN, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '打开活动后台', web_app: { url: base } } });
   await botCall(process.env.ENTRY_BOT_TOKEN, 'setWebhook', { url: webhookUrl,
     secret_token: secret, allowed_updates: ['message'] });
-  setSetting(db, 'entry_webhook_config', marker);
+  await setSetting(db, 'entry_webhook_config', marker);
 }
 
 app.post('/api/cron/tick', async (req,res,next) => { try {
@@ -117,20 +117,20 @@ app.post('/api/cron/tick', async (req,res,next) => { try {
 } catch(error){ next(error); } });
 
 const canAccessBot = (admin, id) => !Array.isArray(admin.publisherIds) || admin.publisherIds.includes(String(id));
-app.use('/api', (req, res, next) => {
+app.use('/api', async (req, res, next) => {
   try {
     req.admin = req.get('x-telegram-init-data')
       ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
-      : browserAuth.authenticate(req);
+      : await browserAuth.authenticate(req);
     if (!req.admin) throw new Error('未授权');
     if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)
       return res.status(403).json({error:'仅 wz994604 可管理或配置机器人'});
     const selected = String(req.get('x-publisher-id') || '');
     if (selected && !canAccessBot(req.admin, selected)) return res.status(403).json({error:'没有此机器人的操作权限'});
-    const defaultBot = scheduler.publisher();
+    const defaultBot = await scheduler.publisher();
     const id = selected || (defaultBot && canAccessBot(req.admin, defaultBot.id) ? defaultBot.id :
-      listPublishers(db).find(bot => canAccessBot(req.admin, bot.id))?.id);
-    req.publisher = id ? scheduler.publisher(id) : null;
+      (await listPublishers(db)).find(bot => canAccessBot(req.admin, bot.id))?.id);
+    req.publisher = id ? await scheduler.publisher(id) : null;
     if (selected && !req.publisher) {
       if (req.method === 'GET' && req.path === '/bootstrap') delete req.headers['x-publisher-id'];
       else throw new Error('所选发布机器人不存在');
@@ -152,14 +152,14 @@ function requirePlayerBot(req) {
 function assertSelected(req, botId) {
   if (botId !== selectedBotId(req)) throw new Error('记录不属于所选机器人');
 }
-const sent = sentActions(db, id => scheduler.publisher(id));
-function selectedSent(req) {
-  const row = sent.read(req.params.kind, Number(req.params.id));
+const sent = await sentActions(db, async id => await scheduler.publisher(id));
+async function selectedSent(req) {
+  const row = await sent.read(req.params.kind, Number(req.params.id));
   if (row.bot_id !== currentBot(req)?.id) throw new Error('记录不属于所选机器人');
   return row;
 }
-app.get('/api/sent/:kind/:id', route(async(req,res)=>res.json(selectedSent(req))));
-app.post('/api/sent/:kind/:id', route(async(req,res)=>{ selectedSent(req); res.json(await sent.act(req.params.kind,Number(req.params.id),req.body||{})); }));
+app.get('/api/sent/:kind/:id', route(async(req,res)=>res.json(await selectedSent(req))));
+app.post('/api/sent/:kind/:id', route(async(req,res)=>{ await selectedSent(req); res.json(await sent.act(req.params.kind,Number(req.params.id),req.body||{})); }));
 const stickerCache = createAssetCache({ limit:128, ttl:3600000 });
 const packCache = createAssetCache({ limit:16, ttl:600000 });
 const previewCache = createAssetCache({ limit:16, ttl:3600000 });
@@ -184,8 +184,8 @@ function isRememberedUnavailableSticker(key) {
   return false;
 }
 
-function ffaToken(botId) {
-  const encrypted = playerSourceToken(db, botId);
+async function ffaToken(botId) {
+  const encrypted = await playerSourceToken(db, botId);
   return encrypted ? decryptToken(encrypted, process.env.CONFIG_KEY) : '';
 }
 
@@ -229,9 +229,9 @@ async function fetchFfaPlayers(token) {
 
 app.get('/api/bootstrap', route(async (req, res) => {
   const bot = currentBot(req);
-  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: listPublishers(db).filter(p => canAccessBot(req.admin, p.id)), publisher: bot ? { id: bot.id, username: bot.username, legacy: bot.id === getSetting(db, 'publisher_id') } : null,
-    targets: db.prepare('SELECT * FROM targets WHERE bot_id=? ORDER BY id DESC').all(bot?.id || ''),
-    tasks: db.prepare('SELECT id,name,status,schedule_json,next_at,updated_at,bot_id FROM tasks WHERE bot_id=? ORDER BY id DESC LIMIT 100').all(bot?.id || '') });
+  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: (await listPublishers(db)).filter(p => canAccessBot(req.admin, p.id)), publisher: bot ? { id: bot.id, username: bot.username, legacy: bot.id === (await getSetting(db, 'publisher_id')) } : null,
+    targets: await db.prepare('SELECT * FROM targets WHERE bot_id=? ORDER BY id DESC').all(bot?.id || ''),
+    tasks: await db.prepare('SELECT id,name,status,schedule_json,next_at,updated_at,bot_id FROM tasks WHERE bot_id=? ORDER BY id DESC LIMIT 100').all(bot?.id || '') });
 }));
 
 app.post('/api/publisher', route(async (req, res) => {
@@ -239,12 +239,12 @@ app.post('/api/publisher', route(async (req, res) => {
   if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(token)) throw new Error('机器人 Token 格式不正确');
   const identity = await botCall(token, 'getMe');
   if (!identity.is_bot || token === process.env.ENTRY_BOT_TOKEN) throw new Error('发布机器人必须使用独立身份');
-  res.json(savePublisher(db, process.env.CONFIG_KEY, identity, token));
+  res.json(await savePublisher(db, process.env.CONFIG_KEY, identity, token));
 }));
 
 app.get('/api/ffa', route(async (req, res) => {
   const botId = requirePlayerBot(req);
-  res.json({ configured: Boolean(playerSourceToken(db, botId)), baseUrl: ffaBaseUrl, botId });
+  res.json({ configured: Boolean(await playerSourceToken(db, botId)), baseUrl: ffaBaseUrl, botId });
 }));
 
 app.post('/api/ffa/token', route(async (req, res) => {
@@ -252,16 +252,16 @@ app.post('/api/ffa/token', route(async (req, res) => {
   const token = String(req.body?.token || '').trim();
   if (!/^.{20,}$/.test(token)) throw new Error('发发娱乐 Token 格式不正确');
   await ffaCall(token, { page_index: '1', page_size: '1' });
-  savePlayerSourceToken(db, botId, encryptToken(token, process.env.CONFIG_KEY));
+  await savePlayerSourceToken(db, botId, encryptToken(token, process.env.CONFIG_KEY));
   res.json({ ok: true, baseUrl: ffaBaseUrl });
 }));
 
 app.post('/api/ffa/sync', route(async (req, res) => {
   const botId = requirePlayerBot(req);
-  const token = ffaToken(botId);
+  const token = await ffaToken(botId);
   if (!token) throw new Error('请先配置发发娱乐 Token');
   const rows = await fetchFfaPlayers(token);
-  const stats = upsertPlayers(db, botId, rows, 'ffa');
+  const stats = await upsertPlayers(db, botId, rows, 'ffa');
   res.json({total:rows.length, ...stats, unchanged:rows.length - stats.created - stats.updated});
 }));
 
@@ -269,25 +269,25 @@ app.get('/api/players', route(async (req, res) => {
   const q = String(req.query.q || '').trim(), page = Math.max(1, Number(req.query.page || 1)), size = Math.min(100, Math.max(10, Number(req.query.size || 50)));
   const where = q ? `AND (telegram_id LIKE @q OR display_name LIKE @q OR username LIKE @q OR platform_id LIKE @q)` : '';
   const params = { botId: selectedBotId(req), ...(q ? { q: `%${q}%` } : {}) };
-  const total = db.prepare(`SELECT COUNT(*) count FROM bot_players WHERE bot_id=@botId ${where}`).get(params).count;
-  const rows = db.prepare(`SELECT telegram_id,display_name,username,platform_id,active,last_seen FROM bot_players WHERE bot_id=@botId ${where} ORDER BY last_seen DESC,telegram_id LIMIT @size OFFSET @offset`).all({ ...params, size, offset: (page - 1) * size });
+  const total = (await db.prepare(`SELECT COUNT(*) count FROM bot_players WHERE bot_id=@botId ${where}`).get(params)).count;
+  const rows = await db.prepare(`SELECT telegram_id,display_name,username,platform_id,active,last_seen FROM bot_players WHERE bot_id=@botId ${where} ORDER BY last_seen DESC,telegram_id LIMIT @size OFFSET @offset`).all({ ...params, size, offset: (page - 1) * size });
   res.json({ rows, total, page, size });
 }));
 
 app.get('/api/players/ids', route(async (req, res) => {
-  res.json({ rows: db.prepare("SELECT telegram_id,display_name FROM bot_players WHERE bot_id=? AND active=1 ORDER BY last_seen DESC").all(selectedBotId(req)) });
+  res.json({ rows: await db.prepare("SELECT telegram_id,display_name FROM bot_players WHERE bot_id=? AND active=1 ORDER BY last_seen DESC").all(selectedBotId(req)) });
 }));
 
 app.get('/api/broadcasts', route(async (req, res) => {
-  res.json(db.prepare(`SELECT b.*,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count,SUM(CASE WHEN d.status='FAILED' THEN 1 ELSE 0 END) failed_count,
+  res.json(await db.prepare(`SELECT b.*,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count,SUM(CASE WHEN d.status='FAILED' THEN 1 ELSE 0 END) failed_count,
     SUM(CASE WHEN d.status IN ('PENDING','SENDING') THEN 1 ELSE 0 END) pending_count FROM broadcasts b
     LEFT JOIN broadcast_deliveries d ON d.broadcast_id=b.id WHERE b.bot_id=? GROUP BY b.id ORDER BY b.id DESC LIMIT 50`).all(selectedBotId(req)));
 }));
 
 app.get('/api/broadcasts/:id', route(async (req, res) => {
-  const item = db.prepare('SELECT * FROM broadcasts WHERE id=?').get(Number(req.params.id));
+  const item = await db.prepare('SELECT * FROM broadcasts WHERE id=?').get(Number(req.params.id));
   if (!item || item.bot_id !== selectedBotId(req)) return res.sendStatus(404);
-  res.json({ ...item, deliveries: db.prepare(`SELECT d.*,c.deleted,c.state AS last_action,c.error AS last_error FROM broadcast_deliveries d LEFT JOIN sent_changes c ON c.kind='broadcasts' AND c.delivery_id=d.id WHERE d.broadcast_id=? ORDER BY d.id`).all(item.id) });
+  res.json({ ...item, deliveries: await db.prepare(`SELECT d.*,c.deleted,c.state AS last_action,c.error AS last_error FROM broadcast_deliveries d LEFT JOIN sent_changes c ON c.kind='broadcasts' AND c.delivery_id=d.id WHERE d.broadcast_id=? ORDER BY d.id`).all(item.id) });
 }));
 
 app.post('/api/broadcasts', route(async (req, res) => {
@@ -297,24 +297,24 @@ app.post('/api/broadcasts', route(async (req, res) => {
   const formatted = renderDelta(req.body?.delta?.ops);
   const buttons = normalizeButtons(req.body?.buttons || []);
   const mediaId = req.body?.mediaId ? Number(req.body.mediaId) : null;
-  if (mediaId && !db.prepare('SELECT id FROM media WHERE id=?').get(mediaId)) throw new Error('图片不存在');
+  if (mediaId && !(await db.prepare('SELECT id FROM media WHERE id=?').get(mediaId))) throw new Error('图片不存在');
   if (mediaId && formatted.text.length > 1024) throw new Error('图片说明最多 1024 字符');
   const ids = [...new Set((Array.isArray(req.body?.playerIds) ? req.body.playerIds : []).map(normalizeTelegramId).filter(Boolean))];
   if (!ids.length) throw new Error('请选择至少一个有效用户');
   const placeholders = ids.map(() => '?').join(',');
-  const players = db.prepare(`SELECT telegram_id AS telegramId,display_name AS displayName FROM bot_players WHERE bot_id=? AND active=1 AND telegram_id IN (${placeholders})`).all(bot.id,...ids);
+  const players = await db.prepare(`SELECT telegram_id AS telegramId,display_name AS displayName FROM bot_players WHERE bot_id=? AND active=1 AND telegram_id IN (${placeholders})`).all(bot.id,...ids);
   if (players.length !== ids.length) throw new Error('部分用户不存在或已停用，请刷新名单后重试');
-  const broadcastId = scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players }, bot.id);
+  const broadcastId = await scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players }, bot.id);
   await kickScheduler('Broadcast tick:');
   res.json({ id: broadcastId, total: players.length });
 }));
 
 app.post('/api/broadcasts/:id/stop', route(async (req, res) => {
-  const id = Number(req.params.id), item = db.prepare('SELECT * FROM broadcasts WHERE id=?').get(id);
+  const id = Number(req.params.id), item = await db.prepare('SELECT * FROM broadcasts WHERE id=?').get(id);
   if (!item || item.bot_id !== selectedBotId(req)) return res.sendStatus(404);
-  db.transaction(() => {
-    db.prepare("UPDATE broadcast_deliveries SET status='CANCELLED',error_text='管理员停止发送',completed_at=? WHERE broadcast_id=? AND status='PENDING'").run(Date.now(), id);
-    db.prepare("UPDATE broadcasts SET status='STOPPED',completed_at=? WHERE id=? AND status IN ('PENDING','RUNNING')").run(Date.now(), id);
+  await db.transaction(async () => {
+    await db.prepare("UPDATE broadcast_deliveries SET status='CANCELLED',error_text='管理员停止发送',completed_at=? WHERE broadcast_id=? AND status='PENDING'").run(Date.now(), id);
+    await db.prepare("UPDATE broadcasts SET status='STOPPED',completed_at=? WHERE id=? AND status IN ('PENDING','RUNNING')").run(Date.now(), id);
   })();
   res.json({ ok:true });
 }));
@@ -329,15 +329,15 @@ app.post('/api/targets', route(async (req, res) => {
   const member = await botCall(bot.token, 'getChatMember', { chat_id: chat.id, user_id: Number(bot.id) });
   const allowed = ['administrator', 'creator'].includes(member.status) && (chat.type !== 'channel' || member.status === 'creator' || member.can_post_messages);
   const error = allowed ? null : chat.type === 'channel' ? '缺少频道发布消息权限' : '机器人不是群管理员';
-  db.prepare(`INSERT INTO targets(bot_id,chat_id,title,chat_type,username,can_publish,last_error) VALUES(?,?,?,?,?,?,?)
+  await db.prepare(`INSERT INTO targets(bot_id,chat_id,title,chat_type,username,can_publish,last_error) VALUES(?,?,?,?,?,?,?)
     ON CONFLICT(bot_id,chat_id) DO UPDATE SET title=excluded.title,chat_type=excluded.chat_type,username=excluded.username,can_publish=excluded.can_publish,last_error=excluded.last_error`)
     .run(bot.id, String(chat.id), String(chat.title || chat.id), chat.type, chat.username || null, allowed ? 1 : 0, error);
-  res.json(db.prepare('SELECT * FROM targets WHERE bot_id=? AND chat_id=?').get(bot.id, String(chat.id)));
+  res.json(await db.prepare('SELECT * FROM targets WHERE bot_id=? AND chat_id=?').get(bot.id, String(chat.id)));
 }));
 
 app.delete('/api/targets/:id', route(async (req, res) => {
   const bot = currentBot(req);
-  const result = db.prepare('DELETE FROM targets WHERE id=? AND bot_id=?').run(Number(req.params.id), bot?.id || '');
+  const result = await db.prepare('DELETE FROM targets WHERE id=? AND bot_id=?').run(Number(req.params.id), bot?.id || '');
   if (!result.changes) return res.sendStatus(404);
   res.json({ ok: true });
 }));
@@ -359,8 +359,11 @@ app.post('/api/sticker-packs', route(async (req, res) => {
 app.get('/api/sticker-packs/saved', route(async (req, res) => {
   const bot = currentBot(req);
   if (!bot) return res.json({ packs: [] });
-  const packs = db.prepare('SELECT * FROM sticker_packs WHERE bot_id=? ORDER BY updated_at DESC').all(bot.id);
-  res.json({ packs: packs.map(pack => ({ ...pack, stickers: db.prepare('SELECT emoji_id AS id,alt,thumbnail_id AS thumbnailId FROM sticker_pack_items WHERE pack_id=? ORDER BY position').all(pack.id) })) });
+  const packs = await db.prepare('SELECT * FROM sticker_packs WHERE bot_id=? ORDER BY updated_at DESC').all(bot.id);
+  res.json({ packs: packs.map(async pack => ({
+    ...pack,
+    stickers: await db.prepare('SELECT emoji_id AS id,alt,thumbnail_id AS thumbnailId FROM sticker_pack_items WHERE pack_id=? ORDER BY position').all(pack.id)
+  })) });
 }));
 
 app.post('/api/sticker-packs/saved', route(async (req, res) => {
@@ -370,20 +373,20 @@ app.post('/api/sticker-packs/saved', route(async (req, res) => {
   const clean = stickers.map((item, index) => ({ id: String(item.id || ''), alt: String(item.alt || '🙂').slice(0, 8), thumbnailId: item.thumbnailId ? String(item.thumbnailId).slice(0, 300) : null, position: index })).filter(item => /^\d{5,30}$/.test(item.id));
   if (!clean.length) throw new Error('表情包没有有效的专属表情');
   const now = Date.now();
-  db.transaction(() => {
-    db.prepare(`INSERT INTO sticker_packs(bot_id,name,title,created_at,updated_at) VALUES(?,?,?,?,?)
+  await db.transaction(async () => {
+    await db.prepare(`INSERT INTO sticker_packs(bot_id,name,title,created_at,updated_at) VALUES(?,?,?,?,?)
       ON CONFLICT(bot_id,name) DO UPDATE SET title=excluded.title,updated_at=excluded.updated_at`).run(bot.id,name,title,now,now);
-    const pack = db.prepare('SELECT id FROM sticker_packs WHERE bot_id=? AND name=?').get(bot.id,name);
-    db.prepare('DELETE FROM sticker_pack_items WHERE pack_id=?').run(pack.id);
+    const pack = await db.prepare('SELECT id FROM sticker_packs WHERE bot_id=? AND name=?').get(bot.id,name);
+    await db.prepare('DELETE FROM sticker_pack_items WHERE pack_id=?').run(pack.id);
     const add = db.prepare('INSERT INTO sticker_pack_items(pack_id,emoji_id,alt,thumbnail_id,position) VALUES(?,?,?,?,?)');
-    for (const item of clean) add.run(pack.id,item.id,item.alt,item.thumbnailId,item.position);
+    for (const item of clean) await add.run(pack.id,item.id,item.alt,item.thumbnailId,item.position);
   })();
   res.json({ ok:true });
 }));
 
 app.delete('/api/sticker-packs/saved/:id', route(async (req, res) => {
   const bot = currentBot(req); if (!bot) return res.sendStatus(404);
-  const result = db.prepare('DELETE FROM sticker_packs WHERE id=? AND bot_id=?').run(Number(req.params.id),bot.id);
+  const result = await db.prepare('DELETE FROM sticker_packs WHERE id=? AND bot_id=?').run(Number(req.params.id),bot.id);
   if (!result.changes) return res.sendStatus(404);
   res.json({ ok:true });
 }));
@@ -469,7 +472,7 @@ app.post('/api/players/import', upload.single('file'), route(async (req, res) =>
     if (unique.has(telegramId)) stats.duplicate++;
     unique.set(telegramId, { telegramId, displayName: String(values[nameIndex] || '').trim().slice(0,100), username:'', platformId:String(values[platformIndex] || '').trim().slice(0,100), active:1 });
   }
-  Object.assign(stats, upsertPlayers(db, botId, [...unique.values()], 'csv'));
+  Object.assign(stats, await upsertPlayers(db, botId, [...unique.values()], 'csv'));
   res.json({ ...stats, unchanged: unique.size - stats.created - stats.updated });
 }));
 
@@ -485,8 +488,8 @@ app.post('/api/media', upload.single('image'), route(async (req, res) => {
   if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('BLOB_READ_WRITE_TOKEN 未配置，媒体上传不可用');
   const blob = await put(`media/${sha}${ext}`, buffer, { access:'public', addRandomSuffix:false });
   const filename = blob.url
-  db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)').run(sha, mime, buffer.length, filename, Date.now());
-  res.json(db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
+  await db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)').run(sha, mime, buffer.length, filename, Date.now());
+  res.json(await db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
 }));
 
 app.post('/api/chat/media', chatUpload.single('file'), route(async (req,res) => {
@@ -501,13 +504,13 @@ app.post('/api/chat/media', chatUpload.single('file'), route(async (req,res) => 
   if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('BLOB_READ_WRITE_TOKEN 未配置，媒体上传不可用');
   const blob = await put(`media/${sha}${ext}`, file.buffer, { access:'public', addRandomSuffix:false });
   const filename = blob.url
-  db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)')
+  await db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)')
     .run(sha,mime,file.buffer.length,filename,Date.now());
-  res.json(db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
+  res.json(await db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
 }));
 
 app.get('/api/media/:id', route(async (req, res) => {
-  const media = db.prepare('SELECT * FROM media WHERE id=?').get(Number(req.params.id));
+  const media = await db.prepare('SELECT * FROM media WHERE id=?').get(Number(req.params.id));
   if (!media) return res.sendStatus(404);
   privateImage(res);
   if (req.query.preview === '1') {
@@ -522,7 +525,7 @@ app.get('/api/media/:id', route(async (req, res) => {
   const source = await fetch(media.file_path); if (!source.ok) return res.sendStatus(404); res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
 }));
 
-function taskPayload(body, bot) {
+async function taskPayload(body, bot) {
   const name = String(body?.name || '').trim();
   if (!name || name.length > 100) throw new Error('活动名称应为 1–100 字');
   const delta = body?.delta?.ops;
@@ -532,10 +535,10 @@ function taskPayload(body, bot) {
   const ids = [...new Set(body.targetIds.map(Number))];
   if (!ids.length || ids.length > 50 || ids.some(id => !Number.isSafeInteger(id) || id < 1)) throw new Error('请选择 1–50 个发布目标');
   const placeholders = ids.map(() => '?').join(',');
-  const targets = db.prepare(`SELECT id FROM targets WHERE bot_id=? AND can_publish=1 AND id IN (${placeholders})`).all(bot.id, ...ids);
+  const targets = await db.prepare(`SELECT id FROM targets WHERE bot_id=? AND can_publish=1 AND id IN (${placeholders})`).all(bot.id, ...ids);
   if (targets.length !== ids.length) throw new Error('有目标不存在或缺少发布权限');
   const mediaId = body.mediaId ? Number(body.mediaId) : null;
-  if (mediaId && !db.prepare('SELECT id FROM media WHERE id=?').get(mediaId)) throw new Error('图片不存在');
+  if (mediaId && !(await db.prepare('SELECT id FROM media WHERE id=?').get(mediaId))) throw new Error('图片不存在');
   if (mediaId && formatted.text.length > 1024) throw new Error('图片说明最多 1024 字符');
   const schedule = normalizeSchedule(body.schedule);
   return { name, delta: JSON.stringify(delta), buttons: JSON.stringify(buttons), ids: JSON.stringify(ids), schedule: JSON.stringify(schedule), mediaId };
@@ -544,44 +547,44 @@ function taskPayload(body, bot) {
 app.post('/api/tasks', route(async (req, res) => {
   const bot = currentBot(req);
   if (!bot) throw new Error('请先配置发布机器人');
-  const item = taskPayload(req.body, bot), now = Date.now();
-  const result = db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,media_id,bot_id,status,next_at,created_at,updated_at)
+  const item = await taskPayload(req.body, bot), now = Date.now();
+  const result = await db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,media_id,bot_id,status,next_at,created_at,updated_at)
     VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(item.name,item.delta,item.buttons,item.ids,item.schedule,item.mediaId,bot.id,'DRAFT',null,now,now);
-  res.json(db.prepare('SELECT * FROM tasks WHERE id=?').get(result.lastInsertRowid));
+  res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(result.lastInsertRowid));
 }));
 
 app.put('/api/tasks/:id', route(async (req, res) => {
   const bot = currentBot(req), id = Number(req.params.id);
-  const old = db.prepare('SELECT * FROM tasks WHERE id=?').get(id);
+  const old = await db.prepare('SELECT * FROM tasks WHERE id=?').get(id);
   if (!old || old.bot_id !== bot?.id) throw new Error('任务不存在或属于旧机器人');
-  const item = taskPayload(req.body, bot), now = Date.now();
+  const item = await taskPayload(req.body, bot), now = Date.now();
   const schedule = JSON.parse(item.schedule);
   const active = old.status === 'ACTIVE' && schedule.kind !== 'MANUAL';
-  db.prepare(`UPDATE tasks SET name=?,delta_json=?,buttons_json=?,target_ids_json=?,schedule_json=?,media_id=?,status=?,next_at=?,updated_at=? WHERE id=?`)
+  await db.prepare(`UPDATE tasks SET name=?,delta_json=?,buttons_json=?,target_ids_json=?,schedule_json=?,media_id=?,status=?,next_at=?,updated_at=? WHERE id=?`)
     .run(item.name,item.delta,item.buttons,item.ids,item.schedule,item.mediaId,active?'ACTIVE':['PAUSED','STOPPED'].includes(old.status)?old.status:'DRAFT',active?nextSlot(schedule,now):null,now,id);
-  res.json(db.prepare('SELECT * FROM tasks WHERE id=?').get(id));
+  res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(id));
 }));
 
 app.get('/api/tasks/:id', route(async (req, res) => {
-  const task = db.prepare('SELECT * FROM tasks WHERE id=?').get(Number(req.params.id));
+  const task = await db.prepare('SELECT * FROM tasks WHERE id=?').get(Number(req.params.id));
   if (!task || task.bot_id !== selectedBotId(req)) return res.sendStatus(404);
   res.json(task);
 }));
 
 app.delete('/api/tasks/:id', route(async (req, res) => {
-  const id = Number(req.params.id), task = db.prepare('SELECT * FROM tasks WHERE id=?').get(id);
+  const id = Number(req.params.id), task = await db.prepare('SELECT * FROM tasks WHERE id=?').get(id);
   if (!task || task.bot_id !== selectedBotId(req)) return res.sendStatus(404);
-  if (task.status === 'ACTIVE' || db.prepare("SELECT 1 FROM deliveries WHERE status IN ('PENDING','SENDING') AND run_id IN (SELECT id FROM runs WHERE task_id=?)").get(id)) throw new Error('请先停止任务并等待正在发送的消息处理完毕');
-  db.transaction(() => {
-    db.prepare('DELETE FROM deliveries WHERE run_id IN (SELECT id FROM runs WHERE task_id=?)').run(id);
-    db.prepare('DELETE FROM runs WHERE task_id=?').run(id);
-    db.prepare('DELETE FROM tasks WHERE id=?').run(id);
+  if (task.status === 'ACTIVE' || (await db.prepare("SELECT 1 FROM deliveries WHERE status IN ('PENDING','SENDING') AND run_id IN (SELECT id FROM runs WHERE task_id=?)").get(id))) throw new Error('请先停止任务并等待正在发送的消息处理完毕');
+  await db.transaction(async () => {
+    await db.prepare('DELETE FROM deliveries WHERE run_id IN (SELECT id FROM runs WHERE task_id=?)').run(id);
+    await db.prepare('DELETE FROM runs WHERE task_id=?').run(id);
+    await db.prepare('DELETE FROM tasks WHERE id=?').run(id);
   })();
   res.json({ ok:true });
 }));
 
 app.post('/api/tasks/:id/status', route(async (req, res) => {
-  const task = db.prepare('SELECT * FROM tasks WHERE id=?').get(Number(req.params.id));
+  const task = await db.prepare('SELECT * FROM tasks WHERE id=?').get(Number(req.params.id));
   if (!task || task.bot_id !== currentBot(req)?.id) throw new Error('任务不存在或属于旧机器人');
   const action = String(req.body?.action || '');
   if (!['activate','pause','stop'].includes(action)) throw new Error('操作无效');
@@ -593,31 +596,31 @@ app.post('/api/tasks/:id/status', route(async (req, res) => {
   const next = action === 'activate' && timed ? nextSlot(schedule, Date.now()) : null;
   if (action === 'activate' && timed && !next) throw new Error('没有未来发布时间，请编辑任务设置新的发布时间');
   const status = action === 'activate' ? (timed ? 'ACTIVE' : 'DRAFT') : action === 'pause' ? 'PAUSED' : 'STOPPED';
-  db.transaction(() => {
-    db.prepare('UPDATE tasks SET status=?,next_at=?,updated_at=? WHERE id=?').run(status,next,Date.now(),task.id);
-    if (action !== 'activate') db.prepare(`UPDATE deliveries SET status='CANCELLED',error_text='任务已暂停或停止',completed_at=? WHERE status='PENDING' AND run_id IN
+  await db.transaction(async () => {
+    await db.prepare('UPDATE tasks SET status=?,next_at=?,updated_at=? WHERE id=?').run(status,next,Date.now(),task.id);
+    if (action !== 'activate') await db.prepare(`UPDATE deliveries SET status='CANCELLED',error_text='任务已暂停或停止',completed_at=? WHERE status='PENDING' AND run_id IN
       (SELECT id FROM runs WHERE task_id=? AND (?='stop' OR source='SCHEDULED'))`).run(Date.now(), task.id, action);
   })();
-  res.json(db.prepare('SELECT * FROM tasks WHERE id=?').get(task.id));
+  res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(task.id));
 }));
 
 app.post('/api/tasks/:id/send', route(async (req, res) => {
-  const runId = scheduler.queueNow(Number(req.params.id), req.body?.requestKey, selectedBotId(req));
+  const runId = await scheduler.queueNow(Number(req.params.id), req.body?.requestKey, selectedBotId(req));
   await kickScheduler('Immediate tick:');
   res.json({ runId });
 }));
 
 app.get('/api/runs', route(async (req, res) => {
-  res.json(db.prepare(`SELECT r.id,r.task_id,r.source,r.slot_at,r.status,r.created_at,t.name,
+  res.json(await db.prepare(`SELECT r.id,r.task_id,r.source,r.slot_at,r.status,r.created_at,t.name,
     COUNT(d.id) total,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count,SUM(CASE WHEN d.status='FAILED' THEN 1 ELSE 0 END) failed_count,SUM(CASE WHEN d.status='UNKNOWN' THEN 1 ELSE 0 END) unknown_count
     FROM runs r JOIN tasks t ON t.id=r.task_id LEFT JOIN deliveries d ON d.run_id=r.id
     WHERE r.bot_id=? GROUP BY r.id,t.name ORDER BY r.id DESC LIMIT 50`).all(selectedBotId(req)));
 }));
 
 app.get('/api/runs/:id', route(async (req, res) => {
-  const run = db.prepare('SELECT * FROM runs WHERE id=?').get(Number(req.params.id));
+  const run = await db.prepare('SELECT * FROM runs WHERE id=?').get(Number(req.params.id));
   if (!run || run.bot_id !== selectedBotId(req)) return res.sendStatus(404);
-  res.json({ ...run, deliveries: db.prepare(`SELECT d.*,c.deleted,c.state AS last_action,c.error AS last_error FROM deliveries d LEFT JOIN sent_changes c ON c.kind='runs' AND c.delivery_id=d.id WHERE d.run_id=? ORDER BY d.id`).all(run.id) });
+  res.json({ ...run, deliveries: await db.prepare(`SELECT d.*,c.deleted,c.state AS last_action,c.error AS last_error FROM deliveries d LEFT JOIN sent_changes c ON c.kind='runs' AND c.delivery_id=d.id WHERE d.run_id=? ORDER BY d.id`).all(run.id) });
 }));
 
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');

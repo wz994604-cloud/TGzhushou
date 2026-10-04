@@ -67,6 +67,7 @@ async function action(fn, button) { if (button?.disabled) return; if (button) bu
 async function authenticatedImage(url) { return URL.createObjectURL(await loadImage(url)); }
 async function loadConversationAvatars() {
   for (const img of document.querySelectorAll('#chatConversations [data-avatar-path]')) {
+    if (!img.dataset.avatarPath) { img.remove(); continue; }
     try {
       const url = URL.createObjectURL(await loadImage(img.dataset.avatarPath));
       if (!img.isConnected) { URL.revokeObjectURL(url); continue; }
@@ -224,7 +225,7 @@ async function loadConversations(more=false) {
   conversationNext=result.next;$('chatMore').hidden=!conversationNext;
   const rows=conversationRows; $('chatUnread').textContent=`${result.totalUnread} 未读`;
   const avatarBotId = selectedPublisherId || data?.publisher?.id || '';
-  $('chatConversations').innerHTML=rows.map(c=>`<button class="chat-conversation ${activeChat?.chat_id===c.chat_id?'selected':''}" data-chat-id="${esc(c.chat_id)}"><span class="chat-avatar"><img hidden data-avatar-path="/chat/avatars/${encodeURIComponent(avatarBotId)}/${encodeURIComponent(c.chat_id)}" alt=""><span>${esc((c.title||'?').slice(0,1))}</span></span><span class="chat-summary"><strong>${esc(c.title||c.chat_id)}</strong><small>${esc(c.last_message_text||'新会话')}</small></span><span class="chat-meta"><small>${c.last_message_at?new Date(c.last_message_at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}):''}</small>${c.unread_count?`<b>${c.unread_count}</b>`:''}</span></button>`).join('')||'<p class="empty-state">暂无会话。启用收消息后，新消息会显示在这里。</p>';
+  $('chatConversations').innerHTML=rows.map(c=>`<button class="chat-conversation ${activeChat?.chat_id===c.chat_id?'selected':''}" data-chat-id="${esc(c.chat_id)}"><span class="chat-avatar"><img hidden data-avatar-path="${c.avatar_file_id ? '/chat/avatars/' + encodeURIComponent(avatarBotId) + '/' + encodeURIComponent(c.chat_id) : ''}" alt=""><span>${esc((c.title||'?').slice(0,1))}</span></span><span class="chat-summary"><strong>${esc(c.title||c.chat_id)}</strong><small>${esc(c.last_message_text||'新会话')}</small></span><span class="chat-meta"><small>${c.last_message_at?new Date(c.last_message_at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}):''}</small>${c.unread_count?`<b>${c.unread_count}</b>`:''}</span></button>`).join('')||'<p class="empty-state">暂无会话。启用收消息后，新消息会显示在这里。</p>';
   loadConversationAvatars();
   if(activeChat){activeChat=rows.find(c=>c.chat_id===activeChat.chat_id)||activeChat;$('chatTitle').textContent=activeChat.title;}
   ui.chat(activeChat);

@@ -8,7 +8,7 @@ import { createScheduler } from '../server/scheduler.js';
 
 test('scheduler start keeps ticking once and stop clears the timer', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-scheduler-'));
-  const db = openDatabase({ localFile:path.join(dir, 'test.db') });
+  const db = await openDatabase({ localFile:path.join(dir, 'test.db') });
   const originalSetInterval = globalThis.setInterval;
   const originalClearInterval = globalThis.clearInterval;
   let intervalCalls = 0, cleared = null, unrefCalls = 0;

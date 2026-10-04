@@ -15,7 +15,7 @@ test('both allowed admins receive /start button and pass Mini App auth; outsider
   const sent = [];
   let handler;
   vm.runInNewContext(handlerSource, {
-    app: { post: (_path, fn) => { handler = fn; } },
+    app: { post: (route, fn) => { if (route === '/tg/entry') handler = fn; } },
     process: { env: { ENTRY_BOT_TOKEN: entryToken, PUBLIC_URL: 'https://example.com', ADMIN_TG_IDS: ids.join(',') } },
     crypto, Buffer, adminIds: ids, console,
     botCall: async (_token, method, payload) => { sent.push({ method, payload }); },

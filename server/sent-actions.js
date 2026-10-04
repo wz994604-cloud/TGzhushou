@@ -1,8 +1,8 @@
 import { renderDelta, normalizeButtons, keyboard } from './format.js';
 import { botCall, editPhoto, safeTelegramError } from './telegram.js';
 
-export function sentActions(db, publisher, call = botCall, photo = editPhoto) {
-  db.exec(`CREATE TABLE IF NOT EXISTS sent_changes(
+export async function sentActions(db, publisher, call = botCall, photo = editPhoto) {
+  await db.exec(`CREATE TABLE IF NOT EXISTS sent_changes(
     kind TEXT NOT NULL, delivery_id INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0,
     delta_json TEXT, buttons_json TEXT, media_id INTEGER, state TEXT, error TEXT, updated_at INTEGER,
     PRIMARY KEY(kind,delivery_id));
@@ -14,23 +14,23 @@ export function sentActions(db, publisher, call = botCall, photo = editPhoto) {
     BEGIN DELETE FROM sent_changes WHERE kind='chat' AND delivery_id=OLD.id; END;
     UPDATE sent_changes SET state='UNKNOWN',error='上次操作中断，请核对 Telegram 消息后再操作' WHERE state='PROCESSING';`);
   const busy = new Set();
-  function read(kind, id) {
+  async function read(kind, id) {
     if (!['runs','broadcasts','chat'].includes(kind)) throw new Error('记录类型无效');
     if (kind === 'chat') {
-      const message=db.prepare("SELECT * FROM chat_messages WHERE id=? AND direction='OUT'").get(id);
+      const message=await db.prepare("SELECT * FROM chat_messages WHERE id=? AND direction='OUT'").get(id);
       if (!message || message.status!=='SUCCESS') throw new Error('请选择发送成功的消息');
-      const change=db.prepare('SELECT * FROM sent_changes WHERE kind=? AND delivery_id=?').get(kind,id);
+      const change=await db.prepare('SELECT * FROM sent_changes WHERE kind=? AND delivery_id=?').get(kind,id);
       return {...message,delta_json:change?.delta_json || JSON.stringify([{insert:message.text+'\n'}]),
         buttons_json:change?.buttons_json || message.buttons_json || '[]',deleted:!!change?.deleted,last_action:change?.state,last_error:change?.error};
     }
     const table=kind==='runs'?'deliveries':'broadcast_deliveries', parent=kind==='runs'?'run_id':'broadcast_id';
-    const row=db.prepare(`SELECT d.*,b.bot_id,b.delta_json,b.buttons_json,b.media_id FROM ${table} d JOIN ${kind} b ON b.id=d.${parent} WHERE d.id=?`).get(id);
+    const row=await db.prepare(`SELECT d.*,b.bot_id,b.delta_json,b.buttons_json,b.media_id FROM ${table} d JOIN ${kind} b ON b.id=d.${parent} WHERE d.id=?`).get(id);
     if(!row || row.status!=='SUCCESS' || !row.telegram_message_id) throw new Error('请选择发送成功的消息');
-    const change=db.prepare('SELECT * FROM sent_changes WHERE kind=? AND delivery_id=?').get(kind,id);
+    const change=await db.prepare('SELECT * FROM sent_changes WHERE kind=? AND delivery_id=?').get(kind,id);
     return {...row, media_id:change?.media_id??row.media_id,delta_json:change?.delta_json??row.delta_json,buttons_json:change?.buttons_json??row.buttons_json,deleted:!!change?.deleted,last_action:change?.state,last_error:change?.error};
   }
   async function act(kind,id,body) {
-    const row=read(kind,id), bot=publisher(row.bot_id), key=kind+':'+id;
+    const row=await read(kind,id), bot=await publisher(row.bot_id), key=kind+':'+id;
     if(!bot || bot.id!==row.bot_id) throw new Error('请使用原发送机器人操作');
     if(busy.has(key)) throw new Error('该消息正在处理中');
     if(!['edit','delete'].includes(body.action)) throw new Error('操作无效');
@@ -39,12 +39,12 @@ export function sentActions(db, publisher, call = botCall, photo = editPhoto) {
     let formatted,buttons,media;
     if(body.action==='edit') {
       formatted=renderDelta(body.delta?.ops);buttons=normalizeButtons(body.buttons||[]);
-      if(body.mediaId){media=db.prepare('SELECT * FROM media WHERE id=?').get(Number(body.mediaId));if(!media)throw new Error('图片不存在');}
+      if(body.mediaId){media=await db.prepare('SELECT * FROM media WHERE id=?').get(Number(body.mediaId));if(!media)throw new Error('图片不存在');}
       if(media && kind==='chat' && row.media_kind!=='photo') throw new Error('当前媒体类型不支持替换图片');
       if((row.media_id||media) && formatted.text.length>1024) throw new Error('图片说明最多 1024 字符');
     }
     busy.add(key);
-    db.prepare(`INSERT INTO sent_changes(kind,delivery_id,state,updated_at) VALUES(?,?,'PROCESSING',?) ON CONFLICT(kind,delivery_id) DO UPDATE SET state='PROCESSING',error=NULL,updated_at=excluded.updated_at`).run(kind,id,Date.now());
+    await db.prepare(`INSERT INTO sent_changes(kind,delivery_id,state,updated_at) VALUES(?,?,'PROCESSING',?) ON CONFLICT(kind,delivery_id) DO UPDATE SET state='PROCESSING',error=NULL,updated_at=excluded.updated_at`).run(kind,id,Date.now());
     try {
       const payload={chat_id:row.chat_id||row.telegram_id,message_id:Number(row.telegram_message_id)};
       if(body.action==='delete') await call(bot.token,'deleteMessage',payload);
@@ -53,21 +53,21 @@ export function sentActions(db, publisher, call = botCall, photo = editPhoto) {
         try { if(media)await photo(bot.token,payload,media,formatted.text,formatted.entities,markup);else await call(bot.token,(row.media_id||row.media_kind)?'editMessageCaption':'editMessageText',{...payload,...((row.media_id||row.media_kind)?{caption:formatted.text,caption_entities:formatted.entities}:{text:formatted.text,entities:formatted.entities}),reply_markup:markup}); }
         catch(error){if(!/message is not modified/i.test(error.message))throw error;}
       }
-      db.prepare(`UPDATE sent_changes SET deleted=?,delta_json=?,buttons_json=?,state=?,error=NULL,updated_at=? WHERE kind=? AND delivery_id=?`).run(body.action==='delete'?1:0,body.action==='edit'?JSON.stringify(body.delta.ops):row.delta_json,body.action==='edit'?JSON.stringify(buttons):row.buttons_json,body.action==='edit'?'EDITED':'DELETED',Date.now(),kind,id);
-      db.prepare('UPDATE sent_changes SET media_id=? WHERE kind=? AND delivery_id=?').run(media?.id||row.media_id||null,kind,id);
+      await db.prepare(`UPDATE sent_changes SET deleted=?,delta_json=?,buttons_json=?,state=?,error=NULL,updated_at=? WHERE kind=? AND delivery_id=?`).run(body.action==='delete'?1:0,body.action==='edit'?JSON.stringify(body.delta.ops):row.delta_json,body.action==='edit'?JSON.stringify(buttons):row.buttons_json,body.action==='edit'?'EDITED':'DELETED',Date.now(),kind,id);
+      await db.prepare('UPDATE sent_changes SET media_id=? WHERE kind=? AND delivery_id=?').run(media?.id||row.media_id||null,kind,id);
       if(kind==='chat') {
-        db.prepare('UPDATE chat_messages SET text=?,entities_json=?,edited_at=?,status=? WHERE id=?')
+        await db.prepare('UPDATE chat_messages SET text=?,entities_json=?,edited_at=?,status=? WHERE id=?')
           .run(body.action==='edit'?formatted.text:row.text,body.action==='edit'?JSON.stringify(formatted.entities):row.entities_json,
             body.action==='edit'?Date.now():row.edited_at,body.action==='edit'?'SUCCESS':'DELETED',id);
-        if(body.action==='edit')db.prepare('UPDATE conversations SET last_message_text=? WHERE bot_id=? AND chat_id=? AND last_message_id=?')
+        if(body.action==='edit')await db.prepare('UPDATE conversations SET last_message_text=? WHERE bot_id=? AND chat_id=? AND last_message_id=?')
           .run(formatted.text,row.bot_id,row.chat_id,row.telegram_message_id);
-        else db.prepare('UPDATE conversations SET last_message_text=? WHERE bot_id=? AND chat_id=? AND last_message_id=?')
+        else await db.prepare('UPDATE conversations SET last_message_text=? WHERE bot_id=? AND chat_id=? AND last_message_id=?')
           .run('[已删除]',row.bot_id,row.chat_id,row.telegram_message_id);
-        db.prepare('INSERT INTO chat_events(bot_id,chat_id,created_at) VALUES(?,?,?)').run(row.bot_id,row.chat_id,Date.now());
+        await db.prepare('INSERT INTO chat_events(bot_id,chat_id,created_at) VALUES(?,?,?)').run(row.bot_id,row.chat_id,Date.now());
       }
       return {ok:true,id,state:body.action==='edit'?'EDITED':'DELETED'};
     } catch(error) {
-      db.prepare('UPDATE sent_changes SET state=?,error=?,updated_at=? WHERE kind=? AND delivery_id=?').run(error.telegramCode?'FAILED':'UNKNOWN',safeTelegramError(error),Date.now(),kind,id);
+      await db.prepare('UPDATE sent_changes SET state=?,error=?,updated_at=? WHERE kind=? AND delivery_id=?').run(error.telegramCode?'FAILED':'UNKNOWN',safeTelegramError(error),Date.now(),kind,id);
       throw error;
     } finally {busy.delete(key);}
   }

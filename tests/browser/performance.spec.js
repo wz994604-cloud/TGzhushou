@@ -216,7 +216,7 @@ test('emoji list scrolls to the last item without a load-more button', async ({ 
   await page.locator('.emoji-choice').last().click(); await expect(page.locator('#message .ql-editor .custom-emoji')).toHaveCount(1);
 });
 
-async function expandPack(page) { if (!await page.locator('#packSettings').evaluate(n => n.open)) await page.locator('#packSettings summary').click(); }
+async function expandPack(page) { if (!(await page.locator('#packSettings').evaluate(n => n.open))) await page.locator('#packSettings summary').click(); }
 
 test('pack controls collapse by default and after loading or switching', async ({page,request}) => {
   await open(page,request); await page.locator('#bodyEmoji').click();

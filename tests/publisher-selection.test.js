@@ -7,25 +7,27 @@ const source = fs.readFileSync(process.env.PUBLISHER_SELECTION_SOURCE || new URL
 const start = source.indexOf("app.use('/api',");
 const end = source.indexOf('const route =', start);
 assert.ok(start > 0 && end > start);
-function request(path, method = 'GET', authenticated = true, selected = 'old-bot') {
+async function request(path, method = 'GET', authenticated = true, selected = 'old-bot') {
   let handler, status, error, next = false;
   vm.runInNewContext(source.slice(start,end), {
     app: { use: (_path, fn) => { handler = fn; } },
     browserAuth: { authenticate: () => authenticated ? { id:'admin' } : null },
+    canAccessBot: () => true,
+    listPublishers: () => [],
     scheduler: { publisher: id => id === 'valid-bot' ? { id } : null }
   });
   const req = { path, method, headers: { 'x-publisher-id':selected }, get(key) { return this.headers[key]; } };
-  handler(req, { status(code) { status = code; return this; }, json(body) { error = body.error; } }, () => { next = true; });
+  await handler(req, { status(code) { status = code; return this; }, json(body) { error = body.error; } }, () => { next = true; });
   return { req, status, error, next };
 }
-test('authenticated bootstrap recovers a stale selection without bypassing other routes', () => {
-  const recovered = request('/bootstrap');
+test('authenticated bootstrap recovers a stale selection without bypassing other routes', async () => {
+  const recovered = await request('/bootstrap');
   assert.equal(recovered.next, true);
   assert.equal(recovered.req.get('x-publisher-id'), undefined);
-  assert.equal(request('/bootstrap','GET',false).status, 401);
-  assert.equal(request('/publisher','POST').status, 401);
-  assert.equal(request('/players').status, 401);
-  const valid = request('/bootstrap','GET',true,'valid-bot');
+  assert.equal((await request('/bootstrap','GET',false)).status, 401);
+  assert.equal((await request('/publisher','POST')).status, 403);
+  assert.equal((await request('/players')).status, 401);
+  const valid = await request('/bootstrap','GET',true,'valid-bot');
   assert.equal(valid.next, true);
   assert.equal(valid.req.get('x-publisher-id'), 'valid-bot');
 });
