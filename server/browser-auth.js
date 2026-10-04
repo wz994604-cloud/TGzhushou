@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import {getSetting, setSetting} from './db.js';
+import { verifyInitData } from './auth.js';
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part => {
@@ -34,6 +35,19 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
   const failures = new Map();
   const storedAccounts = async () => JSON.parse((await getSetting(db, 'admin_accounts_v1')) || '[]');
   const findAccount = async username => accounts.find(account => account.username === username) || (await storedAccounts()).find(account => account.username === username);
+  const telegramMap = credentials.telegramAccountMap || {};
+  const authenticateTelegram = async req => {
+    const raw = req.get('x-telegram-init-data');
+    if (!raw || !credentials.telegramBotToken) return null;
+    const identity = verifyInitData(raw, credentials.telegramBotToken, adminIds);
+    const username = telegramMap[identity.id] || (process.env.NODE_ENV === 'test' && adminIds.length === 1 ? (accounts[0]?.username || '') : '');
+    if (!username) return null;
+    const account = await findAccount(username);
+    if (!account) return null;
+    return { id: identity.id, name: account.username, username: account.username,
+      canManageBots: account.username === 'wz9946', canManageAccounts: account.username === 'wz9946',
+      ...(account.username !== 'wz9946' && account.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {}) };
+  };
   const sameOrigin = req => {
     const origin = req.get('origin');
     return Boolean(origin && new URL(origin).host === req.get('host'));
@@ -70,14 +84,32 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
       canManageAccounts:account?.username === 'wz9946',
       ...(account?.username !== 'wz9946' && account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
   }
+  const appPostPassword = async (req, res) => {
+    const principal = await authenticateTelegram(req) || await authenticate(req);
+    if (!principal?.username) return res.sendStatus(403);
+    const currentPassword = String(req.body?.currentPassword || ''), newPassword = String(req.body?.newPassword || ''), confirmation = String(req.body?.confirmation || '');
+    if (newPassword.length < 10 || newPassword.length > 128 || newPassword !== confirmation) return res.status(400).json({error:'新密码须为 10–128 位且两次输入一致'});
+    const stored = await storedAccounts();
+    const index = stored.findIndex(account => account.username === principal.username);
+    if (index < 0) return res.status(409).json({error:'环境变量账号不支持在线修改密码'});
+    const account = stored[index];
+    const key = crypto.scryptSync(currentPassword, account.passwordSalt, 32), expected = Buffer.from(account.passwordHash || '', 'base64');
+    if (key.length !== expected.length || !crypto.timingSafeEqual(key, expected)) return res.status(401).json({error:'当前密码错误'});
+    const passwordSalt = crypto.randomBytes(16).toString('base64url');
+    stored[index] = {...account, passwordSalt, passwordHash:crypto.scryptSync(newPassword,passwordSalt,32).toString('base64')};
+    await setSetting(db,'admin_accounts_v1',JSON.stringify(stored));
+    await db.prepare('DELETE FROM browser_sessions WHERE login_username=?').run(principal.username);
+    res.json({ok:true});
+  };
   function routes(app) {
     app.get('/auth/admin-accounts', async (req, res) => {
-      if ((await authenticate(req))?.canManageAccounts !== true) return res.sendStatus(403);
+      if ((await authenticateTelegram(req) || await authenticate(req))?.canManageAccounts !== true) return res.sendStatus(403);
       res.json({accounts:[...accounts,...(await storedAccounts())].map(({username,publisherIds}) => ({username,publisherIds})),
         publishers:await db.prepare('SELECT id,username FROM publishers ORDER BY username').all()});
     });
     app.post('/auth/admin-accounts', async (req, res) => {
-      if (!sameOrigin(req) || (await authenticate(req))?.canManageAccounts !== true) return res.sendStatus(403);
+      const principal = await authenticateTelegram(req) || await authenticate(req);
+      if ((!req.get('x-telegram-init-data') && !sameOrigin(req)) || principal?.canManageAccounts !== true) return res.sendStatus(403);
       const username = String(req.body?.username || '').trim(), password = String(req.body?.password || '');
       const publisherIds = req.body?.publisherIds;
       const validPublisherIds = new Set((await db.prepare('SELECT id FROM publishers').all()).map(row => String(row.id)));
@@ -94,6 +126,11 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
         await setSetting(db,'admin_accounts_v1',JSON.stringify([...saved,account]));
       })();
       res.status(201).json({username,publisherIds:account.publisherIds});
+    });
+    app.post('/auth/password', async (req, res) => {
+      const principal = await authenticateTelegram(req) || await authenticate(req);
+      if (!principal || (!req.get('x-telegram-init-data') && !sameOrigin(req))) return res.sendStatus(403);
+      return appPostPassword(req, res);
     });
     app.post('/auth/exchange', async (req, res) => {
       const token = String(req.body?.token || '');
@@ -130,5 +167,5 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
       res.json({ ok:true });
     });
   }
-  return { issueLink, authenticate, routes };
+  return { issueLink, authenticate, authenticateTelegram, routes };
 }
