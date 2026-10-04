@@ -81,10 +81,10 @@ export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {
       const username = String(req.body?.username || '').trim(), password = String(req.body?.password || '');
       const publisherIds = req.body?.publisherIds;
       const validPublisherIds = new Set((await db.prepare('SELECT id FROM publishers').all()).map(row => String(row.id)));
-      if (!/^[A-Za-z0-9_-]{3,64}$/.test(username) || password.length < 10 || password.length > 128 ||
+      if (!/^[A-Za-z0-9]{4,64}$/.test(username) || password.length < 4 || password.length > 128 ||
           !Array.isArray(publisherIds) || !publisherIds.length || publisherIds.length > 100 ||
           publisherIds.some(id => typeof id !== 'string' || !/^\d+$/.test(id) || !validPublisherIds.has(id)))
-        return res.status(400).json({error:'账号须为 3–64 位字母数字或下划线，密码须为 10–128 位，并选择有效机器人'});
+        return res.status(400).json({error:'账号须为 4–64 位字母数字，密码须为 4–128 位，并选择有效机器人'});
       if (['wz9946','wz994604'].includes(username) || (await findAccount(username))) return res.status(409).json({error:'账号已存在或为保留账号'});
       const passwordSalt = crypto.randomBytes(16).toString('base64url');
       const account = {username,passwordSalt,passwordHash:crypto.scryptSync(password,passwordSalt,32).toString('base64'),publisherIds:[...new Set(publisherIds)]};

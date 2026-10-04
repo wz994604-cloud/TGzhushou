@@ -31,12 +31,13 @@ test('only wz9946 creates accounts; hashed password, scope, duplicate, CSRF and 
   const ownerIdentity=await auth.authenticate({method:'GET',get:key=>key==='cookie'?owner.cookie:''});
   assert.equal(ownerIdentity.canManageBots,true);assert.equal(ownerIdentity.canManageAccounts,true);assert.equal(ownerIdentity.publisherIds,undefined);
   assert.equal((await auth.authenticate({method:'GET',get:key=>key==='cookie'?other.cookie:''})).canManageBots,false);
-  const input={username:'newoperator',password:'synthetic-password',publisherIds:['222222']};
+  const input={username:'newoperator',password:'1234',publisherIds:['222222']};
   const create=(cookie,body=input,origin=base)=>fetch(base+'/auth/admin-accounts',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal((await create(other.cookie)).status,403);
   assert.equal((await create(owner.cookie,input,'https://other.test')).status,403);
   assert.equal((await create(owner.cookie,{...input,publisherIds:['999999']})).status,400);
   assert.equal((await create(owner.cookie,{...input,username:'wz994604'})).status,409);
+  assert.equal((await create(owner.cookie,{...input,password:'123'})).status,400);
   assert.equal((await create(owner.cookie)).status,201);
   assert.equal((await create(owner.cookie)).status,409);
   const saved=JSON.parse(await getSetting(db,'admin_accounts_v1'))[0];assert.ok(saved.passwordHash);assert.equal(saved.password,undefined);assert.ok(!JSON.stringify(saved).includes(input.password));
