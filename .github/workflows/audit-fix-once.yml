@@ -41,7 +41,7 @@ jobs:
           node tools/audit-test-fixes.mjs
       - name: Convert database call sites to async
         run: |
-          FILES=$(find server tests -name '*.js' ! -path 'server/db.js' -print)
+          FILES=$(find server tests -name '*.js' ! -path 'server/db.js' ! -path 'tests/performance.test.js' -print)
           npx --yes jscodeshift@17.3.0 -t tools/audit-async-transform.cjs $FILES --parser=babel
       - name: Install project dependencies
         run: npm ci
@@ -68,4 +68,4 @@ jobs:
           git commit -m "fix: harden scheduler database and runtime health"
           git push origin HEAD:audit-20261005-code-health
 
-# rerun: 6
+# rerun: 7
