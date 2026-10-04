@@ -176,10 +176,10 @@ chatQuill.on('selection-change', range => { if (range) chatRange = range; });
 function chatButtonEditor() {
   $('chatButtons').innerHTML = chatButtons.map((b,i)=>`<div class="chat-button-row"><input data-chat-button="${i}" data-field="text" placeholder="按钮文字" value="${esc(b.text)}"><input data-chat-button="${i}" data-field="url" placeholder="https://链接" value="${esc(b.url)}"><select data-chat-button="${i}" data-field="style"><option value="default">默认</option><option value="primary" ${b.style==='primary'?'selected':''}>蓝色</option><option value="success" ${b.style==='success'?'selected':''}>绿色</option><option value="danger" ${b.style==='danger'?'selected':''}>红色</option></select><button class="quiet" data-chat-icon="${i}">✦${b.iconAlt||''}</button><button class="quiet" data-chat-remove="${i}">×</button></div>`).join('');
 }
-$('chatAddButton').onclick=()=>{if(chatButtons.length>=12)return toast('最多 12 个按钮');chatButtons.push({text:'',url:'https://t.me/',style:'default',row:chatButtons.length});chatButtonEditor();};
+$('chatAddButton').onclick=()=>{if(chatButtons.length>=12)return toast('最多 12 个按钮');chatButtons.push({text:'',url:'https://t.me/',style:'default',row:Math.floor(chatButtons.length/2)});chatButtonEditor();};
 $('chatButtons').addEventListener('input',event=>{const {chatButton,field}=event.target.dataset;if(chatButton!==undefined&&field)chatButtons[Number(chatButton)][field]=event.target.value;});
 $('chatButtons').addEventListener('change',event=>{const {chatButton,field}=event.target.dataset;if(chatButton!==undefined&&field)chatButtons[Number(chatButton)][field]=event.target.value;});
-$('chatButtons').onclick=event=>{if(event.target.dataset.chatRemove!==undefined){chatButtons.splice(Number(event.target.dataset.chatRemove),1);chatButtons.forEach((b,i)=>b.row=i);chatButtonEditor();}if(event.target.dataset.chatIcon!==undefined)openPicker(`chat-button-${event.target.dataset.chatIcon}`);};
+$('chatButtons').onclick=event=>{if(event.target.dataset.chatRemove!==undefined){chatButtons.splice(Number(event.target.dataset.chatRemove),1);chatButtons.forEach((b,i)=>b.row=Math.floor(i/2));chatButtonEditor();}if(event.target.dataset.chatIcon!==undefined)openPicker(`chat-button-${event.target.dataset.chatIcon}`);};
 $('chatEmoji').onclick=()=>openPicker('chat');
 $('chatSearch').oninput=()=>action(loadConversations);
 $('enableInbox').onclick=event=>action(async()=>{const takeover=$('enableInbox').dataset.takeover==='true';await api('/inbox/enable','POST',takeover?{takeover:true}:{});await loadInboxStatus();toast(takeover?'已接管到当前服务器，可正常接收新消息':'收消息已启用');},event.currentTarget);
@@ -269,12 +269,26 @@ function remember() {
 window.addEventListener('pagehide', () => flushDraft());
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushDraft(); });
 function showButtons() {
+  normalizeButtonRows(buttons);
   $('buttons').innerHTML = buttons.map((b,i) => `<div class="button-editor" data-index="${i}"><div class="section-title"><strong>按钮 ${i+1}</strong><button data-remove="${i}" class="quiet danger-text">删除</button></div><label>按钮文字<input data-field="text" value="${esc(b.text)}" maxlength="64" placeholder="留空 = 仅显示专属表情"></label><label>跳转链接<input data-field="url" value="${esc(b.url)}" placeholder="https://t.me/…"></label><div class="grid"><label>颜色<select data-field="style">${[['default','默认'],['primary','蓝色'],['success','绿色'],['danger','红色']].map(([v,t])=>`<option value="${v}" ${b.style===v?'selected':''}>${t}</option>`).join('')}</select></label><label>行号<input data-field="row" type="number" min="1" max="12" value="${b.row+1}"></label></div><button data-emoji="${i}" class="quiet">${esc(b.iconAlt || '✦')} ${b.iconId ? '更换专属表情' : '选择专属表情'}</button>${b.iconId?`<button data-clear="${i}" class="quiet">移除表情</button>`:''}</div>`).join('') || '<p class="muted">暂未添加跳转按钮</p>';
   preview();
 }
-$('buttons').addEventListener('input', event => { const wrap = event.target.closest('[data-index]'); if (!wrap || !event.target.dataset.field) return; const field = event.target.dataset.field; buttons[Number(wrap.dataset.index)][field] = field === 'row' ? Number(event.target.value)-1 : event.target.value; remember(); preview(); });
-$('buttons').addEventListener('click', event => { if (event.target.dataset.remove !== undefined) { buttons.splice(Number(event.target.dataset.remove),1); showButtons(); remember(); } if (event.target.dataset.emoji !== undefined) openPicker(Number(event.target.dataset.emoji)); if (event.target.dataset.clear !== undefined) { Object.assign(buttons[Number(event.target.dataset.clear)], { iconId:'',iconAlt:'',iconThumbId:'' }); showButtons(); remember(); } });
-$('addButton').onclick = () => { if (buttons.length >= 12) return toast('最多添加 12 个按钮'); buttons.push({text:'立即进入',url:'https://t.me/',style:'default',row:buttons.length,iconId:'',iconAlt:''}); showButtons(); remember(); };
+function defaultButtonRow(index) { return Math.floor(index / 2); }
+function normalizeButtonRows(list) {
+  let autoIndex = 0;
+  list.forEach((button, index) => {
+    if (!Number.isInteger(button.row) || button.row < 0) button.row = defaultButtonRow(index);
+    if (button.rowExplicit === undefined) button.rowExplicit = button.row !== defaultButtonRow(index);
+    if (!button.rowExplicit) button.row = defaultButtonRow(autoIndex++);
+  });
+}
+function reflowAutomaticButtonRows(list) {
+  let autoIndex = 0;
+  list.forEach(button => { if (!button.rowExplicit) button.row = defaultButtonRow(autoIndex++); });
+}
+$('buttons').addEventListener('input', event => { const wrap = event.target.closest('[data-index]'); if (!wrap || !event.target.dataset.field) return; const field = event.target.dataset.field; const button = buttons[Number(wrap.dataset.index)]; button[field] = field === 'row' ? Math.max(0, Number(event.target.value)-1) : event.target.value; if (field === 'row') button.rowExplicit = true; remember(); preview(); });
+$('buttons').addEventListener('click', event => { if (event.target.dataset.remove !== undefined) { buttons.splice(Number(event.target.dataset.remove),1); reflowAutomaticButtonRows(buttons); showButtons(); remember(); } if (event.target.dataset.emoji !== undefined) openPicker(Number(event.target.dataset.emoji)); if (event.target.dataset.clear !== undefined) { Object.assign(buttons[Number(event.target.dataset.clear)], { iconId:'',iconAlt:'',iconThumbId:'' }); showButtons(); remember(); } });
+$('addButton').onclick = () => { if (buttons.length >= 12) return toast('最多添加 12 个按钮'); const autoIndex = buttons.filter(button => !button.rowExplicit).length; buttons.push({text:'立即进入',url:'https://t.me/',style:'default',row:defaultButtonRow(autoIndex),rowExplicit:false,iconId:'',iconAlt:''}); showButtons(); remember(); };
 function preview() {
   previewDirty = true; clearTimeout(previewTimer);
   if ($('previewPanel').open) previewTimer = setTimeout(renderPreview, 100);
