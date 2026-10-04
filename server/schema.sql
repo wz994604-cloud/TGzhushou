@@ -105,7 +105,8 @@
     );
     CREATE TABLE IF NOT EXISTS browser_sessions(
       session_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL,
-      expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL
+      expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+      login_username TEXT NOT NULL DEFAULT ''
     );
 
 

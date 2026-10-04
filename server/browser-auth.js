@@ -6,21 +6,33 @@ const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part 
 }));
 
 export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
+  // Old sessions have no proven account identity and never receive owner privileges.
+  db.transaction(() => {
+    if (!db.prepare('PRAGMA table_info(browser_sessions)').all().some(column => column.name === 'login_username')) {
+      db.exec("ALTER TABLE browser_sessions ADD COLUMN login_username TEXT NOT NULL DEFAULT ''");
+      db.prepare('UPDATE browser_sessions SET expires_at=0').run();
+    }
+  })();
   const base = String(publicUrl || '').replace(/\/$/, '');
   const salt = String(credentials.salt || 'tgzhushou-browser-login');
   const accounts = (Array.isArray(credentials.accounts) ? credentials.accounts : [{ username: credentials.username, password: credentials.password }])
-    .map(account => ({ username: String(account?.username || '').trim(), password: String(account?.password || '') }))
+    .map(account => {
+      if (account?.publisherIds !== undefined && (!Array.isArray(account.publisherIds) || account.publisherIds.some(id => !/^\d+$/.test(String(id)))))
+        throw new Error('管理员 publisherIds 应为机器人 ID 数组');
+      return {username:String(account?.username || '').trim(), password:String(account?.password || ''),
+        ...(account?.publisherIds !== undefined ? {publisherIds:[...new Set(account.publisherIds.map(String))]} : {})};
+    })
     .filter(account => account.username && account.password)
-    .map(account => ({ username: account.username, passwordKey: crypto.scryptSync(account.password, salt, 32) }));
+    .map(({password, ...account}) => ({...account, passwordKey:crypto.scryptSync(password, salt, 32)}));
   const failures = new Map();
   const sameOrigin = req => {
     const origin = req.get('origin');
     return Boolean(origin && new URL(origin).host === req.get('host'));
   };
-  const createSession = (adminId, now = Date.now()) => {
+  const createSession = (adminId, now = Date.now(), username = '') => {
     const session = crypto.randomBytes(32).toString('base64url');
-    db.prepare('INSERT INTO browser_sessions(session_hash,admin_id,expires_at,created_at,last_seen) VALUES(?,?,?,?,?)')
-      .run(digest(session),String(adminId),now+24*60*60_000,now,now);
+    db.prepare('INSERT INTO browser_sessions(session_hash,admin_id,expires_at,created_at,last_seen,login_username) VALUES(?,?,?,?,?,?)')
+      .run(digest(session),String(adminId),now+24*60*60_000,now,now,username);
     return session;
   };
   const setSession = (res, session) => res.set('Set-Cookie',`tgzhushou_session=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
@@ -42,7 +54,11 @@ export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
       if (!origin || new URL(origin).host !== req.get('host')) return null;
     }
     if (Date.now()-row.last_seen>60_000) db.prepare('UPDATE browser_sessions SET last_seen=? WHERE session_hash=?').run(Date.now(),row.session_hash);
-    return { id:row.admin_id, name:'管理员' };
+    const account = row.login_username ? accounts.find(candidate => candidate.username === row.login_username) : null;
+    if (row.login_username && !account) return null;
+    return {id:row.admin_id, name:account?.username || '管理员', username:account?.username || '',
+      canManageBots:account?.username === 'wz994604',
+      ...(account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
   }
   function routes(app) {
     app.post('/auth/exchange', (req,res) => {
@@ -68,7 +84,7 @@ export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
         state.count += 1; if (state.count >= 5) { state.count = 0; state.until = now + 15*60_000; }
         failures.set(ip, state); return res.status(401).json({ error:'账号或密码错误' });
       }
-      failures.delete(ip); setSession(res, createSession(adminIds[0], now)); res.json({ ok:true });
+      failures.delete(ip); setSession(res, createSession(adminIds[0], now, account.username)); res.json({ ok:true });
     });
     app.post('/auth/logout', (req,res) => {
       if (!sameOrigin(req)) return res.sendStatus(403);

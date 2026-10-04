@@ -17,6 +17,7 @@ import { renderDelta, normalizeButtons } from './format.js';
 import { normalizeSchedule, nextSlot } from './schedule.js';
 import { createScheduler } from './scheduler.js';
 import { normalizeTelegramId, decodeCsv, parseCsv } from './player-utils.js';
+import { initializePlayerImports, playerSourceToken, savePlayerSourceToken, upsertPlayers } from './player-store.js';
 import { createBrowserAuth } from './browser-auth.js';
 import { registerChatRoutes } from './chat.js';
 
@@ -28,6 +29,7 @@ if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_
 const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
 const db = openDatabase(process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_FILE
   ? { localFile:process.env.TEST_DATABASE_FILE } : {});
+initializePlayerImports(db);
 const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
 async function kickScheduler(label) {
   if (process.env.VERCEL === '1') {
@@ -114,14 +116,22 @@ app.post('/api/cron/tick', async (req,res,next) => { try {
   await work(); res.json({ok:true});
 } catch(error){ next(error); } });
 
+const canAccessBot = (admin, id) => !Array.isArray(admin.publisherIds) || admin.publisherIds.includes(String(id));
 app.use('/api', (req, res, next) => {
   try {
     req.admin = req.get('x-telegram-init-data')
       ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
       : browserAuth.authenticate(req);
     if (!req.admin) throw new Error('未授权');
+    if (req.method === 'POST' && ['/publisher','/inbox/enable'].includes(req.path) && req.admin.canManageBots !== true)
+      return res.status(403).json({error:'仅 wz994604 可管理或配置机器人'});
     const selected = String(req.get('x-publisher-id') || '');
-    if (selected && !scheduler.publisher(selected)) {
+    if (selected && !canAccessBot(req.admin, selected)) return res.status(403).json({error:'没有此机器人的操作权限'});
+    const defaultBot = scheduler.publisher();
+    const id = selected || (defaultBot && canAccessBot(req.admin, defaultBot.id) ? defaultBot.id :
+      listPublishers(db).find(bot => canAccessBot(req.admin, bot.id))?.id);
+    req.publisher = id ? scheduler.publisher(id) : null;
+    if (selected && !req.publisher) {
       if (req.method === 'GET' && req.path === '/bootstrap') delete req.headers['x-publisher-id'];
       else throw new Error('所选发布机器人不存在');
     }
@@ -131,12 +141,12 @@ app.use('/api', (req, res, next) => {
 });
 
 const route = fn => async (req, res, next) => { try { await fn(req, res); } catch (error) { next(error); } };
-registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL });
-const currentBot = req => scheduler.publisher(req.get('x-publisher-id') || undefined);
+const currentBot = req => req.publisher;
+registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL, publisherFor:currentBot });
 function selectedBotId(req) { return currentBot(req)?.id || ''; }
-function requireOriginalPlayerSource(req) {
+function requirePlayerBot(req) {
   const id = selectedBotId(req);
-  if (!id || id !== getSetting(db, 'publisher_id')) throw new Error('此机器人的用户来源尚未配置');
+  if (!id) throw new Error('请先选择已绑定的发布机器人');
   return id;
 }
 function assertSelected(req, botId) {
@@ -174,8 +184,8 @@ function isRememberedUnavailableSticker(key) {
   return false;
 }
 
-function ffaToken() {
-  const encrypted = getSetting(db, 'ffa_token');
+function ffaToken(botId) {
+  const encrypted = playerSourceToken(db, botId);
   return encrypted ? decryptToken(encrypted, process.env.CONFIG_KEY) : '';
 }
 
@@ -219,7 +229,7 @@ async function fetchFfaPlayers(token) {
 
 app.get('/api/bootstrap', route(async (req, res) => {
   const bot = currentBot(req);
-  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: listPublishers(db), publisher: bot ? { id: bot.id, username: bot.username, legacy: bot.id === getSetting(db, 'publisher_id') } : null,
+  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: listPublishers(db).filter(p => canAccessBot(req.admin, p.id)), publisher: bot ? { id: bot.id, username: bot.username, legacy: bot.id === getSetting(db, 'publisher_id') } : null,
     targets: db.prepare('SELECT * FROM targets WHERE bot_id=? ORDER BY id DESC').all(bot?.id || ''),
     tasks: db.prepare('SELECT id,name,status,schedule_json,next_at,updated_at,bot_id FROM tasks WHERE bot_id=? ORDER BY id DESC LIMIT 100').all(bot?.id || '') });
 }));
@@ -233,33 +243,26 @@ app.post('/api/publisher', route(async (req, res) => {
 }));
 
 app.get('/api/ffa', route(async (req, res) => {
-  requireOriginalPlayerSource(req);
-  res.json({ configured: Boolean(getSetting(db, 'ffa_token')), baseUrl: ffaBaseUrl });
+  const botId = requirePlayerBot(req);
+  res.json({ configured: Boolean(playerSourceToken(db, botId)), baseUrl: ffaBaseUrl, botId });
 }));
 
 app.post('/api/ffa/token', route(async (req, res) => {
-  requireOriginalPlayerSource(req);
+  const botId = requirePlayerBot(req);
   const token = String(req.body?.token || '').trim();
   if (!/^.{20,}$/.test(token)) throw new Error('发发娱乐 Token 格式不正确');
   await ffaCall(token, { page_index: '1', page_size: '1' });
-  setSetting(db, 'ffa_token', encryptToken(token, process.env.CONFIG_KEY));
+  savePlayerSourceToken(db, botId, encryptToken(token, process.env.CONFIG_KEY));
   res.json({ ok: true, baseUrl: ffaBaseUrl });
 }));
 
 app.post('/api/ffa/sync', route(async (req, res) => {
-  const botId = requireOriginalPlayerSource(req);
-  const token = ffaToken();
+  const botId = requirePlayerBot(req);
+  const token = ffaToken(botId);
   if (!token) throw new Error('请先配置发发娱乐 Token');
-  const rows = await fetchFfaPlayers(token), now = Date.now();
-  const upsert = db.prepare(`INSERT INTO bot_players(bot_id,telegram_id,display_name,username,platform_id,active,first_seen,last_seen,source)
-    VALUES(?,?,?,?,?,?,?,?,'ffa') ON CONFLICT(bot_id,telegram_id) DO UPDATE SET display_name=excluded.display_name,username=excluded.username,
-    platform_id=excluded.platform_id,active=excluded.active,last_seen=excluded.last_seen`);
-  const legacyUpsert = db.prepare(`INSERT INTO players(telegram_id,display_name,username,platform_id,active,first_seen,last_seen,source)
-    VALUES(?,?,?,?,?,?,?,'ffa') ON CONFLICT(telegram_id) DO UPDATE SET display_name=excluded.display_name,username=excluded.username,
-    platform_id=excluded.platform_id,active=excluded.active,last_seen=excluded.last_seen`);
-  const stats = { total: rows.length, created: 0, updated: 0 };
-  db.transaction(() => { for (const row of rows) { const existed = db.prepare('SELECT 1 FROM bot_players WHERE bot_id=? AND telegram_id=?').get(botId,row.telegramId); upsert.run(botId,row.telegramId,row.displayName,row.username,row.platformId,row.active,now,now); legacyUpsert.run(row.telegramId,row.displayName,row.username,row.platformId,row.active,now,now); existed ? stats.updated++ : stats.created++; } })();
-  res.json({ ...stats, unchanged: stats.total - stats.created - stats.updated });
+  const rows = await fetchFfaPlayers(token);
+  const stats = upsertPlayers(db, botId, rows, 'ffa');
+  res.json({total:rows.length, ...stats, unchanged:rows.length - stats.created - stats.updated});
 }));
 
 app.get('/api/players', route(async (req, res) => {
@@ -453,7 +456,7 @@ app.get('/api/sticker-image', route(async (req, res) => {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 const chatUpload = multer({ storage:multer.memoryStorage(), limits:{ fileSize:20 * 1024 * 1024 } });
 app.post('/api/players/import', upload.single('file'), route(async (req, res) => {
-  const botId = requireOriginalPlayerSource(req);
+  const botId = requirePlayerBot(req);
   const file = req.file; if (!file) throw new Error('请选择 WPS 导出的 CSV 文件');
   const rows = parseCsv(decodeCsv(file.buffer)); if (rows.length < 2) throw new Error('CSV 文件没有有效数据');
   const header = rows[0].map(value => value.trim().replace(/^\ufeff/, ''));
@@ -466,11 +469,7 @@ app.post('/api/players/import', upload.single('file'), route(async (req, res) =>
     if (unique.has(telegramId)) stats.duplicate++;
     unique.set(telegramId, { telegramId, displayName: String(values[nameIndex] || '').trim().slice(0,100), username:'', platformId:String(values[platformIndex] || '').trim().slice(0,100), active:1 });
   }
-  const now = Date.now(), upsert = db.prepare(`INSERT INTO bot_players(bot_id,telegram_id,display_name,username,platform_id,active,first_seen,last_seen,source)
-    VALUES(?,?,?,?,?,?,?,?,'csv') ON CONFLICT(bot_id,telegram_id) DO UPDATE SET display_name=excluded.display_name,platform_id=excluded.platform_id,active=excluded.active,last_seen=excluded.last_seen,source='csv'`);
-  const legacyUpsert = db.prepare(`INSERT INTO players(telegram_id,display_name,username,platform_id,active,first_seen,last_seen,source)
-    VALUES(?,?,?,?,?,?,?,'csv') ON CONFLICT(telegram_id) DO UPDATE SET display_name=excluded.display_name,platform_id=excluded.platform_id,active=excluded.active,last_seen=excluded.last_seen,source='csv'`);
-  db.transaction(() => { for (const row of unique.values()) { const existed = db.prepare('SELECT 1 FROM bot_players WHERE bot_id=? AND telegram_id=?').get(botId,row.telegramId); upsert.run(botId,row.telegramId,row.displayName,row.username,row.platformId,row.active,now,now); legacyUpsert.run(row.telegramId,row.displayName,row.username,row.platformId,row.active,now,now); existed ? stats.updated++ : stats.created++; } })();
+  Object.assign(stats, upsertPlayers(db, botId, [...unique.values()], 'csv'));
   res.json({ ...stats, unchanged: unique.size - stats.created - stats.updated });
 }));
 

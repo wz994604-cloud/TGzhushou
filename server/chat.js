@@ -47,9 +47,9 @@ export function saveIncoming(db, botId, update) {
   })();
 }
 
-export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, botApi = botCall }) {
+export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, botApi = botCall, publisherFor }) {
   const ownUrl = id => `${String(publicUrl || '').replace(/\/$/, '')}/tg/publisher/${id}`;
-  const botFor = req => scheduler.publisher(req.get('x-publisher-id') || undefined);
+  const botFor = publisherFor || (req => scheduler.publisher(req.get('x-publisher-id') || undefined));
   const currentId = req => botFor(req)?.id || '';
   const inbox = id => db.prepare('SELECT * FROM publisher_inbox WHERE bot_id=?').get(id);
   const botAvatars = new Map();
@@ -165,8 +165,8 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     res.set('Cache-Control','private, max-age=3600');res.type(type);res.send(bytes);
   }));
   app.get('/api/chat/avatars/:botId/:chatId', wrapper(async (req,res) => {
-    const bot = scheduler.publisher(String(req.params.botId));
-    if (!bot) return res.sendStatus(404);
+    const bot = botFor(req);
+    if (!bot || bot.id !== String(req.params.botId)) return res.sendStatus(404);
     const row = inbox(bot.id) && db.prepare('SELECT avatar_file_id FROM conversations WHERE bot_id=? AND chat_id=?').get(bot.id,String(req.params.chatId));
     if (!row?.avatar_file_id) return res.sendStatus(404);
     const file = await botApi(bot.token,'getFile',{ file_id:row.avatar_file_id });
