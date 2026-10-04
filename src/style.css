@@ -557,6 +557,76 @@ summary .muted {
   text-align:center;
   line-height:1.7;
 }
+.asset-upload-card,.asset-emoji-card {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+}
+.asset-upload-card h3,.asset-emoji-card h3 {
+  margin:0 0 6px;
+}
+.asset-upload-button {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:44px;
+  flex-shrink:0;
+}
+.asset-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:16px;
+  margin:20px 0;
+}
+.asset-card {
+  min-width:0;
+  overflow:hidden;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--bg);
+  box-shadow:var(--shadow);
+}
+.asset-preview {
+  display:grid;
+  place-items:center;
+  min-height:150px;
+  background:var(--subtle);
+  color:var(--muted);
+  font-size:32px;
+}
+.asset-preview img {
+  display:block;
+  width:100%;
+  height:150px;
+  object-fit:cover;
+}
+.asset-card-body {
+  display:grid;
+  gap:6px;
+  padding:14px;
+}
+.asset-card-body strong,.asset-card-body small {
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.asset-card-body small {
+  color:var(--muted);
+}
+.asset-card-body .wrap-actions {
+  margin-top:6px;
+}
+@media(max-width:640px) {
+  .asset-upload-card,.asset-emoji-card {
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .asset-upload-button {
+    width:100%;
+  }
+}
 .error-state,.is-error {
   color:#b42318;
 }
@@ -1134,10 +1204,6 @@ dialog::backdrop {
   color:#91a0b2;
   margin-top:5px;
   overflow-wrap:anywhere;
-}
-.nav-disabled {
-  opacity:.45;
-  cursor:not-allowed;
 }
 /* Desktop pages have explicit structures, not positional overrides. */
 .editor-workbench {

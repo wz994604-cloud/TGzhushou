@@ -1,6 +1,6 @@
 // Presentation only. Existing form nodes keep their IDs, values and API handlers.
 const $ = id => document.getElementById(id);
-const pages = { chat:'聊天', editor:'编写活动', players:'联系人 / 用户', tasks:'自动化任务', logs:'发布记录', settings:'系统设置' };
+const pages = { chat:'聊天', editor:'编写活动', assets:'素材管理', players:'联系人 / 用户', tasks:'自动化任务', logs:'发布记录', settings:'系统设置' };
 const paths = {
   chat:'M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-1 1v-9a9 9 0 0 1 18 0Z',
   editor:'m15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6Z',
@@ -8,6 +8,7 @@ const paths = {
   tasks:'M9 5H5v16h14V5h-4M9 3h6v4H9V3Zm-2 9 2 2 4-4m2 7h2',
   logs:'M3 12a9 9 0 1 0 3-6M3 3v5h5m4-1v6l4 2',
   settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2-6h4l1 3 3 1 3 2-1 4 1 4-3 2-3 1-1 3h-4l-1-3-3-1-3-2 1-4-1-4 3-2 3-1 1-3Z',
+  assets:'M4 5a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Zm4 7 2-2 3 3 2-2 3 3',
   search:'m21 21-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z',
   back:'m15 5-7 7 7 7', close:'m6 6 12 12M6 18 18 6',
   info:'M12 11v6m0-10v1M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z',
@@ -56,7 +57,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     publisher.querySelector('label').classList.add('sr-only');
     top.append(back,title,publisher); workspace.replaceChildren(top,content);
     const nav=node('nav','mini-nav'); nav.setAttribute('aria-label','小程序导航');
-    for(const [id,label] of [['chat','聊天'],['editor','编写'],['players','用户'],['tasks','任务'],['settings','设置']]) {
+    for(const [id,label] of [['chat','聊天'],['editor','编写'],['assets','素材'],['players','用户'],['tasks','任务'],['settings','设置']]) {
       const b=node('button','',`${icon(id)}<span>${label}</span>`); b.type='button'; b.dataset.tab=id; b.onclick=()=>navigate(id); nav.append(b);
     }
     workspace.append(nav);
@@ -69,7 +70,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     const railNav=rail.querySelector('.rail-nav');
     railNav.prepend(node('div','rail-group-label','工作空间'));
     railNav.querySelector('[data-rail-tab="tasks"]').before(node('div','rail-group-label','发布与管理'));
-    railNav.querySelector('.nav-disabled').before(node('div','rail-group-label','更多功能'));
+    railNav.querySelector('[data-rail-tab="assets"]').before(node('div','rail-group-label','内容管理'));
     railNav.querySelectorAll('button').forEach(b=>{
       b.querySelector('.nav-glyph').innerHTML=icon(b.dataset.railTab||'grid');
       if(b.dataset.railTab) b.onclick=()=>{navigate(b.dataset.railTab);workspace.classList.remove('navigation-open');};
