@@ -14,8 +14,8 @@ async function login(page,username='wz994604',password='test-owner-password'){
  await page.route('https://telegram.org/js/telegram-web-app.js',r=>r.fulfill({contentType:'application/javascript',body:'window.Telegram={WebApp:{initData:"",ready(){},expand(){}}};'}));
  await page.goto('/');await expect(page.locator('#locked')).toBeVisible();await page.locator('#loginUsername').fill(username);await page.locator('#loginPassword').fill(password);await page.locator('#loginForm button').click();await expect(page.locator('#workspace')).toBeVisible();
 }
-async function switchTo(page,id){if((await page.locator('#publisherSelect').inputValue())===id)return;await page.locator('#publisherSelect').selectOption(id);await expect(page.locator('#identity')).toContainText(id===first?'local_test_publisher':'local_test_second');await expect(page.locator('#playerStats')).toContainText('第 1 页');}
-async function users(page){await page.locator('[data-rail-tab="players"]').click();await expect(page.locator('#players')).toBeVisible();if(!(await page.locator('#usersPanel').evaluate(n=>n.open)))await page.locator('#usersPanel summary').click();await expect(page.locator('#playerStats')).toContainText('第 1 页');}
+async function switchTo(page,id){if(await page.locator('#publisherSelect').inputValue()===id)return;await page.locator('#publisherSelect').selectOption(id);await expect(page.locator('#identity')).toContainText(id===first?'local_test_publisher':'local_test_second');await expect(page.locator('#playerStats')).toContainText('第 1 页');}
+async function users(page){await page.locator('[data-rail-tab="players"]').click();await expect(page.locator('#players')).toBeVisible();if(!await page.locator('#usersPanel').evaluate(n=>n.open))await page.locator('#usersPanel summary').click();await expect(page.locator('#playerStats')).toContainText('第 1 页');}
 
 test('API: every bot imports/syncs independently; search/pages/IDs/sending and account scopes stay isolated',async({request})=>{
  const h=await bind(request);
@@ -33,7 +33,7 @@ test('API: every bot imports/syncs independently; search/pages/IDs/sending and a
  expect((await request.post('/api/ffa/sync',{headers:h(second)})).status()).toBe(200);
  expect((await search(first,'80001')).rows[0].display_name).toBe('A common');expect((await search(second,'80001')).rows[0].display_name).toBe('B common');
  const ids=await (await request.get('/api/players/ids',{headers:h(second)})).json();expect(ids.rows.some(p=>p.telegram_id==='81001')).toBe(false);
- await Promise.all([await upload(request,h,first,[['98001','A concurrent']]),await upload(request,h,second,[['98001','B concurrent']])]);
+ await Promise.all([upload(request,h,first,[['98001','A concurrent']]),upload(request,h,second,[['98001','B concurrent']])]);
  expect((await search(first,'98001')).rows[0].display_name).toBe('A concurrent');expect((await search(second,'98001')).rows[0].display_name).toBe('B concurrent');
  const payload=playerIds=>({name:'Isolated fake private message',delta:{ops:[{insert:'synthetic test only\n'}]},buttons:[],playerIds});
  expect((await request.post('/api/broadcasts',{headers:h(second),data:payload(['80001','81001'])})).status()).toBe(400);

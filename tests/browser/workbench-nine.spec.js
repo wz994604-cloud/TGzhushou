@@ -44,7 +44,7 @@ async function setup(page,{mini=false,empty=false}={}){
  await page.goto('/');await expect(page.locator('#workspace')).toBeVisible();await expect(page.locator('#enableInbox')).toBeVisible();
  return {calls,errors};
 }
-async function go(page,id){await page.locator(`[data-${(await page.locator('#workspace').evaluate(n=>n.classList.contains('mini-shell')))?'tab':'rail-tab'}="${id}"]`).click();await expect(page.locator('#'+id)).toBeVisible();}
+async function go(page,id){await page.locator(`[data-${await page.locator('#workspace').evaluate(n=>n.classList.contains('mini-shell'))?'tab':'rail-tab'}="${id}"]`).click();await expect(page.locator('#'+id)).toBeVisible();}
 async function noOverflow(page){expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
 
 test('1 chat: real selection, one date per day, bounded composer/history, opt-in details and takeover request',async({page})=>{
