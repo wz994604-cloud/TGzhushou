@@ -8,7 +8,13 @@ const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part 
 export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
   // Old sessions have no proven account identity and never receive owner privileges.
   db.transaction(() => {
-    if (!db.prepare('PRAGMA table_info(browser_sessions)').all().some(column => column.name === 'login_username')) {
+    let hasLoginUsername;
+    try {
+      hasLoginUsername = db.prepare("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='browser_sessions' AND column_name='login_username'").all().length > 0;
+    } catch {
+      hasLoginUsername = db.prepare('PRAGMA table_info(browser_sessions)').all().some(column => column.name === 'login_username');
+    }
+    if (!hasLoginUsername) {
       db.exec("ALTER TABLE browser_sessions ADD COLUMN login_username TEXT NOT NULL DEFAULT ''");
       db.prepare('UPDATE browser_sessions SET expires_at=0').run();
     }
