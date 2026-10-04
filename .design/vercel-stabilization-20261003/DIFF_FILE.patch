@@ -1,0 +1,712 @@
+diff --git a/README.md b/README.md
+index e2c573e..eec8ea3 100644
+--- a/README.md
++++ b/README.md
+@@ -17,7 +17,7 @@
+ 
+ ## 定时任务
+ 
+-使用 cron-job.org 每 5 分钟调用：`POST https://<PUBLIC_URL>/api/cron/tick`，请求头 `Authorization: Bearer <CRON_SECRET>`。接口执行一次幂等任务处理并返回 `{ "ok": true }`。
++使用 cron-job.org **每 1 分钟**调用：`POST https://<PUBLIC_URL>/api/cron/tick`，请求头 `Authorization: Bearer <CRON_SECRET>`。Vercel 会先确认接收，再在函数后台执行一批发送；每批最多 5 条，剩余消息由后续调用继续处理。首次调用还会为入口机器人设置菜单和 Webhook。
+ 
+ ## 验证
+ 
+diff --git a/docs/CHANGES.md b/docs/CHANGES.md
+index a602450..8d94b54 100644
+--- a/docs/CHANGES.md
++++ b/docs/CHANGES.md
+@@ -1,3 +1,5 @@
+ # 变更记录
+ 
+ 2026-10-03：运行时从本地 SQLite/Railway 迁移到 Turso、Vercel Functions 和 Vercel Blob。旧 SQLite 数据不迁移；空 Turso 由 `server/schema.sql` 初始化。
++
++2026-10-03：修复 Turso 事务实际未提交/回滚的问题，Schema 改为批量初始化；私信入队改为原子批量写入。Vercel 发送与入口机器人回复使用函数后台任务，外部 Cron 每分钟处理最多 5 条并自动配置入口 Webhook；相关数据库、批量队列和消息测试已更新。
+diff --git a/package-lock.json b/package-lock.json
+index 89ad89f..e35b2c1 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -10,6 +10,7 @@
+       "dependencies": {
+         "@libsql/client": "0.18.0",
+         "@vercel/blob": "2.8.0",
++        "@vercel/functions": "^3.9.11",
+         "express": "^5.2.1",
+         "multer": "^2.4.0",
+         "quill": "2.0.2",
+@@ -1109,6 +1110,44 @@
+         "node": ">= 18"
+       }
+     },
++    "node_modules/@vercel/functions": {
++      "version": "3.9.11",
++      "resolved": "https://registry.npmjs.org/@vercel/functions/-/functions-3.9.11.tgz",
++      "integrity": "sha512-DbqKqcbUHGBTYgHZieSNDuF1/L2iSPZV0OGm0Xkm/t+s61lFk4VX8yGQ22Og3WYGxypW1l4Elx1NP8BL928u8Q==",
++      "license": "Apache-2.0",
++      "dependencies": {
++        "@vercel/oidc": "4.0.0"
++      },
++      "engines": {
++        "node": ">= 20"
++      },
++      "peerDependencies": {
++        "@aws-sdk/credential-provider-web-identity": "*",
++        "ws": ">=8"
++      },
++      "peerDependenciesMeta": {
++        "@aws-sdk/credential-provider-web-identity": {
++          "optional": true
++        },
++        "ws": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@vercel/functions/node_modules/@vercel/oidc": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/@vercel/oidc/-/oidc-4.0.0.tgz",
++      "integrity": "sha512-ko6ATeRUlHZMB5hLFdC7+/Q1dI2f3NX3gZHxtpALdkxurwjD5HFHGWYF+4o+4SF0E47jg6KzcHknmRpHcKgJ5A==",
++      "license": "Apache-2.0",
++      "dependencies": {
++        "@vercel/cli-config": "0.3.1",
++        "@vercel/cli-exec": "1.0.1",
++        "jose": "^5.9.6"
++      },
++      "engines": {
++        "node": ">= 20"
++      }
++    },
+     "node_modules/@vercel/oidc": {
+       "version": "3.8.10",
+       "resolved": "https://registry.npmjs.org/@vercel/oidc/-/oidc-3.8.10.tgz",
+diff --git a/package.json b/package.json
+index 6326248..bdd3c6c 100644
+--- a/package.json
++++ b/package.json
+@@ -16,6 +16,7 @@
+   "dependencies": {
+     "@libsql/client": "0.18.0",
+     "@vercel/blob": "2.8.0",
++    "@vercel/functions": "^3.9.11",
+     "express": "^5.2.1",
+     "multer": "^2.4.0",
+     "quill": "2.0.2",
+diff --git a/server/db.js b/server/db.js
+index 6bfcfb2..6041ea0 100644
+--- a/server/db.js
++++ b/server/db.js
+@@ -3,10 +3,130 @@ import fs from 'node:fs';
+ import path from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { Worker } from 'node:worker_threads';
+-const decoder=new TextDecoder();const transport=new SharedArrayBuffer(8*1024*1024+8);const signal=new Int32Array(transport,0,2);const payload=new Uint8Array(transport,8);
+-function splitStatements(sql){const out=[];let start=0,quote='',depth=0,word='';for(let i=0;i<sql.length;i++){const c=sql[i];if(quote){if(c===quote&&sql[i-1]!=='\\')quote='';continue}if(c==="'"||c==='"'||c==='`'){quote=c;continue}if(/[A-Za-z_]/.test(c)){word+=c.toUpperCase();continue}if(word){if(word==='BEGIN')depth++;else if(word==='END'&&depth>0)depth--;word=''}if(c===';'&&depth===0){const stmt=sql.slice(start,i).trim();if(stmt)out.push(stmt);start=i+1}}const tail=sql.slice(start).trim();if(tail)out.push(tail);return out}
+-export function openDatabase(){const url=String(process.env.TURSO_DATABASE_URL||'');const authToken=String(process.env.TURSO_AUTH_TOKEN||'');if(!/^libsql:\/\//.test(url)&&!/^https?:\/\//.test(url))throw new Error('TURSO_DATABASE_URL 未配置或格式不正确');if(!authToken)throw new Error('TURSO_AUTH_TOKEN 未配置');const worker=new Worker(new URL('./turso-worker.js',import.meta.url),{workerData:{url,authToken,transport}});let id=0;const execute=(sql,args=[])=>{Atomics.store(signal,0,++id);Atomics.store(signal,1,0);worker.postMessage({sql,args});Atomics.wait(signal,1,0);const result=JSON.parse(decoder.decode(payload.subarray(0,Atomics.load(signal,1))));if(result.error)throw new Error(result.error);return result;};const schema=fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'schema.sql'),'utf8');for(const statement of splitStatements(schema))execute(statement);return {prepare(sql){return {get(...args){return execute(sql,args).rows[0]},all(...args){return execute(sql,args).rows},run(...args){const r=execute(sql,args);return {changes:r.rowsAffected||0,lastInsertRowid:r.lastInsertRowid}}}},exec(sql){for(const statement of splitStatements(String(sql)))execute(statement)},transaction(fn){return(...args)=>fn(...args)},close(){worker.terminate()}}}
+-function encryptionKey(raw){const key=Buffer.from(String(raw||''),'base64');if(key.length!==32)throw new Error('CONFIG_KEY 必须是 32 字节的 Base64 密钥');return key}
+-export function encryptToken(token,rawKey){const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv('aes-256-gcm',encryptionKey(rawKey),iv);const ciphertext=Buffer.concat([cipher.update(token,'utf8'),cipher.final()]);return [iv,cipher.getAuthTag(),ciphertext].map(p=>p.toString('base64url')).join('.')}
+-export function decryptToken(value,rawKey){const [iv,tag,ciphertext]=String(value||'').split('.').map(p=>Buffer.from(p,'base64url'));if(!iv||iv.length!==12||!tag||tag.length!==16||!ciphertext)throw new Error('发布机器人 Token 配置损坏');const decipher=crypto.createDecipheriv('aes-256-gcm',encryptionKey(rawKey),iv);decipher.setAuthTag(tag);return Buffer.concat([decipher.update(ciphertext),decipher.final()]).toString('utf8')}
+-export const getSetting=(db,key)=>db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value||'';export const setSetting=(db,key,value)=>db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,String(value));
++
++const decoder = new TextDecoder();
++const queryTimeoutMs = 25_000;
++
++export function splitStatements(sql) {
++  const statements = [];
++  let start = 0, quote = '', depth = 0, word = '';
++  for (let index = 0; index < sql.length; index++) {
++    const char = sql[index];
++    if (quote) {
++      if (char === quote && sql[index - 1] !== '\\') quote = '';
++      continue;
++    }
++    if (char === "'" || char === '"' || char === '`') { quote = char; continue; }
++    if (/[A-Za-z_]/.test(char)) { word += char.toUpperCase(); continue; }
++    if (word) {
++      if (word === 'BEGIN') depth++;
++      else if (word === 'END' && depth > 0) depth--;
++      word = '';
++    }
++    if (char === ';' && depth === 0) {
++      const statement = sql.slice(start, index).trim();
++      if (statement) statements.push(statement);
++      start = index + 1;
++    }
++  }
++  const tail = sql.slice(start).trim();
++  if (tail) statements.push(tail);
++  return statements;
++}
++
++export function openDatabase(options = {}) {
++  const localFile = typeof options === 'object' && options.localFile;
++  const url = localFile ? `file:${localFile}` : String(process.env.TURSO_DATABASE_URL || '');
++  const authToken = localFile ? undefined : String(process.env.TURSO_AUTH_TOKEN || '');
++  if (!localFile && !/^libsql:\/\//.test(url) && !/^https?:\/\//.test(url))
++    throw new Error('TURSO_DATABASE_URL 未配置或格式不正确');
++  if (!localFile && !authToken) throw new Error('TURSO_AUTH_TOKEN 未配置');
++  const transport = new SharedArrayBuffer(8 * 1024 * 1024 + 12);
++  const signal = new Int32Array(transport, 0, 3);
++  const payload = new Uint8Array(transport, 12);
++  const worker = new Worker(new URL('./turso-worker.js', import.meta.url), {
++    workerData: { url, authToken, transport }
++  });
++  worker.unref();
++  let sequence = 0, transactionDepth = 0, closed = false;
++
++  function execute(operation, sql = '', args = []) {
++    if (closed) throw new Error('数据库连接已关闭');
++    const id = ++sequence;
++    Atomics.store(signal, 1, 0);
++    Atomics.store(signal, 2, 0);
++    worker.postMessage({ id, operation, sql, args });
++    const state = Atomics.wait(signal, 1, 0, queryTimeoutMs);
++    if (state === 'timed-out' || Atomics.load(signal, 1) !== id) {
++      closed = true;
++      worker.terminate();
++      throw new Error('数据库查询超时');
++    }
++    const result = JSON.parse(decoder.decode(payload.subarray(0, Atomics.load(signal, 2))));
++    if (result.error) throw new Error(result.error);
++    return result;
++  }
++
++  const schema = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql'), 'utf8');
++  try {
++    const ready = execute('execute', "SELECT name FROM sqlite_master WHERE type='table' AND name='settings'").rows.length > 0;
++    if (!ready) execute('batch', '', splitStatements(schema));
++  }
++  catch (error) { closed = true; worker.terminate(); throw error; }
++
++  return {
++    prepare(sql) { return {
++      get(...args) { return execute('execute', sql, args).rows[0]; },
++      all(...args) { return execute('execute', sql, args).rows; },
++      run(...args) {
++        const result = execute('execute', sql, args);
++        return { changes: result.rowsAffected || 0, lastInsertRowid: result.lastInsertRowid };
++      }
++    }; },
++    exec(sql) { for (const statement of splitStatements(String(sql))) execute('execute', statement); },
++    transaction(fn) { return (...args) => {
++      const outermost = transactionDepth === 0;
++      if (outermost) execute('begin');
++      transactionDepth++;
++      try {
++        const result = fn(...args);
++        if (result instanceof Promise) throw new Error('数据库事务回调必须同步执行');
++        if (outermost) execute('commit');
++        return result;
++      } catch (error) {
++        if (outermost && !closed) {
++          try { execute('rollback'); } catch { /* retain original error */ }
++        }
++        throw error;
++      } finally {
++        transactionDepth--;
++      }
++    }; },
++    async close() {
++      if (closed) return;
++      try { execute('close'); }
++      finally { closed = true; await worker.terminate(); }
++    }
++  };
++}
++
++function encryptionKey(raw) {
++  const key = Buffer.from(String(raw || ''), 'base64');
++  if (key.length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节的 Base64 密钥');
++  return key;
++}
++export function encryptToken(token, rawKey) {
++  const iv = crypto.randomBytes(12), cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(rawKey), iv);
++  const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
++  return [iv, cipher.getAuthTag(), ciphertext].map(part => part.toString('base64url')).join('.');
++}
++export function decryptToken(value, rawKey) {
++  const [iv, tag, ciphertext] = String(value || '').split('.').map(part => Buffer.from(part, 'base64url'));
++  if (!iv || iv.length !== 12 || !tag || tag.length !== 16 || !ciphertext)
++    throw new Error('发布机器人 Token 配置损坏');
++  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(rawKey), iv);
++  decipher.setAuthTag(tag);
++  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
++}
++export const getSetting = (db, key) => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value || '';
++export const setSetting = (db, key, value) => db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));
+diff --git a/server/index.js b/server/index.js
+index c89e4c7..0e31ce5 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -2,6 +2,7 @@ import { sentActions } from './sent-actions.js';
+ import express from 'express';
+ import sharp from 'sharp';
+ import { put } from '@vercel/blob';
++import { waitUntil } from '@vercel/functions';
+ import { createAssetCache } from './asset-cache.js';
+ import multer from 'multer';
+ import fs from 'node:fs/promises';
+@@ -25,8 +26,16 @@ const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS);
+ if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
+ if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
+ const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
+-const db = openDatabase();
++const db = openDatabase(process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_FILE
++  ? { localFile:process.env.TEST_DATABASE_FILE } : {});
+ const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
++async function kickScheduler(label) {
++  if (process.env.VERCEL === '1') {
++    waitUntil(Promise.resolve().then(() => scheduler.tick()).catch(error => console.error(label, safeTelegramError(error))));
++    return;
++  }
++  await scheduler.tick();
++}
+ const app = express();
+ const browserAuth = createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
+   username: process.env.ADMIN_LOGIN_USERNAME || 'admin',
+@@ -47,22 +56,53 @@ app.post('/tg/entry', async (req, res) => {
+   const actual = Buffer.from(String(req.get('x-telegram-bot-api-secret-token') || ''));
+   const expected = Buffer.from(crypto.createHash('sha256').update(`entry:${process.env.ENTRY_BOT_TOKEN}`).digest('hex'));
+   if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return res.sendStatus(403);
+-  res.sendStatus(200);
+   const chat = req.body?.message?.chat;
+-  if (chat?.type === 'private' && adminIds.includes(String(req.body.message.from?.id)) && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+-    const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
+-    if (base) botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } })
+-      .catch(error => console.error('Entry bot:', safeTelegramError(error)));
+-  }
+-  if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+-    const link = browserAuth.issueLink(req.body.message.from?.id);
+-    if (link) botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
+-      text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } })
+-      .catch(error => console.error('Browser login:',safeTelegramError(error)));
++  const handleEntry = async () => {
++    if (chat?.type === 'private' && adminIds.includes(String(req.body.message.from?.id)) && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
++      const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
++      if (base) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } });
++    }
++    if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
++      const link = browserAuth.issueLink(req.body.message.from?.id);
++      if (link) await botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
++        text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } });
++    }
++  };
++  if (process.env.VERCEL === '1') {
++    waitUntil(Promise.resolve().then(handleEntry).catch(error => console.error('Entry bot:', safeTelegramError(error))));
++    return res.sendStatus(200);
+   }
++  try { await handleEntry(); } catch (error) { console.error('Entry bot:', safeTelegramError(error)); }
++  res.sendStatus(200);
+ });
+ 
+-app.post('/api/cron/tick', async (req,res,next) => { try { const auth=String(req.get('authorization')||''); if(!process.env.CRON_SECRET || auth !== ('Bearer ' + process.env.CRON_SECRET)) return res.sendStatus(401); await scheduler.tick(); res.json({ok:true}); } catch(error){ next(error); } });
++async function ensureEntryBot() {
++  const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
++  if (!base) return;
++  const webhookUrl = `${base}/tg/entry`;
++  const secret = crypto.createHash('sha256').update(`entry:${process.env.ENTRY_BOT_TOKEN}`).digest('hex');
++  const marker = `${webhookUrl}|${secret}`;
++  if (getSetting(db, 'entry_webhook_config') === marker) return;
++  await botCall(process.env.ENTRY_BOT_TOKEN, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '打开活动后台', web_app: { url: base } } });
++  await botCall(process.env.ENTRY_BOT_TOKEN, 'setWebhook', { url: webhookUrl,
++    secret_token: secret, allowed_updates: ['message'] });
++  setSetting(db, 'entry_webhook_config', marker);
++}
++
++app.post('/api/cron/tick', async (req,res,next) => { try {
++  const auth = Buffer.from(String(req.get('authorization') || ''));
++  const expected = Buffer.from(`Bearer ${process.env.CRON_SECRET || ''}`);
++  if (!process.env.CRON_SECRET || auth.length !== expected.length || !crypto.timingSafeEqual(auth, expected)) return res.sendStatus(401);
++  const work = async () => {
++    try { await ensureEntryBot(); } catch (error) { console.error('Entry bot setup:', safeTelegramError(error)); }
++    await scheduler.tick();
++  };
++  if (process.env.VERCEL === '1') {
++    waitUntil(Promise.resolve().then(work).catch(error => console.error('Cron tick:', safeTelegramError(error))));
++    return res.json({ok:true,queued:true});
++  }
++  await work(); res.json({ok:true});
++} catch(error){ next(error); } });
+ 
+ app.use('/api', (req, res, next) => {
+   try {
+@@ -249,7 +289,7 @@ app.post('/api/broadcasts', route(async (req, res) => {
+   const players = db.prepare(`SELECT telegram_id AS telegramId,display_name AS displayName FROM bot_players WHERE bot_id=? AND active=1 AND telegram_id IN (${placeholders})`).all(bot.id,...ids);
+   if (players.length !== ids.length) throw new Error('部分用户不存在或已停用，请刷新名单后重试');
+   const broadcastId = scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players }, bot.id);
+-  scheduler.tick().catch(error => console.error('Broadcast tick:', safeTelegramError(error)));
++  await kickScheduler('Broadcast tick:');
+   res.json({ id: broadcastId, total: players.length });
+ }));
+ 
+@@ -551,7 +591,7 @@ app.post('/api/tasks/:id/status', route(async (req, res) => {
+ 
+ app.post('/api/tasks/:id/send', route(async (req, res) => {
+   const runId = scheduler.queueNow(Number(req.params.id), req.body?.requestKey, selectedBotId(req));
+-  scheduler.tick().catch(error => console.error('Immediate tick:', safeTelegramError(error)));
++  await kickScheduler('Immediate tick:');
+   res.json({ runId });
+ }));
+ 
+@@ -602,9 +642,7 @@ const server = app.listen(port, '0.0.0.0', async () => {
+     console.log('Entry bot menu and webhook ready');
+   } catch (error) { console.error('Entry bot setup:', safeTelegramError(error)); }
+ });
+-function shutdown() { scheduler.stop(); server.close(() => { db.close(); process.exit(0); }); setTimeout(() => process.exit(0), 25000).unref(); }
++function shutdown() { scheduler.stop(); server.close(async () => { await db.close(); process.exit(0); }); setTimeout(() => process.exit(0), 25000).unref(); }
+ process.on('SIGTERM', shutdown);
+ process.on('SIGINT', shutdown);
+ }
+-
+-
+diff --git a/server/scheduler.js b/server/scheduler.js
+index 3f45e03..987d9ac 100644
+--- a/server/scheduler.js
++++ b/server/scheduler.js
+@@ -40,11 +40,16 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
+     const players = Array.isArray(item.players) ? item.players : [];
+     if (!players.length || players.length > 100000) throw new Error('请选择 1–100000 个有效用户');
+     const now = Date.now();
+-    const result = db.prepare(`INSERT INTO broadcasts(name,delta_json,buttons_json,media_id,bot_id,status,total_count,created_at)
+-      VALUES(?,?,?,?,?,'PENDING',?,?)`).run(item.name, item.deltaJson, item.buttonsJson, item.mediaId || null, bot.id, players.length, now);
+-    const add = db.prepare('INSERT INTO broadcast_deliveries(broadcast_id,telegram_id,display_name,status) VALUES(?,?,?,?)');
+-    db.transaction(() => { for (const player of players) add.run(result.lastInsertRowid, String(player.telegramId), String(player.displayName || ''), 'PENDING'); })();
+-    return Number(result.lastInsertRowid);
++    return db.transaction(() => {
++      const result = db.prepare(`INSERT INTO broadcasts(name,delta_json,buttons_json,media_id,bot_id,status,total_count,created_at)
++        VALUES(?,?,?,?,?,'PENDING',?,?)`).run(item.name, item.deltaJson, item.buttonsJson, item.mediaId || null, bot.id, players.length, now);
++      for (let offset = 0; offset < players.length; offset += 100) {
++        const chunk = players.slice(offset, offset + 100);
++        const values = chunk.flatMap(player => [result.lastInsertRowid, String(player.telegramId), String(player.displayName || '')]);
++        db.prepare(`INSERT INTO broadcast_deliveries(broadcast_id,telegram_id,display_name,status) VALUES ${chunk.map(() => "(?,?,?,'PENDING')").join(',')}`).run(...values);
++      }
++      return Number(result.lastInsertRowid);
++    })();
+   }
+ 
+   function queueDue(now) {
+@@ -123,20 +128,28 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
+     }
+   }
+ 
+-  async function tick() {
++  async function tick({ maxDeliveries = 5, maxRuntimeMs = 20_000 } = {}) {
+     if (running) return;
+     running = true;
+     try {
+       const now = Date.now();
++      const deadline = now + maxRuntimeMs;
++      let sent = 0;
+       db.prepare("UPDATE deliveries SET status='UNKNOWN',error_text='发送过程被中断，请到 Telegram 核实；未自动重发',completed_at=? WHERE status='SENDING' AND started_at<?")
+         .run(now, now - 300_000);
+       queueDue(now);
+       const rows = db.prepare(`SELECT d.*,r.bot_id,r.delta_json,r.buttons_json,r.media_id FROM deliveries d
+-        JOIN runs r ON r.id=d.run_id WHERE d.status='PENDING' ORDER BY d.id LIMIT 20`).all();
+-      for (const row of rows) await sendOne(row, now);
++        JOIN runs r ON r.id=d.run_id WHERE d.status='PENDING' ORDER BY d.id LIMIT ?`).all(maxDeliveries);
++      for (const row of rows) {
++        if (sent >= maxDeliveries || Date.now() > deadline - 5_000) break;
++        await sendOne(row, Date.now()); sent++;
++      }
+       const broadcasts = db.prepare(`SELECT d.*,b.bot_id,b.delta_json,b.buttons_json,b.media_id FROM broadcast_deliveries d
+-        JOIN broadcasts b ON b.id=d.broadcast_id WHERE d.status='PENDING' ORDER BY d.id LIMIT 20`).all();
+-      for (const row of broadcasts) await sendBroadcastOne(row, now);
++        JOIN broadcasts b ON b.id=d.broadcast_id WHERE d.status='PENDING' ORDER BY d.id LIMIT ?`).all(maxDeliveries - sent);
++      for (const row of broadcasts) {
++        if (sent >= maxDeliveries || Date.now() > deadline - 5_000) break;
++        await sendBroadcastOne(row, Date.now()); sent++;
++      }
+       db.prepare(`UPDATE broadcasts SET status='RUNNING',started_at=COALESCE(started_at,?) WHERE status='PENDING' AND EXISTS
+         (SELECT 1 FROM broadcast_deliveries d WHERE d.broadcast_id=broadcasts.id AND d.status IN ('SENDING','SUCCESS','FAILED','UNKNOWN'))`).run(now);
+       db.prepare(`UPDATE broadcasts SET status='COMPLETED',completed_at=? WHERE status IN ('PENDING','RUNNING') AND NOT EXISTS
+@@ -149,4 +162,4 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
+   function start() { return tick(); }
+   function stop() { if (timer) clearInterval(timer); timer = null; }
+   return { start, stop, tick, queueNow, queueDue, queueBroadcast, publisher };
+-}
+\ No newline at end of file
++}
+diff --git a/server/turso-worker.js b/server/turso-worker.js
+index e975410..87310f1 100644
+--- a/server/turso-worker.js
++++ b/server/turso-worker.js
+@@ -1 +1,54 @@
+-import {parentPort,workerData} from 'node:worker_threads';import {createClient} from '@libsql/client';const client=createClient({url:workerData.url,authToken:workerData.authToken});const signal=new Int32Array(workerData.transport,0,2);const payload=new Uint8Array(workerData.transport,8);const enc=v=>JSON.stringify(v,(_,x)=>typeof x==='bigint'?Number(x):x);parentPort.on('message',async({sql,args})=>{try{const r=await client.execute({sql,args});const b=new TextEncoder().encode(enc({rows:r.rows,rowsAffected:r.rowsAffected,lastInsertRowid:r.lastInsertRowid}));payload.set(b);Atomics.store(signal,1,b.byteLength);Atomics.notify(signal,1)}catch(e){const b=new TextEncoder().encode(enc({error:e.message||String(e)}));payload.set(b);Atomics.store(signal,1,b.byteLength);Atomics.notify(signal,1)}});
++import { parentPort, workerData } from 'node:worker_threads';
++import { createClient } from '@libsql/client';
++
++const client = createClient({ url: workerData.url, authToken: workerData.authToken });
++const signal = new Int32Array(workerData.transport, 0, 3);
++const payload = new Uint8Array(workerData.transport, 12);
++const encoder = new TextEncoder();
++let transaction = null;
++
++function respond(id, result) {
++  let bytes = encoder.encode(JSON.stringify(result, (_, value) =>
++    typeof value === 'bigint' ? Number(value) : value));
++  if (bytes.length > payload.length)
++    bytes = encoder.encode(JSON.stringify({ error: '数据库查询结果过大' }));
++  payload.set(bytes);
++  Atomics.store(signal, 2, bytes.length);
++  Atomics.store(signal, 1, id);
++  Atomics.notify(signal, 1);
++}
++
++parentPort.on('message', async ({ id, operation, sql, args }) => {
++  try {
++    if (operation === 'close') {
++      if (transaction) await transaction.rollback();
++      client.close();
++      return respond(id, { ok: true });
++    }
++    if (operation === 'begin') {
++      if (transaction) throw new Error('数据库事务已开始');
++      transaction = await client.transaction('write');
++      return respond(id, { ok: true });
++    }
++    if (operation === 'batch') {
++      if (transaction) throw new Error('事务内不支持批量 schema 初始化');
++      await client.batch(args, 'write');
++      return respond(id, { ok: true });
++    }
++    if (operation === 'commit' || operation === 'rollback') {
++      if (!transaction) throw new Error('数据库事务不存在');
++      const current = transaction;
++      try { await current[operation](); }
++      finally { transaction = null; }
++      return respond(id, { ok: true });
++    }
++    const result = await (transaction || client).execute({ sql, args });
++    respond(id, {
++      rows: result.rows,
++      rowsAffected: result.rowsAffected,
++      lastInsertRowid: result.lastInsertRowid
++    });
++  } catch (error) {
++    respond(id, { error: error?.message || String(error) });
++  }
++});
+diff --git a/tests/broadcast.test.js b/tests/broadcast.test.js
+index c7346fa..0b322aa 100644
+--- a/tests/broadcast.test.js
++++ b/tests/broadcast.test.js
+@@ -9,7 +9,7 @@ import { configKey, publisherToken } from './helpers.js';
+ 
+ test('broadcast queues selected players, sends privately and records per-player results', async t => {
+   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-broadcast-'));
+-  const db = openDatabase(dir); t.after(() => { db.close(); fs.rmSync(dir, { recursive:true, force:true }); });
++  const db = openDatabase({localFile:path.join(dir,'test.db')}); t.after(async () => { await db.close(); fs.rmSync(dir, { recursive:true, force:true }); });
+   setSetting(db, 'publisher_token', encryptToken(publisherToken, configKey)); setSetting(db, 'publisher_id', '222222');
+   const now = Date.now();
+   db.prepare("INSERT INTO players(telegram_id,display_name,first_seen,last_seen) VALUES('8547433574','涵涵',?,?)").run(now, now);
+@@ -24,3 +24,35 @@ test('broadcast queues selected players, sends privately and records per-player
+   assert.deepEqual(db.prepare('SELECT status FROM broadcast_deliveries ORDER BY id').all().map(row => row.status), ['SUCCESS','SUCCESS']);
+   assert.equal(db.prepare('SELECT status FROM broadcasts WHERE id=?').get(id).status, 'COMPLETED');
+ });
++
++test('cron ticks drain a broadcast in bounded batches', async t => {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-batches-'));
++  const db = openDatabase({localFile:path.join(dir,'test.db')});
++  t.after(async () => { await db.close(); fs.rmSync(dir, {recursive:true,force:true}); });
++  setSetting(db, 'publisher_token', encryptToken(publisherToken, configKey));
++  setSetting(db, 'publisher_id', '222222');
++  const calls = [];
++  const scheduler = createScheduler(db, { configKey }, {
++    botCall: async (_token, method, payload) => { if (method === 'sendMessage') calls.push(payload.chat_id); return {message_id:calls.length}; },
++    sendPhoto: async () => { throw new Error('unexpected media'); }
++  });
++  const players = Array.from({length:6}, (_, index) => ({telegramId:String(80001+index), displayName:'用户'}));
++  scheduler.queueBroadcast({name:'批量测试',deltaJson:JSON.stringify([{insert:'你好\n'}]),buttonsJson:'[]',players});
++  for (const expected of [2,4,6]) {
++    await scheduler.tick({maxDeliveries:2});
++    assert.equal(calls.length, expected);
++  }
++  assert.equal(db.prepare("SELECT status FROM broadcasts").get().status, 'COMPLETED');
++});
++
++test('200 broadcast recipients queue atomically across SQL chunks', async t => {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-200-'));
++  const db = openDatabase({localFile:path.join(dir,'test.db')});
++  t.after(async () => { await db.close(); fs.rmSync(dir, {recursive:true,force:true}); });
++  setSetting(db, 'publisher_token', encryptToken(publisherToken, configKey));
++  setSetting(db, 'publisher_id', '222222');
++  const scheduler = createScheduler(db, {configKey});
++  const players = Array.from({length:200}, (_, index) => ({telegramId:String(900000+index),displayName:'用户'}));
++  const id = scheduler.queueBroadcast({name:'200人测试',deltaJson:JSON.stringify([{insert:'你好\n'}]),buttonsJson:'[]',players});
++  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM broadcast_deliveries WHERE broadcast_id=?').get(id).count, 200);
++});
+diff --git a/tests/browser/auth-cron.spec.js b/tests/browser/auth-cron.spec.js
+new file mode 100644
+index 0000000..3c82fec
+--- /dev/null
++++ b/tests/browser/auth-cron.spec.js
+@@ -0,0 +1,15 @@
++import { test, expect } from '@playwright/test';
++
++test('browser login reaches bootstrap and cron requires its own secret', async ({ request }) => {
++  const origin = 'http://127.0.0.1:8099';
++  const login = await request.post('/auth/login', {
++    headers:{origin}, data:{username:'admin',password:'test-password-123'}
++  });
++  expect(login.status()).toBe(200);
++  const cookie = login.headers()['set-cookie'].split(';')[0];
++  const bootstrap = await request.get('/api/bootstrap', {headers:{cookie}});
++  expect(bootstrap.status()).toBe(200);
++  expect((await bootstrap.json()).admin.id).toBe('123456');
++  expect((await request.post('/api/cron/tick')).status()).toBe(401);
++  expect((await request.post('/api/cron/tick', {headers:{authorization:'Bearer local-test-cron-secret'}})).status()).toBe(200);
++});
+diff --git a/tests/chat.test.js b/tests/chat.test.js
+index 0e84957..6bb31aa 100644
+--- a/tests/chat.test.js
++++ b/tests/chat.test.js
+@@ -12,8 +12,8 @@ import { configKey } from './helpers.js';
+ 
+ function fixture(t) {
+   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tg-chat-test-'));
+-  const db=openDatabase(dir);
+-  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
++  const db=openDatabase({localFile:path.join(dir,'test.db')});
++  t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
+   return db;
+ }
+ const incoming=(id,chat=42,text='你好')=>({update_id:id,message:{message_id:id,date:1760000000+id,
+diff --git a/tests/core.test.js b/tests/core.test.js
+index 5e6771d..6692a55 100644
+--- a/tests/core.test.js
++++ b/tests/core.test.js
+@@ -68,7 +68,7 @@ test('encrypted publisher credential and wrong-key rejection', () => {
+ });
+ function fixture(t, transport) {
+   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tgzhushou-unit-'));
+-  const db=openDatabase(dir); t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
++  const db=openDatabase({localFile:path.join(dir,'test.db')}); t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
+   setSetting(db,'publisher_token',encryptToken(publisherToken,configKey));setSetting(db,'publisher_id','222222');
+   for(const id of [1,2])db.prepare('INSERT INTO targets(id,bot_id,chat_id,title,chat_type,can_publish) VALUES(?,?,?,?,?,1)').run(id,'222222',String(-1000-id),`target ${id}`,'channel');
+   const result=db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,bot_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'DRAFT',?,?)`).run('test',JSON.stringify([{insert:'hello\n'}]),'[]','[1,2]','{"kind":"MANUAL"}','222222',Date.now(),Date.now());
+diff --git a/tests/database.test.js b/tests/database.test.js
+new file mode 100644
+index 0000000..3a9efb5
+--- /dev/null
++++ b/tests/database.test.js
+@@ -0,0 +1,26 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import os from 'node:os';
++import path from 'node:path';
++import { openDatabase } from '../server/db.js';
++
++test('database transaction commits, rolls back on failure and persists after reopen', async t => {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-db-'));
++  t.after(() => fs.rmSync(dir, { recursive:true, force:true }));
++  const localFile = path.join(dir, 'test.db');
++  let db = openDatabase({ localFile });
++  db.transaction(() => {
++    db.prepare("INSERT INTO settings(key,value) VALUES('committed','yes')").run();
++  })();
++  assert.throws(() => db.transaction(() => {
++    db.prepare("INSERT INTO settings(key,value) VALUES('rolled_back','no')").run();
++    throw new Error('abort');
++  })(), /abort/);
++  assert.equal(db.prepare("SELECT value FROM settings WHERE key='rolled_back'").get(), undefined);
++  await db.close();
++  db = openDatabase({ localFile });
++  assert.equal(db.prepare("SELECT value FROM settings WHERE key='committed'").get().value, 'yes');
++  assert.equal(db.prepare("SELECT value FROM settings WHERE key='rolled_back'").get(), undefined);
++  await db.close();
++});
+diff --git a/tests/multi-bot.test.js b/tests/multi-bot.test.js
+index 35573dc..70a6c20 100644
+--- a/tests/multi-bot.test.js
++++ b/tests/multi-bot.test.js
+@@ -8,35 +8,33 @@ import { createScheduler } from '../server/scheduler.js';
+ import { savePublisher, getPublisher, listPublishers } from '../server/publishers.js';
+ import { configKey, publisherToken } from './helpers.js';
+ 
+-test('legacy publisher and players migrate once, while later bots keep separate recipients', t => {
++test('publishers and recipients persist independently across database reopen', async t => {
+   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-multibot-'));
+   t.after(() => fs.rmSync(dir, { recursive:true, force:true }));
+-  let db = openDatabase(dir);
+-  setSetting(db, 'publisher_id', '222222');
+-  setSetting(db, 'publisher_username', 'original');
+-  setSetting(db, 'publisher_token', encryptToken(publisherToken, configKey));
+-  db.prepare("INSERT INTO players(telegram_id,display_name,first_seen,last_seen) VALUES('80001','原用户',1,1)").run();
+-  db.close();
+-  db = openDatabase(dir);
++  const localFile = path.join(dir, 'test.db');
++  let db = openDatabase({ localFile });
++  savePublisher(db, configKey, { id:222222, username:'original' }, publisherToken);
++  db.prepare("INSERT INTO bot_players(bot_id,telegram_id,display_name,first_seen,last_seen) VALUES('222222','80001','原用户',1,1)").run();
++  await db.close();
++  db = openDatabase({ localFile });
+   assert.equal(listPublishers(db).length, 1);
+   assert.equal(db.prepare("SELECT display_name FROM bot_players WHERE bot_id='222222' AND telegram_id='80001'").get().display_name, '原用户');
+   savePublisher(db, configKey, { id:333333, username:'second' }, '333333:LOCAL_TEST_SECOND_TOKEN_123456789');
+   assert.equal(getPublisher(db, configKey, '333333').id, '333333');
+   assert.equal(db.prepare("SELECT COUNT(*) n FROM bot_players WHERE bot_id='333333'").get().n, 0);
+   db.prepare("DELETE FROM bot_players WHERE bot_id='222222' AND telegram_id='80001'").run();
+-  db.close();
+-  db = openDatabase(dir);
++  await db.close();
++  db = openDatabase({ localFile });
+   assert.equal(db.prepare("SELECT COUNT(*) n FROM bot_players WHERE bot_id='222222'").get().n, 0);
+   assert.equal(listPublishers(db).length, 2);
+-  assert.equal(db.prepare("SELECT display_name FROM players WHERE telegram_id='80001'").get().display_name, '原用户');
+   assert.equal(getPublisher(db, configKey).id, '222222');
+-  db.close();
++  await db.close();
+ });
+ 
+ test('scheduler sends each queued record with its own bot token', async t => {
+   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-multibot-send-'));
+-  const db = openDatabase(dir);
+-  t.after(() => { db.close(); fs.rmSync(dir, { recursive:true, force:true }); });
++  const db = openDatabase({localFile:path.join(dir,'test.db')});
++  t.after(async () => { await db.close(); fs.rmSync(dir, { recursive:true, force:true }); });
+   savePublisher(db, configKey, { id:222222, username:'first' }, publisherToken);
+   savePublisher(db, configKey, { id:333333, username:'second' }, '333333:LOCAL_TEST_SECOND_TOKEN_123456789');
+   const calls = [];
+diff --git a/tests/sent-actions.test.js b/tests/sent-actions.test.js
+index ec1cd56..8876121 100644
+--- a/tests/sent-actions.test.js
++++ b/tests/sent-actions.test.js
+@@ -7,8 +7,8 @@ import {openDatabase} from '../server/db.js';
+ import {sentActions} from '../server/sent-actions.js';
+ 
+ test('sent operations preserve templates, map recipients, persist edits/deletes and enforce eligibility',async t=>{
+-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sent-actions-')),db=openDatabase(dir);
+-  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
++  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sent-actions-')),db=openDatabase({localFile:path.join(dir,'test.db')});
++  t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
+   const now=Date.now(),delta=JSON.stringify([{insert:'original\n'}]);
+   db.prepare("INSERT INTO broadcasts(id,name,delta_json,buttons_json,bot_id,status,created_at) VALUES(1,'test',?,'[]','bot','COMPLETED',?)").run(delta,now);
+   for(let id=1;id<=4;id++)db.prepare("INSERT INTO broadcast_deliveries(id,broadcast_id,telegram_id,display_name,status,telegram_message_id,started_at,completed_at) VALUES(?,1,?,'User','SUCCESS',?,?,?)").run(id,String(80000+id),String(100+id),id===3?now-49*3600000:now,now);
+diff --git a/tests/start-test-server.js b/tests/start-test-server.js
+index 00d1b53..b59c030 100644
+--- a/tests/start-test-server.js
++++ b/tests/start-test-server.js
+@@ -4,8 +4,6 @@ import path from 'node:path';
+ import { entryToken,configKey } from './helpers.js';
+ import './fake-telegram.js';
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tgzhushou-browser-'));
+-Object.assign(process.env,{ENTRY_BOT_TOKEN:entryToken,CONFIG_KEY:configKey,ADMIN_TG_IDS:'123456',ADMIN_LOGIN_USERNAME:'admin',ADMIN_LOGIN_PASSWORD:'test-password-123',PORT:'8099',PUBLIC_URL:'https://test.local'});
++Object.assign(process.env,{NODE_ENV:'test',TEST_DATABASE_FILE:path.join(dir,'test.db'),ENTRY_BOT_TOKEN:entryToken,CONFIG_KEY:configKey,ADMIN_TG_IDS:'123456',ADMIN_LOGIN_USERNAME:'admin',ADMIN_LOGIN_PASSWORD:'test-password-123',CRON_SECRET:'local-test-cron-secret',PORT:'8099',PUBLIC_URL:'https://test.local'});
+ process.on('exit',()=>{try{fs.rmSync(dir,{recursive:true,force:true});}catch{}});
+ await import('../server/index.js');
+-
+-
+diff --git a/tests/task-status.test.js b/tests/task-status.test.js
+index 440405d..7197e81 100644
+--- a/tests/task-status.test.js
++++ b/tests/task-status.test.js
+@@ -9,8 +9,8 @@ import { nextSlot } from '../server/schedule.js';
+ 
+ test('stop cancels both queues, preserves in-flight delivery and restart never revives cancelled messages', async t => {
+   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tgzhushou-stop-'));
+-  const db = openDatabase(dir);
+-  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
++  const db = openDatabase({localFile:path.join(dir,'test.db')});
++  t.after(async () => { await db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+   db.prepare(`INSERT INTO tasks(id,name,delta_json,buttons_json,target_ids_json,schedule_json,bot_id,status,created_at,updated_at)
+     VALUES(1,'fixture','[]','[]','[]','{"kind":"MANUAL"}','222222','DRAFT',0,0)`).run();
+   for (const [id, source] of [[1, 'IMMEDIATE'], [2, 'SCHEDULED']]) {

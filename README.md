@@ -6,7 +6,6 @@
 
 - `ENTRY_BOT_TOKEN`：Telegram 入口机器人 Token。
 - `ADMIN_TG_IDS`：允许管理后台的 Telegram 数字用户 ID。
-- `ADMIN_TG_ACCOUNT_MAP`：Telegram 小程序可信账号映射 JSON，例如 `{"123456":"wz9946"}`；未配置映射的 Telegram 身份不会继承网页登录账号权限。
 - `CONFIG_KEY`：32 字节 Base64 密钥，用于加密机器人 Token。
 - `ADMIN_LOGIN_USERNAME` / `ADMIN_LOGIN_PASSWORD`：兼容的单个网页登录账号密码；也可使用 `ADMIN_LOGIN_ACCOUNTS` 配置多个账号。
 - `PUBLIC_URL`：Railway 对外 HTTPS 域名。

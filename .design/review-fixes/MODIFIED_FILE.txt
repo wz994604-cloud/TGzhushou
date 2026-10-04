@@ -1,0 +1,5 @@
+MODIFIED_FILE
+Changed branch/field: mobile chat title/publisher spacing, immediate back navigation, same-direction bubble grouping.
+Files: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\src\main.js; C:\Users\win11\.codex\worktrees\74e5\TGzhushou\src\style.css
+BASELINE main=8c5b3a13af0ed67731a218d48b3d984e4c8f1512 CSS=bb952573af6861f71ec6b1266794195005f08c0d
+MODIFIED main=2a080b6bf2c5226cd965fbfe2030efe7850761cd CSS=ea3ab354a8db0cb6ea39d5a0a5d124de0d15d5f3

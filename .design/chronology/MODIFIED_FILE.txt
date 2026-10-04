@@ -1,0 +1,5 @@
+MODIFIED_FILE
+Changed branch/field: chat date dividers from actual sent_at and inline inbox status; compact client list/editor state styling.
+Files: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\src\main.js; C:\Users\win11\.codex\worktrees\74e5\TGzhushou\src\style.css
+BASELINE main=c0e69ca7665a5f671a8aa5a8786478aa43877ce1 CSS=30b1fa15b5af77ea83d53150455f030a9beeae3a
+MODIFIED main=ffb9923ca83884f60bc58ff1f4b4ea0e3f1ce28c CSS=5d5fff868262e95226acccdd0a6c4d0677e5156e

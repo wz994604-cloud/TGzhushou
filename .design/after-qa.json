@@ -1,0 +1,41 @@
+{
+  "target": "http://127.0.0.1:4173/",
+  "desktop": {
+    "title": "活动中枢",
+    "url": "http://127.0.0.1:4173/",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "bodyTextLength": 78,
+    "bodyTextSample": "运营工作台 活动中枢 Telegram 活动发布工作台 北京时间 从 Telegram 打开 请使用已绑定的管理员账号，从入口机器人的「打开活动后台」进入。",
+    "horizontalScroll": false,
+    "scrollWidth": 1440,
+    "textOverflow": [],
+    "smallButtons": [],
+    "blockingFixed": [],
+    "hasMain": true,
+    "screenshotPath": "C:\\Users\\win11\\.codex\\worktrees\\362d\\TGzhushou\\.design\\screenshots\\after-desktop.png",
+    "screenshotBytes": 85810,
+    "blankRisk": false
+  },
+  "mobile": {
+    "title": "活动中枢",
+    "url": "http://127.0.0.1:4173/",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "bodyTextLength": 78,
+    "bodyTextSample": "运营工作台 活动中枢 Telegram 活动发布工作台 北京时间 从 Telegram 打开 请使用已绑定的管理员账号，从入口机器人的「打开活动后台」进入。",
+    "horizontalScroll": false,
+    "scrollWidth": 390,
+    "textOverflow": [],
+    "smallButtons": [],
+    "blockingFixed": [],
+    "hasMain": true,
+    "screenshotPath": "C:\\Users\\win11\\.codex\\worktrees\\362d\\TGzhushou\\.design\\screenshots\\after-mobile.png",
+    "screenshotBytes": 40444,
+    "blankRisk": false
+  }
+}

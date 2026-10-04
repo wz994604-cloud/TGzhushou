@@ -1,0 +1,276 @@
+diff --git a/server/chat.js b/server/chat.js
+index a969fc6..03f3d72 100644
+--- a/server/chat.js
++++ b/server/chat.js
+@@ -1,4 +1,5 @@
+ import crypto from 'node:crypto';
++import sharp from 'sharp';
+ import { encryptToken, decryptToken } from './db.js';
+ import { botCall, safeTelegramError } from './telegram.js';
+ import { sendFormatted } from './sender.js';
+@@ -81,7 +82,11 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
+     const status = !url ? 'AVAILABLE' : url === ownUrl(bot.id) ? 'READY' : 'EXTERNAL';
+     const enabled = status === 'READY' && Boolean(inbox(bot.id)?.secret);
+     setState(bot.id,status,enabled,status === 'EXTERNAL' ? '已有外部 webhook，未接管' : null);
+-    return { status, enabled, external:status === 'EXTERNAL' };
++    let externalHost = null;
++    if (status === 'EXTERNAL') {
++      try { externalHost = new URL(url).host; } catch { /* Telegram may return an invalid URL. */ }
++    }
++    return { status, enabled, external:status === 'EXTERNAL', externalHost };
+   }
+   app.post('/tg/publisher/:botId', wrapper(async (req,res) => {
+     const id = String(req.params.botId), row = inbox(id), bot = scheduler.publisher(id);
+@@ -100,7 +105,8 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
+   app.post('/api/inbox/enable', wrapper(async (req,res) => {
+     const bot = botFor(req); if (!bot) return res.status(404).json({ error:'未配置发布机器人' });
+     const state = await inspect(bot);
+-    if (state.status !== 'AVAILABLE' && state.status !== 'READY') return res.status(409).json(state);
++    if (state.status !== 'AVAILABLE' && state.status !== 'READY' &&
++        !(state.status === 'EXTERNAL' && req.body?.takeover === true)) return res.status(409).json(state);
+     let secret = inbox(bot.id)?.secret;
+     if (!secret) secret = encryptToken(crypto.randomBytes(32).toString('base64url'),configKey);
+     await botApi(bot.token,'setWebhook',{ url:ownUrl(bot.id), secret_token:decryptToken(secret,configKey), allowed_updates:['message','edited_message'] });
+@@ -144,13 +150,17 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
+     try { response = await fetch(`https://api.telegram.org/file/bot${bot.token}/${file.file_path}`,{signal:AbortSignal.timeout(10000)}); }
+     catch (error) { console.warn(`Bot avatar file download failed for ${bot.id}:`,safeTelegramError(error));throw error; }
+     if (!response.ok) { console.warn(`Bot avatar file download returned ${response.status} for ${bot.id}`);return res.sendStatus(502); }
+-    const type = response.headers.get('content-type')?.split(';')[0]?.trim();
+-    if (!['image/jpeg','image/png','image/webp'].includes(type) || Number(response.headers.get('content-length') || 0)>2_000_000) {
+-      console.warn(`Bot avatar file rejected for ${bot.id}: type=${type || 'missing'}, size=${response.headers.get('content-length') || 'unknown'}`);
++    if (Number(response.headers.get('content-length') || 0)>2_000_000) {
++      console.warn(`Bot avatar file exceeded size limit for ${bot.id}`);
+       return res.sendStatus(502);
+     }
+     const bytes = Buffer.from(await response.arrayBuffer());
+     if (bytes.length>2_000_000) { console.warn(`Bot avatar file exceeded size limit for ${bot.id}`);return res.sendStatus(502); }
++    let format;
++    try { format = (await sharp(bytes).metadata()).format; }
++    catch { console.warn(`Bot avatar file is not a supported image for ${bot.id}`);return res.sendStatus(502); }
++    const type = { jpeg:'image/jpeg', png:'image/png', webp:'image/webp' }[format];
++    if (!type) { console.warn(`Bot avatar file is not a supported image for ${bot.id}`);return res.sendStatus(502); }
+     botAvatars.set(id,{bytes,type,expires:Date.now()+6*60*60_000});
+     res.set('Cache-Control','private, max-age=3600');res.type(type);res.send(bytes);
+   }));
+@@ -221,4 +231,4 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
+     if (bytes.length > 20 * 1024 * 1024) return res.sendStatus(413);
+     res.type(row.media_kind === 'photo' ? 'image/jpeg' : row.media_kind === 'video' ? 'video/mp4' : 'application/octet-stream').send(bytes);
+   }));
+-}
+\ No newline at end of file
++}
+diff --git a/src/main.js b/src/main.js
+index bc6d029..ed172b9 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -153,7 +153,7 @@ $('chatButtons').addEventListener('change',event=>{const {chatButton,field}=even
+ $('chatButtons').onclick=event=>{if(event.target.dataset.chatRemove!==undefined){chatButtons.splice(Number(event.target.dataset.chatRemove),1);chatButtons.forEach((b,i)=>b.row=i);chatButtonEditor();}if(event.target.dataset.chatIcon!==undefined)openPicker(`chat-button-${event.target.dataset.chatIcon}`);};
+ $('chatEmoji').onclick=()=>openPicker('chat');
+ $('chatSearch').oninput=()=>action(loadConversations);
+-$('enableInbox').onclick=event=>action(async()=>{await api('/inbox/enable','POST',{});await loadInboxStatus();toast('收消息已启用');},event.currentTarget);
++$('enableInbox').onclick=event=>action(async()=>{const takeover=event.currentTarget.dataset.takeover==='1';if(takeover&&!confirm('接管后，原 webhook 将停止接收此机器人的新消息。确认原服务已停用并切换到当前后台？'))return;await api('/inbox/enable','POST',takeover?{takeover:true}:{});await loadInboxStatus();toast('收消息已启用');},event.currentTarget);
+ $('chatFile').onchange=event=>action(async()=>{const file=event.target.files[0];if(!file)return;const form=new FormData();form.set('file',file);chatMedia=await api('/chat/media','POST',form);$('chatMedia').textContent=`已附加：${file.name} · ${(file.size/1024/1024).toFixed(1)} MB`;},event.currentTarget);
+ function renderChatRows(rows) {
+   const byTelegramId=new Map(rows.map(m=>[m.telegram_message_id,m]));
+@@ -192,7 +192,7 @@ $('chatBack').onclick=()=>{activeChat=null;$('chatConversations').querySelector(
+ $('chatMessages').onclick=event=>action(async()=>{const reply=event.target.dataset.reply, file=event.target.dataset.file, manage=event.target.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReply').textContent=`回复 #${reply} · 点击取消`;}if(manage){await openSent('chat',manage);$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file){const response=await fetch(`/api/chat/files/${file}`,{headers:{'x-telegram-init-data':initData,...(selectedPublisherId?{'x-publisher-id':selectedPublisherId}:{})}});if(!response.ok)throw new Error('附件读取失败');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);}},event.target);
+ $('chatReply').onclick=()=>{chatReply=null;$('chatReply').hidden=true;};
+ $('chatSend').onclick=event=>action(async()=>{if(!activeChat)throw new Error('请选择会话');$('chatSendStatus').textContent='发送中…';try{await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/send`,'POST',{delta:chatQuill.getContents(),buttons:chatButtons,mediaId:chatMedia?.id,replyTo:chatReply});chatQuill.setText('');chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatFile').value='';$('chatSendStatus').textContent='已发送';await loadChat();await loadConversations();}catch(error){$('chatSendStatus').textContent=`发送失败或结果待核实：${error.message}`;throw error;}},event.currentTarget);
+-async function loadInboxStatus(){if(!data?.publisher)return;try{const s=await api('/inbox/status');$('inboxStatus').textContent=s.status==='EXTERNAL'?'已有外部 webhook；不会覆盖，当前无法接收新消息':s.status==='READY'?'':s.status==='AVAILABLE'?'尚未启用收消息':s.status==='NO_PUBLIC_URL'?'需要配置 PUBLIC_URL':'收消息状态：'+s.status;$('inboxStatus').hidden=s.status==='READY';$('inboxStatus').className='hint inbox-status '+(s.status==='AVAILABLE'?'is-available':'is-warning');$('enableInbox').hidden=s.status!=='AVAILABLE';$('enableInbox').textContent='启用收消息';}catch(error){$('inboxStatus').hidden=false;$('inboxStatus').textContent=`状态检查失败：${error.message}`;$('inboxStatus').className='hint inbox-status is-error';$('enableInbox').hidden=true;}}
++async function loadInboxStatus(){if(!data?.publisher)return;try{const s=await api('/inbox/status');$('inboxStatus').textContent=s.status==='EXTERNAL'?`消息仍发往${s.externalHost?' '+s.externalHost+' 的':''}外部 webhook；确认旧服务停用后可接管`:s.status==='READY'?'':s.status==='AVAILABLE'?'尚未启用收消息':s.status==='NO_PUBLIC_URL'?'需要配置 PUBLIC_URL':'收消息状态：'+s.status;$('inboxStatus').hidden=s.status==='READY';$('inboxStatus').className='hint inbox-status '+(s.status==='AVAILABLE'?'is-available':'is-warning');$('enableInbox').hidden=!['AVAILABLE','EXTERNAL'].includes(s.status);$('enableInbox').dataset.takeover=s.status==='EXTERNAL'?'1':'0';$('enableInbox').textContent=s.status==='EXTERNAL'?'接管收消息':'启用收消息';}catch(error){$('inboxStatus').hidden=false;$('inboxStatus').textContent=`状态检查失败：${error.message}`;$('inboxStatus').className='hint inbox-status is-error';$('enableInbox').hidden=true;}}
+ async function pollChats(){if(!data?.publisher)return;try{const result=await api('/chat/updates?after='+chatCursor);if(result.rows.length){chatCursor=result.cursor;await loadConversations();if(activeChat&&result.rows.some(m=>m.chat_id===activeChat.chat_id))await loadChat();}}catch{/* Keep the UI usable and retry on the next interval. */}}
+ function changeTab(id) { closePicker(); sessionStorage.setItem('tgzhushou:tab',id); document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); document.querySelectorAll('[data-tab],[data-rail-tab]').forEach(button => button.classList.toggle('active', (button.dataset.tab || button.dataset.railTab) === id)); if (id === 'logs') action(loadRuns); if (id === 'players') action(loadPlayers); if(id==='chat')action(loadConversations); }
+ document.querySelector('nav').addEventListener('click', event => { if (event.target.dataset.tab) changeTab(event.target.dataset.tab); });
+@@ -515,4 +515,3 @@ function updateViewport() {
+ window.visualViewport?.addEventListener('resize', updateViewport);
+ window.visualViewport?.addEventListener('scroll', updateViewport);
+ updateViewport();
+-
+diff --git a/src/style.css b/src/style.css
+index 0be434c..817d63d 100644
+--- a/src/style.css
++++ b/src/style.css
+@@ -256,18 +256,8 @@ body:has(#workspace:not([hidden])){overflow:hidden}
+ @media(max-width:480px){
+   #editor .actions{position:static}
+ }
+-/* Show the selected bot name beside its avatar on desktop; keep the compact rail on mobile. */
+-@media(min-width:701px){
+-  #workspace:has(#chat:not([hidden])){grid-template-columns:188px minmax(0,1fr)}
+-  #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:188px minmax(0,1fr)}
+-  #workspace:not(:has(#chat:not([hidden]))) .app-rail,#workspace:has(#chat:not([hidden])) .app-rail{align-items:flex-start;padding-left:12px;padding-right:12px}
+-  .rail-bots{width:164px;align-items:stretch}
+-  .rail-bot{width:164px;border-radius:22px;text-align:left;padding-left:54px;white-space:nowrap}
+-  .rail-bot-name{display:block;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:700}
+-  .rail-bot img{right:auto;width:44px}
+-  .rail-nav{align-self:center}
+-}
+-@media(max-width:700px){.rail-bot-name{display:none}}
++/* Robot names are available in the button tooltip and switch confirmation, not across columns. */
++.rail-bot-name{display:none}
+ /* Responsive Telegram Web/Desktop shell: fixed rail/list columns and a single-pane Mini App. */
+ :root{box-sizing:border-box}
+ *,*::before,*::after{box-sizing:border-box}
+@@ -276,9 +266,7 @@ body:has(#workspace:not([hidden])){overflow:hidden}
+ #workspace:has(#chat:not([hidden])) .chat-list{width:320px;min-width:0}
+ #workspace:has(#chat:not([hidden])) .chat-main{min-width:0}
+ #workspace:has(#chat:not([hidden])) .rail-bot{width:48px;min-width:48px;height:48px;overflow:visible;padding:0}
+-#workspace:has(#chat:not([hidden])) .rail-bot-name{position:absolute;left:56px;top:50%;transform:translateY(-50%);display:block;width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tg-client-text);font-size:12px;font-weight:700;text-align:left;pointer-events:none;z-index:5}
+-#workspace:has(#chat:not([hidden])) .rail-bot-name::first-letter{color:var(--tg-client-blue)}
+-#workspace:has(#chat:not([hidden])) .rail-bots{width:48px;overflow:visible}
++#workspace:has(#chat:not([hidden])) .rail-bots{width:48px;overflow-x:hidden;overflow-y:auto}
+ #workspace:has(#chat:not([hidden])) .rail-nav{align-self:center}
+ #workspace:has(#chat:not([hidden])) .chat-head{min-width:0}
+ #workspace:has(#chat:not([hidden])) .chat-head #chatTitle{min-width:0;flex:1}
+@@ -289,7 +277,6 @@ body:has(#workspace:not([hidden])){overflow:hidden}
+   #workspace:has(#chat:not([hidden])){grid-template-columns:64px 280px minmax(0,1fr)}
+   #workspace:has(#chat:not([hidden])) .app-rail{width:64px;min-width:64px;padding-inline:8px}
+   #workspace:has(#chat:not([hidden])) .chat-list{width:280px}
+-  #workspace:has(#chat:not([hidden])) .rail-bot-name{left:50px;width:120px}
+ }
+ @media(max-width:899px){
+   #workspace:has(#chat:not([hidden])){grid-template-columns:minmax(0,1fr);min-height:100dvh;height:100dvh}
+@@ -313,3 +300,43 @@ body:has(#workspace:not([hidden])){overflow:hidden}
+   #workspace:has(#chat:not([hidden])) nav button{min-height:44px;font-size:12px}
+   #workspace:has(#chat:not([hidden])):has(.chat-conversation.selected) nav{display:none!important}
+ }
++
++/* Desktop workspace density; the existing Mini App shell remains unchanged. */
++@media(min-width:900px){
++  #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:72px minmax(0,1fr)}
++  #workspace .app-rail{align-items:center;min-width:0;overflow:hidden}
++  #workspace .rail-bots{width:50px;max-width:100%;min-width:0;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin}
++  #workspace .rail-bot{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:50%}
++  #workspace .rail-nav{align-self:center}
++  #workspace:has(#chat:not([hidden])) .chat-list{min-width:0;overflow-x:hidden}
++  #workspace:has(#chat:not([hidden])) .chat-main{min-width:0}
++  #chatConversations,.chat-list .section-title,#chatSearch,#inboxStatus{min-width:0;max-width:100%}
++  #inboxStatus{overflow-wrap:anywhere;white-space:normal;line-height:1.4}
++  #workspace:not(:has(#chat:not([hidden])))>.page{width:100%;max-width:1320px;padding:24px 28px 40px}
++  #workspace:not(:has(#chat:not([hidden]))) #settings{max-width:1040px;margin-inline:auto}
++  #workspace:not(:has(#chat:not([hidden]))) #editor{max-width:1240px}
++  #workspace:not(:has(#chat:not([hidden])))>.page .card{padding:24px;margin:16px 0;border-radius:12px}
++  #workspace:not(:has(#chat:not([hidden])))>.page .card h3{font-size:17px}
++  #workspace:not(:has(#chat:not([hidden])))>.page :is(input,select,button){min-height:40px}
++  #workspace:not(:has(#chat:not([hidden])))>.page .actions{gap:10px}
++  #workspace:not(:has(#chat:not([hidden])))>.page .actions button{flex:0 0 auto;min-width:0}
++  #toolbar,#chatToolbar{min-height:40px;padding:4px 8px}
++  #toolbar button,#chatToolbar button{width:32px;height:32px;min-height:32px;padding:5px}
++  #toolbar button svg,#chatToolbar button svg{width:18px;height:18px}
++}
++@media(min-width:900px) and (max-width:1199px){
++  #workspace:not(:has(#chat:not([hidden]))){grid-template-columns:64px minmax(0,1fr)}
++  #workspace:not(:has(#chat:not([hidden])))>.page{padding-inline:20px}
++}
++body:has(#locked:not([hidden])){background:#f4f8fb;background-image:none;color:#253447}
++body:has(#locked:not([hidden])) #app{min-height:100dvh;display:grid;grid-template-rows:auto 1fr}
++body:has(#locked:not([hidden])) .app-header{padding:16px 28px;border-color:#dde7ef;box-shadow:none}
++body:has(#locked:not([hidden])) .app-header::after{background:none}
++body:has(#locked:not([hidden])) .brand-icon{background:#229ed9;border-radius:50%;box-shadow:0 4px 12px #229ed930}
++body:has(#locked:not([hidden])) #locked{grid-row:2;align-self:center;width:min(460px,calc(100% - 32px));max-width:none;margin:24px auto;padding:32px;text-align:left;border-color:#dde7ef;border-radius:14px;box-shadow:0 12px 32px #25344712}
++body:has(#locked:not([hidden])) #locked h2{font-size:24px;margin-bottom:8px}
++body:has(#locked:not([hidden])) #locked>p{font-size:13px;color:#718398}
++body:has(#locked:not([hidden])) .login-form label{margin-top:18px}
++body:has(#locked:not([hidden])) .login-form button{width:100%;min-height:44px;margin-top:20px}
++body:has(#locked:not([hidden])) #authError:not(:empty){margin-top:14px;padding:10px 12px;border-radius:8px;background:#fff0ee;color:#a92329}
++@media(max-width:480px){body:has(#locked:not([hidden])) #locked{padding:24px}}
+diff --git a/tests/browser/desktop-layout.spec.js b/tests/browser/desktop-layout.spec.js
+new file mode 100644
+index 0000000..08a431b
+--- /dev/null
++++ b/tests/browser/desktop-layout.spec.js
+@@ -0,0 +1,36 @@
++import { test, expect } from '@playwright/test';
++import { publisherToken } from '../helpers.js';
++
++test('desktop rail, chat columns and login stay within the viewport', async ({ page }) => {
++  await page.setViewportSize({ width:1280, height:800 });
++  await page.goto('/');
++  await expect(page.locator('#locked')).toBeVisible();
++  const login = await page.locator('#locked').boundingBox();
++  expect(login.width).toBeLessThanOrEqual(480);
++  expect(Math.abs(login.x + login.width / 2 - 640)).toBeLessThan(2);
++  await page.screenshot({ path:'test-results/desktop-login.png' });
++  await page.locator('#loginUsername').fill('admin');
++  await page.locator('#loginPassword').fill('test-password-123');
++  await page.locator('#loginForm button').click();
++  await expect(page.locator('#settings')).toBeVisible();
++  await page.locator('#token').fill(publisherToken);
++  await page.locator('#savePublisher').click();
++  await page.locator('.rail-nav [data-rail-tab="chat"]').click();
++  await expect(page.locator('#chat')).toBeVisible();
++  const rail = await page.locator('.app-rail').boundingBox();
++  const list = await page.locator('.chat-list').boundingBox();
++  expect(rail.width).toBe(72);
++  expect(list.width).toBe(320);
++  expect(list.x).toBe(rail.x + rail.width);
++  await expect(page.locator('.rail-bot-name')).toBeHidden();
++  await page.locator('#inboxStatus').evaluate(node => { node.textContent = '已有外部 webhook；确认旧服务停用后可接管 '.repeat(4); });
++  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
++  expect(await page.locator('.app-rail').evaluate(node => node.scrollWidth)).toBeLessThanOrEqual(rail.width);
++  await page.screenshot({ path:'test-results/desktop-chat.png' });
++  await page.locator('.rail-nav [data-rail-tab="editor"]').click();
++  expect((await page.locator('.app-rail').boundingBox()).width).toBe(72);
++  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
++  await page.screenshot({ path:'test-results/desktop-editor.png' });
++  await page.setViewportSize({ width:390, height:844 });
++  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
++});
+diff --git a/tests/chat.test.js b/tests/chat.test.js
+index 6bb31aa..4c31896 100644
+--- a/tests/chat.test.js
++++ b/tests/chat.test.js
+@@ -4,6 +4,7 @@ import fs from 'node:fs';
+ import os from 'node:os';
+ import path from 'node:path';
+ import express from 'express';
++import sharp from 'sharp';
+ import { openDatabase, encryptToken } from '../server/db.js';
+ import { saveIncoming, registerChatRoutes } from '../server/chat.js';
+ import { createBrowserAuth } from '../server/browser-auth.js';
+@@ -52,7 +53,7 @@ test('reply, rich text, custom emoji, buttons and media share formatted sender',
+   assert.equal(calls[1].method,'sendPhoto');
+ });
+ 
+-test('external webhook is never overwritten, secret is required for own webhook',async t=>{
++test('external webhook requires explicit takeover, secret is required for own webhook',async t=>{
+   const db=fixture(t), app=express(), calls=[];
+   app.use(express.json());
+   const bot={id:'123',token:'token'};
+@@ -62,7 +63,12 @@ test('external webhook is never overwritten, secret is required for own webhook'
+   const base=`http://127.0.0.1:${server.address().port}`;
+   const conflict=await fetch(base+'/api/inbox/enable',{method:'POST'});
+   assert.equal(conflict.status,409);
++  assert.equal((await conflict.json()).externalHost,'other.test');
+   assert.deepEqual(calls,['getWebhookInfo']);
++  const takeover=await fetch(base+'/api/inbox/enable',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({takeover:true})});
++  assert.equal(takeover.status,200);
++  assert.equal((await takeover.json()).status,'READY');
++  assert.deepEqual(calls,['getWebhookInfo','getWebhookInfo','setWebhook']);
+   const denied=await fetch(base+'/tg/publisher/123',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(incoming(1))});
+   assert.equal(denied.status,403);
+   db.prepare("INSERT OR REPLACE INTO publisher_inbox(bot_id,enabled,webhook_status,secret) VALUES('123',1,'READY',?)")
+@@ -94,10 +100,11 @@ test('empty webhook can be enabled without altering another bot',async t=>{
+ test('bot avatars load with their own selected context and missing photos fall back',async t=>{
+   const db=fixture(t),app=express(),calls=[];
+   const bots={123:{id:'123',token:'123:SECRET_TOKEN_A'},456:{id:'456',token:'456:SECRET_TOKEN_B'},678:{id:'678',token:'678:SECRET_TOKEN_MISSING'},789:{id:'789',token:'789:SECRET_TOKEN_C'}};
++  const avatarBytes=await sharp({create:{width:1,height:1,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toBuffer();
+   const originalFetch=globalThis.fetch;
+   t.after(()=>{globalThis.fetch=originalFetch;});
+   globalThis.fetch=(url,options)=>String(url).startsWith('https://api.telegram.org/file/')
+-    ? Promise.resolve(new Response(Buffer.from('avatar-a'),{headers:{'content-type':'image/jpeg'}}))
++    ? Promise.resolve(new Response(avatarBytes,{headers:{'content-type':String(url).includes('SECRET_TOKEN_A')?'application/octet-stream':'image/png'}}))
+     : originalFetch(url,options);
+   registerChatRoutes(app,{db,scheduler:{publisher:id=>bots[id||'123']},configKey,publicUrl:'https://example.test',
+     botApi:async(token,method,payload)=>{calls.push({token,method,payload});
+@@ -109,8 +116,8 @@ test('bot avatars load with their own selected context and missing photos fall b
+   const server=app.listen(0);t.after(()=>server.close());
+   const base=`http://127.0.0.1:${server.address().port}`;
+   const ok=await originalFetch(base+'/api/chat/bot-avatars/123',{headers:{'x-publisher-id':'123'}});
+-  assert.equal(ok.status,200);assert.equal(await ok.text(),'avatar-a');
+-  assert.equal(ok.headers.get('content-type'),'image/jpeg');
++  assert.equal(ok.status,200);assert.deepEqual(Buffer.from(await ok.arrayBuffer()),avatarBytes);
++  assert.equal(ok.headers.get('content-type'),'image/png');
+   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/123',{headers:{'x-publisher-id':'456'}})).status,404);
+   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/456',{headers:{'x-publisher-id':'456'}})).status,200);
+   assert.equal((await originalFetch(base+'/api/chat/bot-avatars/678',{headers:{'x-publisher-id':'678'}})).status,404);

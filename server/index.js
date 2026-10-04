@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openDatabase, getSetting, setSetting, encryptToken, decryptToken } from './db.js';
 import { listPublishers, savePublisher } from './publishers.js';
-import { parseAdminIds } from './auth.js';
+import { parseAdminIds, verifyInitData } from './auth.js';
 import { botCall, safeTelegramError } from './telegram.js';
 import { renderDelta, normalizeButtons } from './format.js';
 import { normalizeSchedule, nextSlot } from './schedule.js';
@@ -52,17 +52,7 @@ const browserAuth = await createBrowserAuth(db, adminIds, process.env.PUBLIC_URL
     }
     return [{ username: process.env.ADMIN_LOGIN_USERNAME || 'admin', password: process.env.ADMIN_LOGIN_PASSWORD }];
   })(),
-  salt: process.env.CONFIG_KEY,
-  telegramBotToken: process.env.ENTRY_BOT_TOKEN,
-  telegramAccountMap: (() => {
-    const raw = String(process.env.ADMIN_TG_ACCOUNT_MAP || '').trim();
-    if (!raw) return {};
-    try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || Array.isArray(parsed) || Object.keys(parsed).some(id => !/^\d+$/.test(id) || typeof parsed[id] !== 'string')) throw new Error('ADMIN_TG_ACCOUNT_MAP must map numeric Telegram IDs to account names');
-      return parsed;
-    } catch (error) { throw new Error(`ADMIN_TG_ACCOUNT_MAP 配置无效: ${error.message}`); }
-  })()
+  salt: process.env.CONFIG_KEY
 });
 app.disable('x-powered-by');
 app.use(express.json({ limit: '512kb' }));
@@ -130,7 +120,7 @@ const canAccessBot = (admin, id) => !Array.isArray(admin.publisherIds) || admin.
 app.use('/api', async (req, res, next) => {
   try {
     req.admin = req.get('x-telegram-init-data')
-      ? await browserAuth.authenticateTelegram(req)
+      ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
       : await browserAuth.authenticate(req);
     if (!req.admin) throw new Error('未授权');
     if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)

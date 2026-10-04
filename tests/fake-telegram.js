@@ -1,0 +1,44 @@
+// Test-process-only transport. Production code never imports this module.
+import fs from 'node:fs';
+import path from 'node:path';
+const realFetch=globalThis.fetch;
+const webhooks=new Map();
+globalThis.fetch=async(url,options={})=>{
+  const address=String(url);
+  if(!address.startsWith('https://api.telegram.org/'))return realFetch(url,options);
+  if (address.includes('/file/bot')) return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/C9sAAAAASUVORK5CYII=', 'base64'),{headers:{'content-type':'image/png'}});
+  const method=address.split('/').at(-1), body=typeof options.body==='string'?JSON.parse(options.body):{};
+  let result;
+  if(method==='getMe') result=address.includes('bot111111:')?{id:111111,is_bot:true,username:'local_test_entry'}:address.includes('bot333333:')?{id:333333,is_bot:true,username:'local_test_second'}:{id:222222,is_bot:true,username:'local_test_publisher'};
+  else if(method==='getChat') result={id:body.chat_id==='@test_channel'?-1001:-1002,title:body.chat_id==='@test_channel'?'测试频道':'测试群',type:body.chat_id==='@test_channel'?'channel':'supergroup'};
+  else if(method==='getChatMember') result={status:'administrator',can_post_messages:true};
+  else if(method==='getUserProfilePhotos') result={photos:[[{file_id:'bot-avatar'}]]};
+  else if(method==='getFile') {
+    const fileId=String(body.file_id||'');
+    result=fileId.startsWith('animated_')?{file_path:'emoji/test.tgs',file_size:68}:{file_path:'emoji/test.png',file_size:68};
+  }
+  else if(method==='getCustomEmojiStickers') result=(body.custom_emoji_ids||[]).flatMap(id=>String(id)==='9999999999999999999'?[]:String(id)==='8888888888888888888'?[{custom_emoji_id:id,file_id:'animated_'+id,is_animated:true}]:[{custom_emoji_id:id,file_id:'current_emoji_'+id,thumbnail:{file_id:'current_thumbnail_'+id}}]);
+  else if(method==='getStickerSet' && body.name==='batch_pack') result={title:'分批测试',stickers:Array.from({length:60},(_,i)=>({custom_emoji_id:String(6000000000000000000n+BigInt(i)),emoji:'⭐',thumbnail:{file_id:'mock_thumbnail_'+i}}))};
+  else if(method==='getStickerSet' && body.name==='broken_pack') result={title:'缩略图不可用测试',stickers:[{custom_emoji_id:'9999999999999999999',emoji:'🧪'}]};
+  else if(method==='getStickerSet') result={title:'测试表情包',stickers:[{custom_emoji_id:'5432101234567890123',emoji:'🔥'},{custom_emoji_id:'5432101234567890124',emoji:'💎'}]};
+  else if(method==='sendMessage') {
+    const loginUrl=body.reply_markup?.inline_keyboard?.[0]?.[0]?.url;
+    if(loginUrl?.includes('#login=')) { fs.mkdirSync('test-results',{recursive:true});fs.writeFileSync('test-results/browser-login.json',JSON.stringify({url:loginUrl})); }
+    result={message_id:456,entities:body.entities||[],reply_markup:body.reply_markup};
+  }
+  else if(method==='sendPhoto') result={message_id:457,caption_entities:JSON.parse(options.body.get('caption_entities')||'[]'),reply_markup:JSON.parse(options.body.get('reply_markup')||'null')};
+  else if(['sendVideo','sendDocument'].includes(method)) result={message_id:method==='sendVideo'?458:459,caption_entities:JSON.parse(options.body.get('caption_entities')||'[]')};
+  else if(method==='getWebhookInfo') result={url:webhooks.get(address.split('/').at(-2))?.url || ''};
+  else if(['editMessageText','editMessageCaption','editMessageMedia','deleteMessage'].includes(method)) result=true;
+  else if(method==='setWebhook') {
+    const token=address.split('/').at(-2);webhooks.set(token,body);
+    if(token.startsWith('bot222222:')||token.startsWith('bot333333:')) {
+      fs.mkdirSync('test-results',{recursive:true});
+      fs.writeFileSync(path.join('test-results',token.startsWith('bot222222:')?'publisher-secret-222222.json':'publisher-secret-333333.json'),JSON.stringify({secret:body.secret_token}));
+    }
+    result=true;
+  }
+  else if(method==='setChatMenuButton') result=true;
+  else throw new Error(`Unexpected mock Telegram method ${method}`);
+  return Response.json({ok:true,result});
+};

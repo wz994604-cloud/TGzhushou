@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {openDatabase} from '../server/db.js';
+import {sentActions} from '../server/sent-actions.js';
+
+test('sent operations preserve templates, map recipients, persist edits/deletes and enforce eligibility',async t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sent-actions-')),db=await openDatabase({localFile:path.join(dir,'test.db')});
+  t.after(async()=>{await db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  const now=Date.now(),delta=JSON.stringify([{insert:'original\n'}]);
+  await db.prepare("INSERT INTO broadcasts(id,name,delta_json,buttons_json,bot_id,status,created_at) VALUES(1,'test',?,'[]','bot','COMPLETED',?)").run(delta,now);
+  for(let id=1;id<=4;id++)await db.prepare("INSERT INTO broadcast_deliveries(id,broadcast_id,telegram_id,display_name,status,telegram_message_id,started_at,completed_at) VALUES(?,1,?,'User','SUCCESS',?,?,?)").run(id,String(80000+id),String(100+id),id===3?now-49*3600000:now,now);
+  let bot={id:'bot',token:'test'}, fail=false;const calls=[];
+  const svc=await sentActions(db,()=>bot,async(token,method,payload)=>{calls.push({method,payload});if(fail)throw Object.assign(Error('blocked'),{telegramCode:403});return true;});
+  const edit={action:'edit',delta:{ops:[{insert:'updated\n'}]},buttons:[]};
+  await svc.act('broadcasts',1,edit);
+  assert.equal(calls[0].method,'editMessageText');assert.equal(calls[0].payload.chat_id,'80001');assert.equal(calls[0].payload.message_id,101);
+  assert.equal(JSON.parse((await svc.read('broadcasts',1)).delta_json)[0].insert,'updated\n');
+  assert.equal((await db.prepare('SELECT delta_json FROM broadcasts WHERE id=1').get()).delta_json,delta);
+  fail=true;await assert.rejects(svc.act('broadcasts',2,edit),/blocked/);assert.equal((await svc.read('broadcasts',2)).last_action,'FAILED');fail=false;
+  await assert.rejects(svc.act('broadcasts',3,{action:'delete'}),/48/);
+  bot={id:'other'};await assert.rejects(svc.act('broadcasts',1,edit),/原发送/);bot={id:'bot',token:'test'};
+  await svc.act('broadcasts',1,{action:'delete'});assert.equal((await svc.read('broadcasts',1)).deleted,true);
+  await assert.rejects(svc.act('broadcasts',1,edit),/已经删除/);
+  await assert.rejects(svc.act('invalid',1,edit),/类型/);
+  await db.prepare("UPDATE broadcast_deliveries SET status='FAILED' WHERE id=4").run();
+  await assert.rejects(svc.act('broadcasts',4,edit),/成功/);
+});

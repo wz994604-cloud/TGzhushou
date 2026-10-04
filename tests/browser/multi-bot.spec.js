@@ -1,0 +1,37 @@
+import { test, expect } from '@playwright/test';
+import { signedData, publisherToken } from '../helpers.js';
+
+test('one dashboard isolates targets, tasks, players and private records by publisher', async ({ request, page }) => {
+  const first = { 'x-telegram-init-data':signedData(), 'x-publisher-id':'222222' };
+  const second = { 'x-telegram-init-data':first['x-telegram-init-data'], 'x-publisher-id':'333333' };
+  expect((await request.post('/api/publisher', { headers:{ 'x-telegram-init-data':first['x-telegram-init-data'] }, data:{ token:publisherToken } })).ok()).toBeTruthy();
+  expect((await request.post('/api/players/import', { headers:first, multipart:{ file:{ name:'players.csv', mimeType:'text/csv', buffer:Buffer.from('ID,昵称,telegram_id\n1,原用户,80001\n') } } })).ok()).toBeTruthy();
+  const target = await (await request.post('/api/targets', { headers:first, data:{ reference:'@test_channel' } })).json();
+  const task = await (await request.post('/api/tasks', { headers:first, data:{ name:'原机器人任务', delta:{ ops:[{ insert:'你好\n' }] }, buttons:[], targetIds:[target.id], schedule:{ kind:'MANUAL' } } })).json();
+  const broadcast = await (await request.post('/api/broadcasts', { headers:first, data:{ name:'原私信', delta:{ ops:[{ insert:'你好\n' }] }, buttons:[], playerIds:['80001'] } })).json();
+  expect((await request.post('/api/publisher', { headers:first, data:{ token:'333333:LOCAL_TEST_SECOND_TOKEN_123456789' } })).ok()).toBeTruthy();
+  const secondHome = await (await request.get('/api/bootstrap', { headers:second })).json();
+  expect(secondHome.publishers.map(p=>p.id)).toEqual(['222222','333333']);
+  expect(secondHome.targets).toEqual([]);
+  expect(secondHome.tasks).toEqual([]);
+  expect((await (await request.get('/api/players/ids', { headers:second })).json()).rows).toEqual([]);
+  expect((await (await request.get('/api/broadcasts', { headers:second })).json())).toEqual([]);
+  expect((await request.get(`/api/tasks/${task.id}`, { headers:second })).status()).toBe(404);
+  expect((await request.get(`/api/broadcasts/${broadcast.id}`, { headers:second })).status()).toBe(404);
+  expect((await request.post('/api/broadcasts', { headers:second, data:{ name:'误发', delta:{ ops:[{ insert:'你好\n' }] }, buttons:[], playerIds:['80001'] } })).ok()).toBeFalsy();
+  expect((await request.post('/api/players/import', { headers:second, multipart:{ file:{ name:'players.csv', mimeType:'text/csv', buffer:Buffer.from('ID,昵称,telegram_id\n1,用户,80002\n') } } })).ok()).toBeFalsy();
+  const firstHome = await (await request.get('/api/bootstrap', { headers:first })).json();
+  expect(firstHome.tasks.map(t=>t.id)).toContain(task.id);
+  expect(firstHome.targets.map(t=>t.id)).toContain(target.id);
+  await page.route('https://telegram.org/js/telegram-web-app.js', r=>r.fulfill({ contentType:'application/javascript', body:`window.Telegram={WebApp:{initData:${JSON.stringify(signedData())},ready(){},expand(){}}};` }));
+  await page.goto('/');
+  await expect(page.locator('#publisherSelect option')).toHaveCount(2);
+  await page.getByRole('button',{name:'用户',exact:true}).click();
+  await page.locator('#publisherSelect').selectOption('333333');
+  await expect(page.locator('#identity')).toContainText('local_test_second');
+  await expect(page.locator('#importPlayers')).toBeHidden();
+  await expect(page.locator('#ffaCard')).toBeHidden();
+  await page.locator('#publisherSelect').selectOption('222222');
+  await expect(page.locator('#identity')).toContainText('local_test_publisher');
+  await expect(page.locator('#importPlayers')).toBeVisible();
+});

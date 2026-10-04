@@ -1,0 +1,27 @@
+VERIFICATION
+Changed branch/field: mobile rail touch targets and selected-chat publisher overlap.
+Artifacts:
+MODIFIED_FILE=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\touch-target\MODIFIED_FILE.txt
+DIFF_FILE=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\touch-target\DIFF_FILE.patch
+VERIFICATION.txt=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\touch-target\VERIFICATION.txt
+ROLLBACK.sh=C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\touch-target\ROLLBACK.sh
+BASELINE
+Command: git hash-object .design/touch-target/baseline-style.css
+Input: HEAD 3ac5b15 src/style.css
+Literal output/result: ed6b7c26fd02cb67fb6bec5c61ba5fc45d9d7777
+Exit status: 0
+MODIFIED
+Command: npm run build; git diff --check
+Input: current src/style.css
+Literal output/result: Vite 8.3.1 built in 170ms; BUILD=0 DIFF=0
+Exit status: 0
+Command: node C:/Users/win11/.codex/skills/codex-ui-designer-kit/scripts/visual-audit.mjs --url http://127.0.0.1:5174 --name touch-target-final
+Input: local unauthenticated page
+Literal output/result: desktop/mobile blankRisk=false, horizontalScroll=false, textOverflow=0, smallButtons=0
+Exit status: 0
+ROLLBACK
+Command: pwsh -NoProfile -File .design/touch-target/ROLLBACK.ps1 -Target .design/touch-target/rollback-copy.css -Backup .design/touch-target/baseline-style.css
+Input: copy of modified src/style.css
+Literal output/result: ROLLBACK_OK; restored hash ed6b7c26fd02cb67fb6bec5c61ba5fc45d9d7777
+Exit status: 0
+Restored behavior/status: rollback copy matches 3ac5b15; actual src/style.css remains modified.

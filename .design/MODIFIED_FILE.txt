@@ -1,0 +1,10 @@
+# MODIFIED_FILE
+
+Changed branch/field: Telegram client three-stage shell, context, mobile back path, status surfaces, composer and module layout.
+
+- MODIFIED_FILE: src/style.css and src/main.js
+- Baseline CSS SHA-1: e9da0949d28089aca2ba26e927094d10aa8d17f6
+- Modified CSS SHA-1: 04f8f30d6d227bca0f826a21141c2dc1e0d53197
+- Baseline main SHA-1: 2f621b91bf42370de90e0d93f83927f9873d3a22
+- Modified main SHA-1: ac22c2e3b800c6b9d8555ceb36c2ac1cbd14d09a
+- Backend/API/database/business logic: unchanged.
