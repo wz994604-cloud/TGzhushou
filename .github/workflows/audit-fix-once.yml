@@ -60,3 +60,5 @@ jobs:
           git diff --cached --check
           git commit -m "fix: harden scheduler database and runtime health"
           git push origin HEAD:audit-20261005-code-health
+
+# rerun: 2
