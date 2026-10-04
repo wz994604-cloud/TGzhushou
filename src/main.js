@@ -154,28 +154,35 @@ function stickerImage(url) {
 const openSent = installSentEditor({ Quill, api, esc, toast, action, image: stickerImage, hydrateEmojiImages });
 const quill = new Quill('#message', { theme:'snow', placeholder:'输入活动文案…', modules:{ toolbar:'#toolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
 installLinkEditor(Quill, quill);
-// Telegram desktop may copy a rich-text anchor whose URL is not retained by
-// Quill's default clipboard matcher. Normalize supported anchors explicitly so
-// the Delta keeps the URL as a Telegram-compatible `text_link` later.
-quill.clipboard.addMatcher('A', (node, delta) => {
-  const href = String(node.getAttribute('href') || '').trim();
-  if (!/^(?:https?:|tg:)/i.test(href)) return delta;
+function installClipboardMatchers(editor) {
   const Delta = Quill.import('delta');
-  return new Delta(delta.ops.map(op => ({
-    ...op,
-    ...(typeof op.insert === 'string' ? { attributes: { ...(op.attributes || {}), link: href } } : {})
-  })));
-});
+  // Telegram may copy a rich-text anchor whose URL is not retained by
+  // Quill's default clipboard matcher.
+  editor.clipboard.addMatcher('A', (node, delta) => {
+    const href = String(node.getAttribute('href') || '').trim();
+    if (!/^(?:https?:|tg:)/i.test(href)) return delta;
+    return new Delta(delta.ops.map(op => ({
+      ...op,
+      ...(typeof op.insert === 'string' ? { attributes: { ...(op.attributes || {}), link: href } } : {})
+    })));
+  });
+  // Telegram custom emoji are copied as tg-emoji or data-document-id nodes.
+  editor.clipboard.addMatcher(Node.ELEMENT_NODE, (node, delta) => {
+    const id = String(node.getAttribute('emoji-id') || node.getAttribute('data-document-id') || node.getAttribute('data-emoji-id') || '').trim();
+    const isEmoji = id && (/^tg-emoji$/i.test(node.tagName) || /(?:^|\s)tg-emoji(?:\s|$)/i.test(String(node.className || '')) || node.hasAttribute('data-document-id') || node.hasAttribute('data-emoji-id'));
+    if (!isEmoji || !/^\d{5,30}$/.test(id)) return delta;
+    const alt = String(node.textContent || node.getAttribute('alt') || '🙂').trim().slice(0, 8) || '🙂';
+    return new Delta([{ insert: { customEmoji: { id, alt } } }]);
+  });
+}
+installClipboardMatchers(quill);
 quill.enable(false);
 $('toggleWriting').onclick=()=>{const edit=!quill.isEnabled();quill.enable(edit);$('toggleWriting').textContent=edit?'完成编辑':'编辑文案';if(edit)quill.focus();else{quill.blur();closePicker();}};
 quill.on('selection-change', range => { if (range) savedRange = range; });
 quill.on('text-change', () => { insertedEmbedPending=false; $('textCount').textContent = `${quill.getText().trimEnd().length} / ${mediaId ? 1024 : 4096}`; remember(); preview(); });
-quill.root.addEventListener('paste', event => {
-  const html = event.clipboardData?.getData('text/html') || '';
-  if (/custom_emoji|tg-emoji|data-document-id/.test(html)) toast('粘贴内容中的专属表情可能需要从选择器重新添加。');
-});
 chatQuill = new Quill('#chatInput', { theme:'snow', placeholder:'输入消息…', modules:{ toolbar:'#chatToolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
 installLinkEditor(Quill, chatQuill, { trigger:$('chatLink'),dialogId:'chatLinkDialog',idPrefix:'chat-' });
+installClipboardMatchers(chatQuill);
 chatQuill.on('selection-change', range => { if (range) chatRange = range; });
 function chatButtonEditor() {
   $('chatButtons').innerHTML = chatButtons.map((b,i)=>`<div class="chat-button-row"><input data-chat-button="${i}" data-field="text" placeholder="按钮文字" value="${esc(b.text)}"><input data-chat-button="${i}" data-field="url" placeholder="https://链接" value="${esc(b.url)}"><select data-chat-button="${i}" data-field="style"><option value="default">默认</option><option value="primary" ${b.style==='primary'?'selected':''}>蓝色</option><option value="success" ${b.style==='success'?'selected':''}>绿色</option><option value="danger" ${b.style==='danger'?'selected':''}>红色</option></select><button class="quiet" data-chat-icon="${i}">✦${b.iconAlt||''}</button><button class="quiet" data-chat-remove="${i}">×</button></div>`).join('');
