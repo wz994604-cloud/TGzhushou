@@ -1642,6 +1642,30 @@ dialog::backdrop {
   min-width:0;
   position:relative;
 }
+.desktop-shell.chat-empty-state .chat-shell {
+  grid-template-columns:320px minmax(0,1fr);
+}
+.desktop-shell.chat-empty-state .chat-main {
+  background:var(--canvas);
+}
+.desktop-shell.chat-empty-state .chat-head {
+  display:none;
+}
+.desktop-shell.chat-empty-state .chat-messages {
+  display:grid;
+  place-items:center;
+  padding:32px;
+}
+.desktop-shell.chat-empty-state .chat-messages .chat-empty {
+  margin:0;
+  border:0;
+  background:transparent;
+  padding:24px;
+  color:var(--muted);
+}
+.chat-details[hidden] {
+  display:none;
+}
 .desktop-shell .chat-list {
   padding:0 14px 16px;
   border-right:1px solid var(--line);

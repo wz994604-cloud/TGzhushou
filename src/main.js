@@ -219,7 +219,7 @@ async function loadConversations(more=false) {
 }
 $('chatMore').onclick=event=>action(()=>loadConversations(true),event.currentTarget);
 $('chatConversations').onclick=event=>action(async()=>{const id=event.target.closest('[data-chat-id]')?.dataset.chatId;if(!id)return;activeChat=conversationRows.find(c=>c.chat_id===id);if(!activeChat)return;$('chatTitle').textContent=activeChat.title;$('chatComposer').hidden=false;await loadChat();});
-$('chatBack').onclick=()=>{activeChat=null;ui.chat(null);$('chatConversations').querySelector('.chat-conversation.selected')?.classList.remove('selected');$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';$('chatMessages').replaceChildren();action(loadConversations);};
+$('chatBack').onclick=()=>{activeChat=null;ui.chat(null);$('chatConversations').querySelector('.chat-conversation.selected')?.classList.remove('selected');$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';action(loadConversations);};
 $('chatMessages').onclick=event=>action(async()=>{const reply=event.target.dataset.reply, file=event.target.dataset.file, manage=event.target.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReply').textContent=`回复 #${reply} · 点击取消`;}if(manage){await openSent('chat',manage);$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file){const response=await fetch(`/api/chat/files/${file}`,{headers:{'x-telegram-init-data':initData,...(selectedPublisherId?{'x-publisher-id':selectedPublisherId}:{})}});if(!response.ok)throw new Error('附件读取失败');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);}},event.target);
 $('chatReply').onclick=()=>{chatReply=null;$('chatReply').hidden=true;};
 $('chatSend').onclick=event=>action(async()=>{if(!activeChat)throw new Error('请选择会话');$('chatSendStatus').textContent='发送中…';try{await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/send`,'POST',{delta:chatQuill.getContents(),buttons:chatButtons,mediaId:chatMedia?.id,replyTo:chatReply});chatQuill.setText('');chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatFile').value='';$('chatSendStatus').textContent='已发送';await loadChat();await loadConversations();}catch(error){$('chatSendStatus').textContent=`发送失败或结果待核实：${error.message}`;throw error;}},event.currentTarget);
@@ -460,7 +460,7 @@ async function switchPublisher(id) {
   flushDraft();
   selectedPublisherId=id;
   localStorage.setItem('tgzhushou:selected-publisher',id);
-  activeChat=null;ui.chat(null);chatCursor=0;$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';$('chatMessages').replaceChildren();
+  activeChat=null;ui.chat(null);chatCursor=0;$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';
   selectedPlayerIds.clear(); playerCache.clear(); playerPage=1; savedPacks=[]; pendingSend=null;
   await refresh();
   let draft; try { draft=JSON.parse(localStorage.getItem(draftKey())||'null'); } catch { draft=null; }
