@@ -5,3 +5,5 @@
 2026-10-03：运行时从本地 SQLite/Railway 迁移到 Turso、Vercel Functions 和 Vercel Blob。旧 SQLite 数据不迁移；空 Turso 由 `server/schema.sql` 初始化。
 
 2026-10-03：修复 Turso 事务实际未提交/回滚的问题，Schema 改为批量初始化；私信入队改为原子批量写入。Vercel 发送与入口机器人回复使用函数后台任务，外部 Cron 每分钟处理最多 5 条并自动配置入口 Webhook；相关数据库、批量队列和消息测试已更新。
+
+2026-10-04：修复空库切换后浏览器保留旧发布机器人 ID 导致后台进不去的问题；已认证 bootstrap 自动回退默认机器人或空设置状态，并同步清理浏览器旧选择，其他接口仍拒绝无效机器人。

@@ -121,7 +121,10 @@ app.use('/api', (req, res, next) => {
       : browserAuth.authenticate(req);
     if (!req.admin) throw new Error('未授权');
     const selected = String(req.get('x-publisher-id') || '');
-    if (selected && !scheduler.publisher(selected)) throw new Error('所选发布机器人不存在');
+    if (selected && !scheduler.publisher(selected)) {
+      if (req.method === 'GET' && req.path === '/bootstrap') delete req.headers['x-publisher-id'];
+      else throw new Error('所选发布机器人不存在');
+    }
     next();
   }
   catch (error) { res.status(401).json({ error: error.message }); }
