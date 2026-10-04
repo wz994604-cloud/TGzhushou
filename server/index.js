@@ -123,7 +123,7 @@ app.use('/api', (req, res, next) => {
       ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
       : browserAuth.authenticate(req);
     if (!req.admin) throw new Error('未授权');
-    if (req.method === 'POST' && ['/publisher','/inbox/enable'].includes(req.path) && req.admin.canManageBots !== true)
+    if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)
       return res.status(403).json({error:'仅 wz994604 可管理或配置机器人'});
     const selected = String(req.get('x-publisher-id') || '');
     if (selected && !canAccessBot(req.admin, selected)) return res.status(403).json({error:'没有此机器人的操作权限'});

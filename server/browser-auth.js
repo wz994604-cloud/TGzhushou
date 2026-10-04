@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {getSetting, setSetting} from './db.js';
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part => {
@@ -31,6 +32,8 @@ export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
     .filter(account => account.username && account.password)
     .map(({password, ...account}) => ({...account, passwordKey:crypto.scryptSync(password, salt, 32)}));
   const failures = new Map();
+  const storedAccounts = () => JSON.parse(getSetting(db, 'admin_accounts_v1') || '[]');
+  const findAccount = username => accounts.find(account => account.username === username) || storedAccounts().find(account => account.username === username);
   const sameOrigin = req => {
     const origin = req.get('origin');
     return Boolean(origin && new URL(origin).host === req.get('host'));
@@ -60,13 +63,37 @@ export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
       if (!origin || new URL(origin).host !== req.get('host')) return null;
     }
     if (Date.now()-row.last_seen>60_000) db.prepare('UPDATE browser_sessions SET last_seen=? WHERE session_hash=?').run(Date.now(),row.session_hash);
-    const account = row.login_username ? accounts.find(candidate => candidate.username === row.login_username) : null;
+    const account = row.login_username ? findAccount(row.login_username) : null;
     if (row.login_username && !account) return null;
     return {id:row.admin_id, name:account?.username || '管理员', username:account?.username || '',
       canManageBots:account?.username === 'wz994604',
+      canManageAccounts:account?.username === 'wz9946',
       ...(account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
   }
   function routes(app) {
+    app.get('/auth/admin-accounts', (req,res) => {
+      if (authenticate(req)?.canManageAccounts !== true) return res.sendStatus(403);
+      res.json({accounts:[...accounts,...storedAccounts()].map(({username,publisherIds}) => ({username,publisherIds})),
+        publishers:db.prepare('SELECT id,username FROM publishers ORDER BY username').all()});
+    });
+    app.post('/auth/admin-accounts', (req,res) => {
+      if (!sameOrigin(req) || authenticate(req)?.canManageAccounts !== true) return res.sendStatus(403);
+      const username = String(req.body?.username || '').trim(), password = String(req.body?.password || '');
+      const publisherIds = req.body?.publisherIds;
+      if (!/^[A-Za-z0-9_-]{3,64}$/.test(username) || password.length < 10 || password.length > 128 ||
+          !Array.isArray(publisherIds) || !publisherIds.length || publisherIds.length > 100 ||
+          publisherIds.some(id => typeof id !== 'string' || !/^\d+$/.test(id) || !db.prepare('SELECT 1 FROM publishers WHERE id=?').get(id)))
+        return res.status(400).json({error:'账号须为 3–64 位字母数字或下划线，密码须为 10–128 位，并选择有效机器人'});
+      if (['wz9946','wz994604'].includes(username) || findAccount(username)) return res.status(409).json({error:'账号已存在或为保留账号'});
+      const passwordSalt = crypto.randomBytes(16).toString('base64url');
+      const account = {username,passwordSalt,passwordHash:crypto.scryptSync(password,passwordSalt,32).toString('base64'),publisherIds:[...new Set(publisherIds)]};
+      db.transaction(() => {
+        const saved = storedAccounts();
+        if (saved.some(item => item.username === username)) throw new Error('账号已存在');
+        setSetting(db,'admin_accounts_v1',JSON.stringify([...saved,account]));
+      })();
+      res.status(201).json({username,publisherIds:account.publisherIds});
+    });
     app.post('/auth/exchange', (req,res) => {
       const token = String(req.body?.token || '');
       if (!/^[A-Za-z0-9_-]{40,100}$/.test(token)) return res.sendStatus(401);
@@ -79,13 +106,15 @@ export function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
     });
     app.post('/auth/login', (req,res) => {
       if (!sameOrigin(req)) return res.sendStatus(403);
-      if (!accounts.length) return res.status(503).json({ error:'账号登录尚未配置，请联系管理员' });
+      if (!accounts.length && !storedAccounts().length) return res.status(503).json({ error:'账号登录尚未配置，请联系管理员' });
       const now = Date.now(), ip = req.ip || 'unknown', state = failures.get(ip) || { count:0, until:0 };
       if (state.until > now) return res.status(429).json({ error:'登录失败次数过多，请稍后再试' });
       const inputUser = String(req.body?.username || ''), inputPassword = String(req.body?.password || '');
-      const inputKey = crypto.scryptSync(inputPassword, salt, 32);
-      const account = accounts.find(candidate => candidate.username === inputUser);
-      const valid = Boolean(account && inputKey.length === account.passwordKey.length && crypto.timingSafeEqual(inputKey, account.passwordKey));
+      if (inputPassword.length > 128) return res.status(401).json({error:'账号或密码错误'});
+      const account = findAccount(inputUser);
+      const inputKey = crypto.scryptSync(inputPassword, account?.passwordSalt || salt, 32);
+      const passwordKey = account?.passwordKey || Buffer.from(account?.passwordHash || '', 'base64');
+      const valid = Boolean(account && inputKey.length === passwordKey.length && crypto.timingSafeEqual(inputKey, passwordKey));
       if (!valid) {
         state.count += 1; if (state.count >= 5) { state.count = 0; state.until = now + 15*60_000; }
         failures.set(ip, state); return res.status(401).json({ error:'账号或密码错误' });

@@ -115,6 +115,15 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
       .run(bot.id,secret,Date.now());
     res.json({ status:'READY', enabled:true });
   }));
+  app.post('/api/inbox/disable', wrapper(async (req,res) => {
+    if (req.admin?.canManageBots !== true) return res.sendStatus(403);
+    const bot = botFor(req); if (!bot) return res.status(404).json({error:'未配置发布机器人'});
+    const state = await inspect(bot);
+    if (state.status !== 'READY' && state.status !== 'AVAILABLE') return res.status(409).json(state);
+    if (state.status === 'READY') await botApi(bot.token,'deleteWebhook',{drop_pending_updates:false});
+    setState(bot.id,'AVAILABLE',false);
+    res.json({status:'AVAILABLE',enabled:false});
+  }));
   app.get('/api/chat/conversations', wrapper(async (req,res) => {
     const id = currentId(req), limit = clamp(req.query.limit,40,100), q = String(req.query.q || '').slice(0,100);
     const before = /^(\d+):(-?\d+)$/.exec(String(req.query.before || ''));
