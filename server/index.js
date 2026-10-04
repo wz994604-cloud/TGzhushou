@@ -360,10 +360,10 @@ app.get('/api/sticker-packs/saved', route(async (req, res) => {
   const bot = currentBot(req);
   if (!bot) return res.json({ packs: [] });
   const packs = await db.prepare('SELECT * FROM sticker_packs WHERE bot_id=? ORDER BY updated_at DESC').all(bot.id);
-  res.json({ packs: packs.map(async pack => ({
+  res.json({ packs: await Promise.all(packs.map(async pack => ({
     ...pack,
     stickers: await db.prepare('SELECT emoji_id AS id,alt,thumbnail_id AS thumbnailId FROM sticker_pack_items WHERE pack_id=? ORDER BY position').all(pack.id)
-  })) });
+  }))) });
 }));
 
 app.post('/api/sticker-packs/saved', route(async (req, res) => {
