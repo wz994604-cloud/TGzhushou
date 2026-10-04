@@ -1,5 +1,4 @@
-const jscodeshift = require('jscodeshift');
-const j = jscodeshift.withParser('babel');
+let j;
 
 const knownAsyncIdentifiers = new Set([
   'openDatabase','getSetting','setSetting',
@@ -55,7 +54,8 @@ function awaitCall(path, { allowHandled = false } = {}) {
   return true;
 }
 
-module.exports = function transform(fileInfo) {
+module.exports = function transform(fileInfo, api) {
+  j = api.jscodeshift.withParser('babel');
   const root = j(fileInfo.source);
   const prepared = new Set();
   const transactions = new Set();
