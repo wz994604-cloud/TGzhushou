@@ -84,7 +84,8 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     const topActions=node('div','topbar-actions');
     for(const [label,glyph] of [['新建','plus'],['通知','bell'],['外观','moon']]) { const b=button(label,glyph,null); b.disabled=true; b.dataset.placeholder='soon'; b.title=`${label}｜即将开放`; topActions.append(b); }
     const account=node('button','topbar-account','管理账号'); account.type='button'; account.onclick=()=>navigate('settings');
-    top.append(toggle,search,publisher,topActions,account); content.prepend(top); workspace.replaceChildren(rail,content);
+    rail.querySelector('#railBots').append(publisher);
+    top.append(toggle,search,topActions,account); content.prepend(top); workspace.replaceChildren(rail,content);
     details=node('aside','chat-details','<div class="details-heading"><div><span class="details-kicker">当前会话</span><h3>会话资料</h3></div></div><div class="details-profile"><div class="details-avatar">?</div><h3 class="details-title">请选择会话</h3><p class="details-handle">未选择会话</p><span class="details-status is-placeholder">状态未接入</span></div><div class="details-actions"><button class="primary" type="button" data-details-send>发送消息</button><button class="secondary is-placeholder" type="button" disabled>加标签</button><button class="secondary is-placeholder" type="button" disabled>备注</button><button class="secondary is-placeholder" type="button" disabled>更多</button></div><section class="details-card"><h4>用户信息</h4><dl></dl></section><section class="details-card details-tags"><h4>标签</h4><span class="empty-state">即将开放</span></section><section class="details-card details-media"><h4>媒体</h4><span class="empty-state">即将开放</span></section>');
     details.setAttribute('aria-label','会话资料');
     const close=button('关闭会话资料','close',()=>{workspace.classList.remove('details-open');$('showChatDetails').setAttribute('aria-expanded','false');$('showChatDetails').focus();}); details.querySelector('.details-heading').append(close);
@@ -202,6 +203,9 @@ export function mountWorkbench({ mini, navigate, backChat }) {
       if(!chat && $('chatMessages')) $('chatMessages').innerHTML='<p class="chat-empty">选择左侧会话，开始处理消息</p>';
       if(!details)return;
       details.hidden=mini?!chat:false;
+      const send=details.querySelector('[data-details-send]');
+      send.disabled=!chat;
+      send.title=chat?'聚焦消息输入框':'请先选择会话';
       details.querySelector('.details-title').textContent=chat?.title||'请选择会话';
       details.querySelector('.details-avatar').textContent=(chat?.title||'?').slice(0,1);
       details.querySelector('.details-handle').textContent=chat?`ID ${chat.chat_id}`:'未选择会话';
