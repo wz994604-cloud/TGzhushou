@@ -2356,3 +2356,65 @@ html[data-surface=web] .toast { top:76px;bottom:auto;left:auto;right:24px;transf
 .compose-heading>#toggleWriting { margin:0; }
 .desktop-shell .editor-publishing .check { padding:10px;min-height:52px; }
 .desktop-shell .editor-publishing h3 { margin-bottom:10px; }
+/* Approved web reference: pale pink-blue shell and four-column chat workspace. */
+html[data-surface=web] body {
+  min-height:100dvh;
+  padding:18px;
+  background:
+    radial-gradient(46rem 32rem at 2% 0%,rgb(255 127 147 / .78),transparent 68%),
+    radial-gradient(42rem 30rem at 98% 4%,rgb(148 94 211 / .58),transparent 70%),
+    radial-gradient(48rem 34rem at 52% 100%,rgb(67 181 242 / .68),transparent 72%),
+    #8dcbff;
+}
+html[data-surface=web] #workspace.desktop-shell {
+  height:calc(var(--visible-height,100dvh) - 36px);
+  min-height:0;
+  border:1px solid rgb(255 255 255 / .76);
+  border-radius:18px;
+  overflow:hidden;
+  background:#f6f7fbcc;
+  box-shadow:0 24px 80px rgb(25 47 91 / .22),0 0 0 1px rgb(255 255 255 / .3);
+}
+html[data-surface=web] .app-rail {
+  width:230px;
+  padding:18px 14px;
+  background:linear-gradient(180deg,#f8ddea 0%,#f6b9db 52%,#dfdffa 100%);
+  color:#1b2c4c;
+  border-right:1px solid rgb(255 255 255 / .78);
+}
+html[data-surface=web] .rail-brand-copy strong { color:#172642; }
+html[data-surface=web] .rail-brand-copy small,
+html[data-surface=web] .rail-group-label,
+html[data-surface=web] .rail-account small { color:#526483; }
+html[data-surface=web] .rail-brand-mark { background:linear-gradient(135deg,#1677f2,#945ed3); }
+html[data-surface=web] .rail-bot { color:#172642; }
+html[data-surface=web] .rail-bot>span:first-child { background:#ffffffa8; color:#172642; }
+html[data-surface=web] .rail-bot.active { background:#ffffffb8; box-shadow:inset 3px 0 #1677f2; }
+html[data-surface=web] .rail-nav button { color:#1b2c4c; }
+html[data-surface=web] .rail-nav button.active { background:#e7f1ff; color:#1677f2; box-shadow:inset 3px 0 #1677f2; }
+html[data-surface=web] .rail-account { border-top-color:#ffffffa8; }
+html[data-surface=web] .desktop-content { background:#f6f7fbcc; }
+html[data-surface=web] .desktop-topbar { background:#ffffffde; border-bottom-color:#e5ecf5; }
+html[data-surface=web] .workspace-search input { background:#f2f7fd; }
+html[data-surface=web] .desktop-shell .chat-shell { grid-template-columns:355px minmax(0,1fr) 419px; }
+html[data-surface=web] .desktop-shell .chat-list { padding:0 16px 16px; background:#ffffffd9; border-right-color:#e5ecf5; }
+html[data-surface=web] .desktop-shell .chat-main { background:#f2f7fd; }
+html[data-surface=web] .desktop-shell .chat-details,
+html[data-surface=web] .desktop-shell .chat-details[hidden] { display:block !important; position:static; width:auto; background:#ffffffde; border-left:1px solid #e5ecf5; box-shadow:none; }
+html[data-surface=web] .desktop-shell .chat-details .details-avatar { background:#e7f1ff; color:#1677f2; }
+html[data-surface=web] .desktop-shell .chat-details .details-heading button { display:none; }
+html[data-surface=web] #showChatDetails { display:none; }
+html[data-surface=web] .chat-conversation.selected { background:#e7f1ff; box-shadow:inset 3px 0 #1677f2; }
+html[data-surface=web] .chat-bubble.out { background:#dceeff; border-color:#c6e2ff; }
+html[data-surface=web] .desktop-shell.chat-empty-state .chat-main { background:#f2f7fd; }
+html[data-surface=web] .desktop-shell.chat-empty-state .chat-details { display:block !important; }
+@media (max-width:1399px) and (min-width:900px) {
+  html[data-surface=web] .desktop-shell .chat-shell { grid-template-columns:300px minmax(0,1fr) 300px; }
+}
+@media (max-width:899px) {
+  html[data-surface=web] body { padding:0; }
+  html[data-surface=web] #workspace.desktop-shell { height:var(--visible-height,100dvh); border-radius:0; border:0; }
+  html[data-surface=web] .desktop-shell .chat-details,
+  html[data-surface=web] .desktop-shell .chat-details[hidden] { display:none !important; }
+  html[data-surface=web] .desktop-shell.details-open .chat-details { display:block !important; position:absolute; right:0; top:0; bottom:0; width:min(320px,92%); z-index:8; box-shadow:var(--shadow); }
+}

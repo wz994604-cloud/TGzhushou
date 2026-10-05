@@ -190,7 +190,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
       if(!chat)workspace.classList.remove('details-open');$('showChatDetails')?.setAttribute('aria-expanded',String(workspace.classList.contains('details-open')));
       if(!chat && $('chatMessages')) $('chatMessages').innerHTML='<p class="chat-empty">选择左侧会话，开始处理消息</p>';
       if(!details)return;
-      details.hidden=!chat;
+      details.hidden=mini?!chat:false;
       details.querySelector('.details-title').textContent=chat?.title||'请选择会话';
       details.querySelector('.details-avatar').textContent=(chat?.title||'?').slice(0,1);
       const dl=details.querySelector('dl');dl.replaceChildren();
