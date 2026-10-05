@@ -1,0 +1,36 @@
+# Function pages verification
+
+Branch: feature/web-function-pages-v2
+BASELINE_SHA256: AF9E6AC8020BEB2893D0C6AFDDEC49F10290F35D804F551B28C5B35A15C5ADEE
+MODIFIED_SHA256: F845A50AD536AE274EC2B5291AC74E4F4F4DB70CC4330473BB58C379AEEC8332
+
+BASELINE
+Command: git diff --check origin/main...HEAD -- src/glass-theme-final.css
+Result: clean baseline comparison before UI patch
+Exit status: 0
+
+MODIFIED
+Command: node --check src/main.js
+Result: passed
+Exit status: 0
+Command: npm run build
+Result: Vite 8.3.1; 728 modules transformed; build succeeded
+Exit status: 0
+Command: npx playwright test --config tests/web-function-pages.config.js --grep "web function pages"
+Result: 2 passed (content + empty states), no page errors
+Exit status: 0
+
+ROLLBACK
+Command: ROLLBACK.sh <copy>
+Result: restored BASELINE.css hash AF9E6AC8020BEB2893D0C6AFDDEC49F10290F35D804F551B28C5B35A15C5ADEE on separate copy; source remains modified
+Exit status: 0
+
+Artifacts
+MODIFIED_FILE: .design/function-pages-20261006/MODIFIED_FILE.css
+DIFF_FILE: .design/function-pages-20261006/DIFF_FILE.patch
+VERIFICATION: .design/function-pages-20261006/VERIFICATION.txt
+ROLLBACK: .design/function-pages-20261006/ROLLBACK.sh
+
+Command: npx playwright test --config tests/web-function-pages.config.js --grep "chat refinement"
+Result: 1 passed; existing chat refinement regression remains green
+Exit status: 0
