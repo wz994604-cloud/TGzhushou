@@ -1,11 +1,8 @@
 import { sentActions } from './sent-actions.js';
 import express from 'express';
 import sharp from 'sharp';
-import { put } from '@vercel/blob';
-import { waitUntil } from '@vercel/functions';
 import { createAssetCache } from './asset-cache.js';
 import multer from 'multer';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +16,9 @@ import { createScheduler } from './scheduler.js';
 import { normalizeTelegramId, decodeCsv, parseCsv } from './player-utils.js';
 import { initializePlayerImports, playerSourceToken, savePlayerSourceToken, upsertPlayers } from './player-store.js';
 import { createBrowserAuth } from './browser-auth.js';
+import { createMediaStore } from './media-store.js';
+import { route, canAccessBot, currentBot, selectedBotId, requirePlayerBot, assertSelected } from './request-context.js';
+import { registerTaskRoutes } from './routes-tasks.js';
 import { registerChatRoutes } from './chat.js';
 
 const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
@@ -27,30 +27,25 @@ const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS);
 if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
 if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
 const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
-const db = await openDatabase(process.env.NODE_ENV === 'test' && process.env.TEST_DATABASE_FILE
-  ? { localFile:process.env.TEST_DATABASE_FILE } : {});
+const mediaDir = path.resolve(process.env.MEDIA_DIR || './data/media');
+const mediaStore = createMediaStore(mediaDir);
+await mediaStore.init();
+const db = await openDatabase();
 await initializePlayerImports(db);
 const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
-async function kickScheduler(label) {
-  if (process.env.VERCEL === '1') {
-    waitUntil(Promise.resolve().then(async () => await scheduler.tick()).catch(error => console.error(label, safeTelegramError(error))));
-    return;
-  }
+async function kickScheduler() {
   await scheduler.tick();
 }
 const app = express();
 const browserAuth = await createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
   accounts: (() => {
-    if (process.env.ADMIN_LOGIN_ACCOUNTS) {
-      try {
-        const parsed = JSON.parse(process.env.ADMIN_LOGIN_ACCOUNTS);
-        if (!Array.isArray(parsed)) throw new Error('ADMIN_LOGIN_ACCOUNTS must be a JSON array');
-        return parsed;
-      } catch (error) {
-        throw new Error(`ADMIN_LOGIN_ACCOUNTS 配置无效: ${error.message}`);
-      }
+    try {
+      const parsed = JSON.parse(process.env.ADMIN_LOGIN_ACCOUNTS || '[]');
+      if (!Array.isArray(parsed)) throw new Error('ADMIN_LOGIN_ACCOUNTS must be a JSON array');
+      return parsed;
+    } catch (error) {
+      throw new Error(`ADMIN_LOGIN_ACCOUNTS 配置无效: ${error.message}`);
     }
-    return [{ username: process.env.ADMIN_LOGIN_USERNAME || 'admin', password: process.env.ADMIN_LOGIN_PASSWORD }];
   })(),
   salt: process.env.CONFIG_KEY
 });
@@ -80,43 +75,10 @@ app.post('/tg/entry', async (req, res) => {
         text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } });
     }
   };
-  if (process.env.VERCEL === '1') {
-    waitUntil(Promise.resolve().then(handleEntry).catch(error => console.error('Entry bot:', safeTelegramError(error))));
-    return res.sendStatus(200);
-  }
   try { await handleEntry(); } catch (error) { console.error('Entry bot:', safeTelegramError(error)); }
   res.sendStatus(200);
 });
 
-async function ensureEntryBot() {
-  const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
-  if (!base) return;
-  const webhookUrl = `${base}/tg/entry`;
-  const secret = crypto.createHash('sha256').update(`entry:${process.env.ENTRY_BOT_TOKEN}`).digest('hex');
-  const marker = `${webhookUrl}|${secret}`;
-  if ((await getSetting(db, 'entry_webhook_config')) === marker) return;
-  await botCall(process.env.ENTRY_BOT_TOKEN, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '打开活动后台', web_app: { url: base } } });
-  await botCall(process.env.ENTRY_BOT_TOKEN, 'setWebhook', { url: webhookUrl,
-    secret_token: secret, allowed_updates: ['message'] });
-  await setSetting(db, 'entry_webhook_config', marker);
-}
-
-app.post('/api/cron/tick', async (req,res,next) => { try {
-  const auth = Buffer.from(String(req.get('authorization') || ''));
-  const expected = Buffer.from(`Bearer ${process.env.CRON_SECRET || ''}`);
-  if (!process.env.CRON_SECRET || auth.length !== expected.length || !crypto.timingSafeEqual(auth, expected)) return res.sendStatus(401);
-  const work = async () => {
-    try { await ensureEntryBot(); } catch (error) { console.error('Entry bot setup:', safeTelegramError(error)); }
-    await scheduler.tick();
-  };
-  if (process.env.VERCEL === '1') {
-    waitUntil(Promise.resolve().then(work).catch(error => console.error('Cron tick:', safeTelegramError(error))));
-    return res.json({ok:true,queued:true});
-  }
-  await work(); res.json({ok:true});
-} catch(error){ next(error); } });
-
-const canAccessBot = (admin, id) => !Array.isArray(admin.publisherIds) || admin.publisherIds.includes(String(id));
 app.use('/api', async (req, res, next) => {
   try {
     req.admin = await browserAuth.authenticate(req) || (req.get('x-telegram-init-data')
@@ -127,7 +89,7 @@ app.use('/api', async (req, res, next) => {
       return res.status(403).json({error:'仅 wz9946 可管理或配置机器人'});
     const selected = String(req.get('x-publisher-id') || '');
     if (selected && !canAccessBot(req.admin, selected)) return res.status(403).json({error:'没有此机器人的操作权限'});
-    const defaultBot = await scheduler.publisher();
+    const defaultBot = (await listPublishers(db)).find(bot => canAccessBot(req.admin, bot.id));
     const id = selected || (defaultBot && canAccessBot(req.admin, defaultBot.id) ? defaultBot.id :
       (await listPublishers(db)).find(bot => canAccessBot(req.admin, bot.id))?.id);
     req.publisher = id ? await scheduler.publisher(id) : null;
@@ -140,18 +102,7 @@ app.use('/api', async (req, res, next) => {
   catch (error) { res.status(401).json({ error: error.message }); }
 });
 
-const route = fn => async (req, res, next) => { try { await fn(req, res); } catch (error) { next(error); } };
-const currentBot = req => req.publisher;
 registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL, publisherFor:currentBot });
-function selectedBotId(req) { return currentBot(req)?.id || ''; }
-function requirePlayerBot(req) {
-  const id = selectedBotId(req);
-  if (!id) throw new Error('请先选择已绑定的发布机器人');
-  return id;
-}
-function assertSelected(req, botId) {
-  if (botId !== selectedBotId(req)) throw new Error('记录不属于所选机器人');
-}
 const sent = await sentActions(db, async id => await scheduler.publisher(id));
 async function selectedSent(req) {
   const row = await sent.read(req.params.kind, Number(req.params.id));
@@ -229,7 +180,7 @@ async function fetchFfaPlayers(token) {
 
 app.get('/api/bootstrap', route(async (req, res) => {
   const bot = currentBot(req);
-  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: (await listPublishers(db)).filter(p => canAccessBot(req.admin, p.id)), publisher: bot ? { id: bot.id, username: bot.username, legacy: bot.id === (await getSetting(db, 'publisher_id')) } : null,
+  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: (await listPublishers(db)).filter(p => canAccessBot(req.admin, p.id)), publisher: bot ? { id: bot.id, username: bot.username } : null,
     targets: await db.prepare('SELECT * FROM targets WHERE bot_id=? ORDER BY id DESC').all(bot?.id || ''),
     tasks: await db.prepare('SELECT id,name,status,schedule_json,next_at,updated_at,bot_id FROM tasks WHERE bot_id=? ORDER BY id DESC LIMIT 100').all(bot?.id || '') });
 }));
@@ -485,9 +436,8 @@ app.post('/api/media', upload.single('image'), route(async (req, res) => {
   if (!mime) throw new Error('只支持 JPEG、PNG、WebP 图片');
   const sha = crypto.createHash('sha256').update(buffer).digest('hex');
   const ext = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : '.webp';
-  if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('BLOB_READ_WRITE_TOKEN 未配置，媒体上传不可用');
-  const blob = await put(`media/${sha}${ext}`, buffer, { access:'public', addRandomSuffix:false });
-  const filename = blob.url
+  const filename = mediaStore.pathFor(sha, ext);
+  await mediaStore.write(filename, buffer);
   await db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)').run(sha, mime, buffer.length, filename, Date.now());
   res.json(await db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
 }));
@@ -501,9 +451,8 @@ app.post('/api/chat/media', chatUpload.single('file'), route(async (req,res) => 
   const ext = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp'
     : mime === 'video/mp4' ? '.mp4' : mime === 'video/webm' ? '.webm' : '.bin';
   const sha = crypto.createHash('sha256').update(file.buffer).digest('hex');
-  if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error('BLOB_READ_WRITE_TOKEN 未配置，媒体上传不可用');
-  const blob = await put(`media/${sha}${ext}`, file.buffer, { access:'public', addRandomSuffix:false });
-  const filename = blob.url
+  const filename = mediaStore.pathFor(sha, ext);
+  await mediaStore.write(filename, file.buffer);
   await db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)')
     .run(sha,mime,file.buffer.length,filename,Date.now());
   res.json(await db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
@@ -516,112 +465,15 @@ app.get('/api/media/:id', route(async (req, res) => {
   if (req.query.preview === '1') {
     if (!media.mime.startsWith('image/')) return res.sendStatus(400);
     const bytes = await previewCache(media.sha256, async () => {
-      const source = await fetch(media.file_path, { signal:AbortSignal.timeout(20000) }); if (!source.ok) throw new Error('媒体对象读取失败');
-      return sharp(Buffer.from(await source.arrayBuffer()), { limitInputPixels:40000000 }).rotate()
+      return sharp(await mediaStore.read(media.file_path), { limitInputPixels:40000000 }).rotate()
         .resize(720, 720, { fit:'inside', withoutEnlargement:true }).webp({ quality:75 }).toBuffer();
     });
     return res.type('image/webp').send(bytes);
   }
-  const source = await fetch(media.file_path, { signal:AbortSignal.timeout(20000) }); if (!source.ok) return res.sendStatus(404); res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
+  try { res.type(media.mime).send(await mediaStore.read(media.file_path)); } catch { res.sendStatus(404); }
 }));
 
-async function taskPayload(body, bot) {
-  const name = String(body?.name || '').trim();
-  if (!name || name.length > 100) throw new Error('活动名称应为 1–100 字');
-  const delta = body?.delta?.ops;
-  const formatted = renderDelta(delta);
-  const buttons = normalizeButtons(body?.buttons || []);
-  if (!Array.isArray(body?.targetIds)) throw new Error('请选择发布目标');
-  const ids = [...new Set(body.targetIds.map(Number))];
-  if (!ids.length || ids.length > 50 || ids.some(id => !Number.isSafeInteger(id) || id < 1)) throw new Error('请选择 1–50 个发布目标');
-  const placeholders = ids.map(() => '?').join(',');
-  const targets = await db.prepare(`SELECT id FROM targets WHERE bot_id=? AND can_publish=1 AND id IN (${placeholders})`).all(bot.id, ...ids);
-  if (targets.length !== ids.length) throw new Error('有目标不存在或缺少发布权限');
-  const mediaId = body.mediaId ? Number(body.mediaId) : null;
-  if (mediaId && !(await db.prepare('SELECT id FROM media WHERE id=?').get(mediaId))) throw new Error('图片不存在');
-  if (mediaId && formatted.text.length > 1024) throw new Error('图片说明最多 1024 字符');
-  const schedule = normalizeSchedule(body.schedule);
-  return { name, delta: JSON.stringify(delta), buttons: JSON.stringify(buttons), ids: JSON.stringify(ids), schedule: JSON.stringify(schedule), mediaId };
-}
-
-app.post('/api/tasks', route(async (req, res) => {
-  const bot = currentBot(req);
-  if (!bot) throw new Error('请先配置发布机器人');
-  const item = await taskPayload(req.body, bot), now = Date.now();
-  const result = await db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,media_id,bot_id,status,next_at,created_at,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(item.name,item.delta,item.buttons,item.ids,item.schedule,item.mediaId,bot.id,'DRAFT',null,now,now);
-  res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(result.lastInsertRowid));
-}));
-
-app.put('/api/tasks/:id', route(async (req, res) => {
-  const bot = currentBot(req), id = Number(req.params.id);
-  const old = await db.prepare('SELECT * FROM tasks WHERE id=?').get(id);
-  if (!old || old.bot_id !== bot?.id) throw new Error('任务不存在或属于旧机器人');
-  const item = await taskPayload(req.body, bot), now = Date.now();
-  const schedule = JSON.parse(item.schedule);
-  const active = old.status === 'ACTIVE' && schedule.kind !== 'MANUAL';
-  await db.prepare(`UPDATE tasks SET name=?,delta_json=?,buttons_json=?,target_ids_json=?,schedule_json=?,media_id=?,status=?,next_at=?,updated_at=? WHERE id=?`)
-    .run(item.name,item.delta,item.buttons,item.ids,item.schedule,item.mediaId,active?'ACTIVE':['PAUSED','STOPPED'].includes(old.status)?old.status:'DRAFT',active?nextSlot(schedule,now):null,now,id);
-  res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(id));
-}));
-
-app.get('/api/tasks/:id', route(async (req, res) => {
-  const task = await db.prepare('SELECT * FROM tasks WHERE id=?').get(Number(req.params.id));
-  if (!task || task.bot_id !== selectedBotId(req)) return res.sendStatus(404);
-  res.json(task);
-}));
-
-app.delete('/api/tasks/:id', route(async (req, res) => {
-  const id = Number(req.params.id), task = await db.prepare('SELECT * FROM tasks WHERE id=?').get(id);
-  if (!task || task.bot_id !== selectedBotId(req)) return res.sendStatus(404);
-  if (task.status === 'ACTIVE' || (await db.prepare("SELECT 1 FROM deliveries WHERE status IN ('PENDING','SENDING') AND run_id IN (SELECT id FROM runs WHERE task_id=?)").get(id))) throw new Error('请先停止任务并等待正在发送的消息处理完毕');
-  await db.transaction(async () => {
-    await db.prepare('DELETE FROM deliveries WHERE run_id IN (SELECT id FROM runs WHERE task_id=?)').run(id);
-    await db.prepare('DELETE FROM runs WHERE task_id=?').run(id);
-    await db.prepare('DELETE FROM tasks WHERE id=?').run(id);
-  })();
-  res.json({ ok:true });
-}));
-
-app.post('/api/tasks/:id/status', route(async (req, res) => {
-  const task = await db.prepare('SELECT * FROM tasks WHERE id=?').get(Number(req.params.id));
-  if (!task || task.bot_id !== currentBot(req)?.id) throw new Error('任务不存在或属于旧机器人');
-  const action = String(req.body?.action || '');
-  if (!['activate','pause','stop'].includes(action)) throw new Error('操作无效');
-  const schedule = JSON.parse(task.schedule_json);
-  if (action === 'activate' && task.status === 'ACTIVE') return res.json(task);
-  if (action === 'pause' && task.status === 'STOPPED') throw new Error('任务已停止，请先重新开始');
-  if (action === 'activate' && task.status === 'COMPLETED') throw new Error('单次任务已经完成');
-  const timed = schedule.kind !== 'MANUAL';
-  const next = action === 'activate' && timed ? nextSlot(schedule, Date.now()) : null;
-  if (action === 'activate' && timed && !next) throw new Error('没有未来发布时间，请编辑任务设置新的发布时间');
-  const status = action === 'activate' ? (timed ? 'ACTIVE' : 'DRAFT') : action === 'pause' ? 'PAUSED' : 'STOPPED';
-  await db.transaction(async () => {
-    await db.prepare('UPDATE tasks SET status=?,next_at=?,updated_at=? WHERE id=?').run(status,next,Date.now(),task.id);
-    if (action !== 'activate') await db.prepare(`UPDATE deliveries SET status='CANCELLED',error_text='任务已暂停或停止',completed_at=? WHERE status='PENDING' AND run_id IN
-      (SELECT id FROM runs WHERE task_id=? AND (?='stop' OR source='SCHEDULED'))`).run(Date.now(), task.id, action);
-  })();
-  res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(task.id));
-}));
-
-app.post('/api/tasks/:id/send', route(async (req, res) => {
-  const runId = await scheduler.queueNow(Number(req.params.id), req.body?.requestKey, selectedBotId(req));
-  await kickScheduler('Immediate tick:');
-  res.json({ runId });
-}));
-
-app.get('/api/runs', route(async (req, res) => {
-  res.json(await db.prepare(`SELECT r.id,r.task_id,r.source,r.slot_at,r.status,r.created_at,t.name,
-    COUNT(d.id) total,SUM(CASE WHEN d.status='SUCCESS' THEN 1 ELSE 0 END) success_count,SUM(CASE WHEN d.status='FAILED' THEN 1 ELSE 0 END) failed_count,SUM(CASE WHEN d.status='UNKNOWN' THEN 1 ELSE 0 END) unknown_count
-    FROM runs r JOIN tasks t ON t.id=r.task_id LEFT JOIN deliveries d ON d.run_id=r.id
-    WHERE r.bot_id=? GROUP BY r.id,t.name ORDER BY r.id DESC LIMIT 50`).all(selectedBotId(req)));
-}));
-
-app.get('/api/runs/:id', route(async (req, res) => {
-  const run = await db.prepare('SELECT * FROM runs WHERE id=?').get(Number(req.params.id));
-  if (!run || run.bot_id !== selectedBotId(req)) return res.sendStatus(404);
-  res.json({ ...run, deliveries: await db.prepare(`SELECT d.*,c.deleted,c.state AS last_action,c.error AS last_error FROM deliveries d LEFT JOIN sent_changes c ON c.kind='runs' AND c.delivery_id=d.id WHERE d.run_id=? ORDER BY d.id`).all(run.id) });
-}));
+registerTaskRoutes(app, { db, route, currentBot, selectedBotId, scheduler, nextSlot, normalizeSchedule, renderDelta, normalizeButtons, kickScheduler });
 
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 app.use('/api', (_req, res) => res.status(404).json({ error:'接口不存在' }));
@@ -645,7 +497,6 @@ app.use((error, _req, res, _next) => {
 const port = Number(process.env.PORT || 8080);
 export default app;
 
-if (process.env.VERCEL !== '1') {
 const server = app.listen(port, '0.0.0.0', async () => {
   console.log(`TGzhushou listening on ${port}`);
   scheduler.start();
@@ -660,4 +511,3 @@ const server = app.listen(port, '0.0.0.0', async () => {
 function shutdown() { scheduler.stop(); server.close(async () => { await db.close(); process.exit(0); }); setTimeout(() => process.exit(0), 25000).unref(); }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
-}

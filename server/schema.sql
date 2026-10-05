@@ -31,7 +31,7 @@
       id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES runs(id),
       target_id INTEGER NOT NULL, chat_id TEXT NOT NULL, title TEXT NOT NULL,
       status TEXT NOT NULL, telegram_message_id TEXT, error_text TEXT,
-      started_at INTEGER, completed_at INTEGER,
+      started_at INTEGER, completed_at INTEGER, claim_token TEXT, claimed_at INTEGER,
       UNIQUE(run_id, target_id)
     );
     CREATE INDEX IF NOT EXISTS delivery_pending ON deliveries(status, id);
@@ -45,12 +45,6 @@
       emoji_id TEXT NOT NULL, alt TEXT NOT NULL, thumbnail_id TEXT, position INTEGER NOT NULL,
       UNIQUE(pack_id, emoji_id)
     );
-    CREATE TABLE IF NOT EXISTS players(
-      id INTEGER PRIMARY KEY, telegram_id TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL DEFAULT '',
-      username TEXT NOT NULL DEFAULT '', platform_id TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
-      first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'ffa'
-    );
-    CREATE INDEX IF NOT EXISTS players_name ON players(display_name);
     CREATE TABLE IF NOT EXISTS bot_players(
       bot_id TEXT NOT NULL, telegram_id TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '',
       username TEXT NOT NULL DEFAULT '', platform_id TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
@@ -66,7 +60,7 @@
     CREATE TABLE IF NOT EXISTS broadcast_deliveries(
       id INTEGER PRIMARY KEY, broadcast_id INTEGER NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
       telegram_id TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
-      telegram_message_id TEXT, error_text TEXT, started_at INTEGER, completed_at INTEGER,
+      telegram_message_id TEXT, error_text TEXT, started_at INTEGER, completed_at INTEGER, claim_token TEXT, claimed_at INTEGER,
       UNIQUE(broadcast_id, telegram_id)
     );
     CREATE INDEX IF NOT EXISTS broadcast_pending ON broadcast_deliveries(status, id);
@@ -108,5 +102,3 @@
       expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
       login_username TEXT NOT NULL DEFAULT ''
     );
-
-

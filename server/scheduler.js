@@ -3,6 +3,7 @@ import { botCall, sendPhoto, safeTelegramError } from './telegram.js';
 import { renderDelta, keyboard } from './format.js';
 import { sendFormatted } from './sender.js';
 import { nextSlot } from './schedule.js';
+import crypto from 'node:crypto';
 
 export function createScheduler(db, config, api = { botCall, sendPhoto }) {
   let running = false, timer = null;
@@ -73,7 +74,8 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
   }
 
   async function sendOne(row, now) {
-    const claimed = await db.prepare("UPDATE deliveries SET status='SENDING',started_at=? WHERE id=? AND status='PENDING'").run(now, row.id);
+    const claim = crypto.randomUUID();
+    const claimed = await db.prepare("UPDATE deliveries SET status='SENDING',started_at=?,claim_token=?,claimed_at=? WHERE id=? AND status='PENDING'").run(now, claim, now, row.id);
     if (!claimed.changes) return;
     let attempted = false;
     try {
@@ -98,16 +100,17 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       const expectedIcons = buttons?.inline_keyboard?.flat().filter(button => button.icon_custom_emoji_id).map(button => button.icon_custom_emoji_id) || [];
       const returnedIcons = sent.reply_markup?.inline_keyboard?.flat().filter(button => button.icon_custom_emoji_id).map(button => button.icon_custom_emoji_id) || [];
       if (expectedIcons.some((id, index) => id !== returnedIcons[index])) notes.push('Telegram 返回的按钮专属表情与配置不一致，请核对目标实际显示');
-      await db.prepare("UPDATE deliveries SET status='SUCCESS',telegram_message_id=?,error_text=?,completed_at=? WHERE id=?")
-        .run(String(sent.message_id), notes.join('；') || null, Date.now(), row.id);
+      await db.prepare("UPDATE deliveries SET status='SUCCESS',telegram_message_id=?,error_text=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?")
+        .run(String(sent.message_id), notes.join('；') || null, Date.now(), row.id, claim);
     } catch (error) {
       const status = !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
-      await db.prepare('UPDATE deliveries SET status=?,error_text=?,completed_at=? WHERE id=?').run(status, safeTelegramError(error), Date.now(), row.id);
+      await db.prepare('UPDATE deliveries SET status=?,error_text=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?').run(status, safeTelegramError(error), Date.now(), row.id, claim);
     }
   }
 
   async function sendBroadcastOne(row, now) {
-    const claimed = await db.prepare("UPDATE broadcast_deliveries SET status='SENDING',started_at=? WHERE id=? AND status='PENDING'").run(now, row.id);
+    const claim = crypto.randomUUID();
+    const claimed = await db.prepare("UPDATE broadcast_deliveries SET status='SENDING',started_at=?,claim_token=?,claimed_at=? WHERE id=? AND status='PENDING'").run(now, claim, now, row.id);
     if (!claimed.changes) return;
     let attempted = false;
     try {
@@ -121,10 +124,10 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       attempted = true;
       const { sent } = await sendFormatted({ token:bot.token, chatId:row.telegram_id,
         delta:JSON.parse(row.delta_json), buttons:JSON.parse(row.buttons_json), media, api });
-      await db.prepare("UPDATE broadcast_deliveries SET status='SUCCESS',telegram_message_id=?,completed_at=? WHERE id=?").run(String(sent.message_id), Date.now(), row.id);
+      await db.prepare("UPDATE broadcast_deliveries SET status='SUCCESS',telegram_message_id=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?").run(String(sent.message_id), Date.now(), row.id, claim);
     } catch (error) {
       const status = !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
-      await db.prepare('UPDATE broadcast_deliveries SET status=?,error_text=?,completed_at=? WHERE id=?').run(status, safeTelegramError(error), Date.now(), row.id);
+      await db.prepare('UPDATE broadcast_deliveries SET status=?,error_text=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?').run(status, safeTelegramError(error), Date.now(), row.id, claim);
     }
   }
 
@@ -135,7 +138,9 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       const now = Date.now();
       const deadline = now + maxRuntimeMs;
       let sent = 0;
-      await db.prepare("UPDATE deliveries SET status='UNKNOWN',error_text='发送过程被中断，请到 Telegram 核实；未自动重发',completed_at=? WHERE status='SENDING' AND started_at<?")
+      await db.prepare("UPDATE deliveries SET status='UNKNOWN',error_text='发送过程被中断，请到 Telegram 核实；未自动重发',completed_at=?,claim_token=NULL,claimed_at=NULL WHERE status='SENDING' AND started_at<?")
+        .run(now, now - 300_000);
+      await db.prepare("UPDATE broadcast_deliveries SET status='UNKNOWN',error_text='发送过程被中断，请到 Telegram 核实；未自动重发',completed_at=?,claim_token=NULL,claimed_at=NULL WHERE status='SENDING' AND started_at<?")
         .run(now, now - 300_000);
       await queueDue(now);
       const rows = await db.prepare(`SELECT d.*,r.bot_id,r.delta_json,r.buttons_json,r.media_id FROM deliveries d

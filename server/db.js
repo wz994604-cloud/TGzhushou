@@ -2,13 +2,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Worker } from 'node:worker_threads';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import { postgresStatement } from './postgres-sql.js';
 
-const decoder = new TextDecoder();
-const queryTimeoutMs = 25_000;
 
 export function splitStatements(sql) {
   const statements = [];
@@ -40,68 +37,6 @@ export function splitStatements(sql) {
 const bindArgs = args => args.length === 1 && args[0] !== null && typeof args[0] === 'object' &&
   (Object.getPrototypeOf(args[0]) === Object.prototype || Object.getPrototypeOf(args[0]) === null)
   ? args[0] : args;
-
-function openLocalDatabase(localFile) {
-  const transport = new SharedArrayBuffer(8 * 1024 * 1024 + 12);
-  const signal = new Int32Array(transport, 0, 3);
-  const payload = new Uint8Array(transport, 12);
-  const worker = new Worker(new URL('./turso-worker.js', import.meta.url), {
-    workerData: { url: `file:${localFile}`, transport }
-  });
-  worker.unref();
-  let sequence = 0, transactionDepth = 0, closed = false;
-
-  function execute(operation, sql = '', args = []) {
-    if (closed) throw new Error('数据库连接已关闭');
-    const id = ++sequence;
-    Atomics.store(signal, 1, 0);
-    Atomics.store(signal, 2, 0);
-    worker.postMessage({ id, operation, sql, args });
-    const state = Atomics.wait(signal, 1, 0, queryTimeoutMs);
-    if (state === 'timed-out' || Atomics.load(signal, 1) !== id) {
-      closed = true;
-      worker.terminate();
-      throw new Error('数据库查询超时');
-    }
-    const result = JSON.parse(decoder.decode(payload.subarray(0, Atomics.load(signal, 2))));
-    if (result.error) throw new Error(result.error);
-    return result;
-  }
-
-  return {
-    prepare(sql) { return {
-      get(...args) { return execute('execute', sql, bindArgs(args)).rows[0]; },
-      all(...args) { return execute('execute', sql, bindArgs(args)).rows; },
-      run(...args) {
-        const result = execute('execute', sql, bindArgs(args));
-        return { changes: result.rowsAffected || 0, lastInsertRowid: result.lastInsertRowid };
-      }
-    }; },
-    exec(sql) { for (const statement of splitStatements(String(sql))) execute('execute', statement); },
-    transaction(fn) { return async (...args) => {
-      const outermost = transactionDepth === 0;
-      if (outermost) execute('begin');
-      transactionDepth++;
-      try {
-        const result = await fn(...args);
-        if (outermost) execute('commit');
-        return result;
-      } catch (error) {
-        if (outermost && !closed) {
-          try { execute('rollback'); } catch { /* retain original error */ }
-        }
-        throw error;
-      } finally {
-        transactionDepth--;
-      }
-    }; },
-    async close() {
-      if (closed) return;
-      try { execute('close'); }
-      finally { closed = true; await worker.terminate(); }
-    }
-  };
-}
 
 const parseInteger = value => {
   const number = Number(value);
@@ -167,18 +102,14 @@ async function openPostgresDatabase(url) {
   await db.transaction(async () => {
     for (const statement of splitStatements(postgresSchema)) await query(statement);
   })();
+  await db.exec('ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS claim_token TEXT');
+  await db.exec('ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS claimed_at BIGINT');
+  await db.exec('ALTER TABLE broadcast_deliveries ADD COLUMN IF NOT EXISTS claim_token TEXT');
+  await db.exec('ALTER TABLE broadcast_deliveries ADD COLUMN IF NOT EXISTS claimed_at BIGINT');
   return db;
 }
 
-export async function openDatabase(options = {}) {
-  const localFile = typeof options === 'object' && options.localFile;
-  if (localFile) {
-    const db = openLocalDatabase(localFile);
-    const schema = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql'), 'utf8');
-    const ready = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'").all().length > 0;
-    if (!ready) for (const statement of splitStatements(schema)) db.exec(statement);
-    return db;
-  }
+export async function openDatabase() {
   const url = String(process.env.DATABASE_URL || '');
   if (!/^postgres(?:ql)?:\/\//.test(url)) throw new Error('DATABASE_URL 未配置或格式不正确');
   return openPostgresDatabase(url);

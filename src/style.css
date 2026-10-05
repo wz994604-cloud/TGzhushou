@@ -2281,7 +2281,7 @@ html[data-surface=mini] .toast {
 .settings-forms { max-width:760px; }
 .settings-input-row { align-items:end; }
 #settingsImportUsers { margin:0 0 16px; }
-#legacyImportSettings label { margin-top:0; }
+#ffaImportSettings label { margin-top:0; }
 .user-table-heading,.user-table-row { grid-template-columns:28px minmax(70px,1fr) minmax(80px,.85fr) minmax(70px,.85fr) 56px minmax(90px,1fr) 58px;gap:8px; }
 .user-table-row { cursor:default; }
 .user-selection { margin:0;display:grid;place-items:center;min-height:44px;cursor:pointer; }
