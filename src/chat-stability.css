@@ -1,0 +1,53 @@
+/* Desktop chat selection stability fixes. Keep layout dimensions fixed while a conversation changes. */
+html[data-surface="web"] #chat .chat-list {
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+
+html[data-surface="web"] #chat #chatConversations {
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+
+html[data-surface="web"] #chat #chatMore {
+  flex:none;
+}
+
+html[data-surface="web"] #chat .chat-messages,
+html[data-surface="web"] #chat .chat-details,
+html[data-surface="web"] #chat #chatConversations {
+  scrollbar-gutter:stable;
+}
+
+/* The empty state used to remove the header completely. Reserving the same
+   header geometry prevents a visible vertical snap when the first chat opens. */
+html[data-surface="web"] .desktop-shell.chat-empty-state #chat .chat-head {
+  display:flex!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+
+html[data-surface="web"] .desktop-shell:not(.chat-empty-state) #chat .chat-head {
+  visibility:visible!important;
+}
+
+/* Do not let transient loading/empty content change the chat column geometry. */
+html[data-surface="web"] #chat .chat-main,
+html[data-surface="web"] #chat .chat-messages,
+html[data-surface="web"] #chat .chat-details {
+  min-width:0;
+  min-height:0;
+  contain:layout;
+}
+
+/* Selected rows should never alter their own box size. */
+html[data-surface="web"] #chat .chat-conversation,
+html[data-surface="web"] #chat .chat-conversation.selected {
+  box-sizing:border-box;
+  border-width:0!important;
+}
