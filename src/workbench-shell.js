@@ -16,7 +16,7 @@ const paths = {
   emoji:'M8 14s1 3 4 3 4-3 4-3M8 8v2m8-2v2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z',
   link:'m10 13 4-4M8 16l-2 2a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m2 1 2-2a4 4 0 0 1 6 6l-5 5a4 4 0 0 1-6 0',
   attach:'m9 15 8-8a3 3 0 0 0-4-4L3 13a5 5 0 0 0 7 7L21 9',
-  plus:'M12 5v14M5 12h14', menu:'M4 6h16M4 12h16M4 18h16', grid:'M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z'
+  plus:'M12 5v14M5 12h14', menu:'M4 6h16M4 12h16M4 18h16', bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4', moon:'M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z', phone:'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2Z', video:'M15 10 21 6v12l-6-4M3 6h12v12H3z', grid:'M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z'
 };
 export function icon(name) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${`<path d="${paths[name] || paths.grid}"/>`}</svg>`; }
 function node(tag, className, html='') { const el=document.createElement(tag); el.className=className; el.innerHTML=html; return el; }
@@ -81,13 +81,18 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     const search=node('form','workspace-search',`${icon('search')}<input type="search" aria-label="搜索会话" placeholder="搜索会话…">`);
     search.onsubmit=event=>{event.preventDefault();$('chatSearch').value=search.querySelector('input').value;navigate('chat');};
     publisher.querySelector('label').classList.add('sr-only');
+    const topActions=node('div','topbar-actions');
+    for(const [label,glyph] of [['新建','plus'],['通知','bell'],['外观','moon']]) { const b=button(label,glyph,null); b.disabled=true; b.dataset.placeholder='soon'; b.title=`${label}｜即将开放`; topActions.append(b); }
     const account=node('button','topbar-account','管理账号'); account.type='button'; account.onclick=()=>navigate('settings');
-    top.append(toggle,search,publisher,account); content.prepend(top); workspace.replaceChildren(rail,content);
-    details=node('aside','chat-details','<div class="details-heading"><h3>会话资料</h3></div><div class="details-avatar">?</div><h3 class="details-title">请选择会话</h3><dl></dl>');
+    top.append(toggle,search,publisher,topActions,account); content.prepend(top); workspace.replaceChildren(rail,content);
+    details=node('aside','chat-details','<div class="details-heading"><div><span class="details-kicker">当前会话</span><h3>会话资料</h3></div></div><div class="details-profile"><div class="details-avatar">?</div><h3 class="details-title">请选择会话</h3><p class="details-handle">未选择会话</p><span class="details-status is-placeholder">状态未接入</span></div><div class="details-actions"><button class="primary" type="button" data-details-send>发送消息</button><button class="secondary is-placeholder" type="button" disabled>加标签</button><button class="secondary is-placeholder" type="button" disabled>备注</button><button class="secondary is-placeholder" type="button" disabled>更多</button></div><section class="details-card"><h4>用户信息</h4><dl></dl></section><section class="details-card details-tags"><h4>标签</h4><span class="empty-state">即将开放</span></section><section class="details-card details-media"><h4>媒体</h4><span class="empty-state">即将开放</span></section>');
     details.setAttribute('aria-label','会话资料');
     const close=button('关闭会话资料','close',()=>{workspace.classList.remove('details-open');$('showChatDetails').setAttribute('aria-expanded','false');$('showChatDetails').focus();}); details.querySelector('.details-heading').append(close);
+    details.querySelector('[data-details-send]').onclick=()=>{const editorEl=$('chatInput')?.querySelector('.ql-editor');editorEl?.focus();};
     $('chat').querySelector('.chat-shell').append(details);
-    const info=button('查看会话资料','info',()=>{workspace.classList.toggle('details-open');info.setAttribute('aria-expanded',String(workspace.classList.contains('details-open')));if(workspace.classList.contains('details-open'))close.focus();});info.id='showChatDetails';$('chatHeader').append(info);
+    const headerActions=node('div','chat-header-actions');
+    for(const [label,glyph] of [['搜索消息','search'],['拨打电话','phone'],['视频通话','video'],['更多操作','menu']]) { const b=button(label,glyph,null); b.disabled=true; b.dataset.placeholder='soon'; headerActions.append(b); }
+    const info=button('查看会话资料','info',()=>{workspace.classList.toggle('details-open');info.setAttribute('aria-expanded',String(workspace.classList.contains('details-open')));if(workspace.classList.contains('details-open'))close.focus();});info.id='showChatDetails';headerActions.append(info);$('chatHeader').append(headerActions);
     workspace.addEventListener('keydown',e=>{if(e.key==='Escape'){workspace.classList.remove('details-open','navigation-open');}});
   }
 
@@ -166,6 +171,12 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     if(section.id==='chat')section.querySelector('.chat-list').prepend(status);else section.prepend(status);
     feedback.set(section.id,status);
   }
+  if(!mini) {
+    const chatList=$('chat').querySelector('.chat-list');
+    const chatFilters=node('div','chat-filters'); chatFilters.setAttribute('aria-label','会话筛选');
+    for(const [label,active] of [['全部',true],['未读',false],['收藏',false],['群组',false]]) { const b=node('button',active?'active is-placeholder':'is-placeholder',label); b.type='button'; b.disabled=!active; b.title=active?'当前会话列表':'即将开放'; chatFilters.append(b); }
+    chatList.querySelector('.section-title').after(chatFilters);
+  }
   function sectionLoading(id,busy){$(id)?.setAttribute('aria-busy',String(busy));}
   return {
     mini,
@@ -193,6 +204,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
       details.hidden=mini?!chat:false;
       details.querySelector('.details-title').textContent=chat?.title||'请选择会话';
       details.querySelector('.details-avatar').textContent=(chat?.title||'?').slice(0,1);
+      details.querySelector('.details-handle').textContent=chat?`ID ${chat.chat_id}`:'未选择会话';
       const dl=details.querySelector('dl');dl.replaceChildren();
       const fields=chat ? [['会话 ID',chat.chat_id],['未读消息',String(chat.unread_count||0)],...(chat.last_message_text?[['最近消息',chat.last_message_text]]:[])] : [];
       for(const [label,value] of fields){const dt=node('dt',''),dd=node('dd','');dt.textContent=label;dd.textContent=value;dl.append(dt,dd);}
