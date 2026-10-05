@@ -33,3 +33,36 @@
 ## 完成报告必须包含
 
 当前目录、身份、分支、修改文件、提交哈希、验证命令及结果、推送/合并/部署状态和未解决项。
+
+## 插件与本地工具调用规则
+
+先判断任务类型，再调用最合适的已安装插件或本地工具；不要为了简单任务操控电脑。
+
+### 已确认的本地工具
+
+- Git：`C:\Users\win11\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe`
+- Node.js：`C:\Users\win11\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`
+- pnpm：`C:\Users\win11\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd`
+- ripgrep：系统 `rg`
+- PowerShell：系统 PowerShell / bundled `pwsh`
+- 浏览器自动化：Browser Use、Chrome、统一计算机使用工具
+- 文档/表格/PDF：bundled Python、Documents、Spreadsheets、PDF、Presentations 工具
+
+### 可调用的插件类别
+
+- GitHub / GitLab：读取仓库、分支、提交、PR 和 CI；代码任务优先使用，不要先操控浏览器。
+- Railway / Vercel：读取部署、日志、域名和健康状态；只有用户明确确认才部署、回滚或修改配置。
+- Figma：读取设计稿、页面和组件；UI 对齐任务优先使用 Figma。
+- Browser Use / Chrome：只有需要真实页面交互、截图或验收时使用。
+- Documents / Spreadsheets / PDF / Presentations：处理对应文件时使用专用插件。
+- SQL Expert：需要数据库查询、结构或性能分析时使用。
+- Notion / Sites：用户明确要求知识库或站点操作时使用。
+
+### 调用优先级
+
+1. 专用插件或 Git/API。
+2. 本地命令行工具。
+3. 浏览器自动化。
+4. 只有前面都不能完成时，才进行电脑界面操作。
+
+每次报告使用了哪些插件、本地工具、命令和结果；未使用的工具不需要调用。
