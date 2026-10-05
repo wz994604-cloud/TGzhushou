@@ -79,7 +79,7 @@ html[data-surface="web"] .desktop-viewport {
   background:transparent!important;
 }
 
-/* Left rail: keep the current geometry, with a quiet paper-plane identity mark. */
+/* Left rail: keep the current pink/blue identity, but make it lighter and more translucent. */
 html[data-surface="web"] .desktop-shell>.app-rail,
 html[data-surface="web"] .app-rail {
   width:236px!important;
@@ -104,14 +104,6 @@ html[data-surface="web"] .rail-brand-copy strong {
 html[data-surface="web"] .rail-brand-copy small {
   font-size:10px!important;
 }
-
-html[data-surface="web"] .rail-brand-mark {
-  background:rgba(255,255,255,.38)!important;
-  border:1px solid rgba(31,41,55,.18)!important;
-  color:#1f2937!important;
-  box-shadow:none!important;
-}
-html[data-surface="web"] .rail-brand-mark svg { color:#1f2937!important; }
 
 html[data-surface="web"] .rail-bots {
   min-height:56px!important;
@@ -221,21 +213,22 @@ html[data-surface="web"] .rail-account {
   padding-top:10px!important;
 }
 
-/* Shared work-area material for the six function pages. Layout and page DOM stay unchanged. */
+/* Main work area on every non-chat function page: translucent pink glass, not plain white. */
 html[data-surface="web"] #editor.page,
 html[data-surface="web"] #assets.page,
 html[data-surface="web"] #players.page,
 html[data-surface="web"] #tasks.page,
 html[data-surface="web"] #logs.page,
 html[data-surface="web"] #settings.page {
-  background:transparent!important;
-  border:0!important;
-  border-radius:0!important;
-  box-shadow:none!important;
-  backdrop-filter:none!important;
-  -webkit-backdrop-filter:none!important;
-  color:var(--chat-text)!important;
-  padding:24px!important;
+  background:
+    radial-gradient(circle at 12% 8%,rgba(255,185,218,.22),transparent 30%),
+    radial-gradient(circle at 86% 12%,rgba(177,211,255,.17),transparent 34%),
+    linear-gradient(180deg,rgba(255,246,251,.58),rgba(251,239,248,.50))!important;
+  border:1px solid rgba(255,255,255,.52)!important;
+  border-radius:14px!important;
+  box-shadow:0 12px 34px rgba(71,91,128,.045)!important;
+  backdrop-filter:blur(18px) saturate(112%);
+  -webkit-backdrop-filter:blur(18px) saturate(112%);
 }
 
 html[data-surface="web"] #editor.page>.section-title,
@@ -244,27 +237,20 @@ html[data-surface="web"] #players.page>.section-title,
 html[data-surface="web"] #tasks.page>.section-title,
 html[data-surface="web"] #logs.page>.section-title,
 html[data-surface="web"] #settings.page>.section-title {
-  min-height:0!important;
-  margin:0 0 20px!important;
-  padding:0!important;
-  gap:6px!important;
-  background:transparent!important;
-  border:0!important;
+  min-height:68px!important;
 }
 
-/* Panels remain readable without nested shadows or repeated blur layers. */
+/* Internal cards stay readable but still let the pink background show through. */
 html[data-surface="web"] .page:not(#chat) .card,
 html[data-surface="web"] .page:not(#chat) .asset-card,
 html[data-surface="web"] .page:not(#chat) .surface-feedback,
 html[data-surface="web"] .page:not(#chat) .button-editor,
 html[data-surface="web"] .page:not(#chat) .message-preview {
-  background:var(--chat-panel)!important;
-  border-color:var(--chat-line)!important;
-  box-shadow:none!important;
-  backdrop-filter:none!important;
-  -webkit-backdrop-filter:none!important;
-  border-radius:10px!important;
-  padding:20px!important;
+  background:rgba(255,255,255,.58)!important;
+  border-color:rgba(255,255,255,.62)!important;
+  box-shadow:0 6px 18px rgba(64,88,128,.035)!important;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
 }
 
 html[data-surface="web"] .page:not(#chat) input,
@@ -274,19 +260,16 @@ html[data-surface="web"] .page:not(#chat) .ql-toolbar.ql-snow,
 html[data-surface="web"] .page:not(#chat) .ql-container.ql-snow,
 html[data-surface="web"] .page:not(#chat) .ops-table-head,
 html[data-surface="web"] .page:not(#chat) .user-table-heading {
-  background:var(--chat-input)!important;
-  border-color:var(--chat-line)!important;
+  background:rgba(255,255,255,.46)!important;
+  border-color:rgba(142,169,207,.20)!important;
 }
 
 html[data-surface="web"] .page:not(#chat) h2 {
-  font-size:20px!important;
-  line-height:1.25!important;
-  font-weight:600!important;
+  font-size:23px!important;
 }
 
 html[data-surface="web"] .page:not(#chat) h3 {
   font-size:14px!important;
-  font-weight:600!important;
 }
 
 html[data-surface="web"] .page:not(#chat) button,
@@ -294,30 +277,7 @@ html[data-surface="web"] .page:not(#chat) input,
 html[data-surface="web"] .page:not(#chat) select,
 html[data-surface="web"] .page:not(#chat) textarea,
 html[data-surface="web"] .page:not(#chat) label {
-  font-size:14px;
-}
-
-html[data-surface="web"] .page:not(#chat) label,
-html[data-surface="web"] .page:not(#chat) .field-label {
-  display:grid;
-  gap:6px;
-}
-html[data-surface="web"] .page:not(#chat) input:not([type="checkbox"]):not([type="radio"]),
-html[data-surface="web"] .page:not(#chat) select,
-html[data-surface="web"] .page:not(#chat) textarea {
-  min-height:40px!important;
-  border-radius:8px!important;
-  padding:8px 12px!important;
-}
-html[data-surface="web"] .page:not(#chat) button {
-  min-height:40px!important;
-  padding:8px 16px!important;
-  border-radius:8px!important;
-}
-html[data-surface="web"] .page:not(#chat) .button-editor button,
-html[data-surface="web"] .page:not(#chat) .compact-row button {
-  min-height:32px!important;
-  padding:6px 12px!important;
+  font-size:13px;
 }
 
 html[data-surface="web"] .page:not(#chat) button:not(.primary) {
@@ -325,34 +285,8 @@ html[data-surface="web"] .page:not(#chat) button:not(.primary) {
 }
 
 html[data-surface="web"] .page:not(#chat) .primary {
-  background:var(--chat-accent)!important;
+  background:#167cf3!important;
   color:#fff!important;
-}
-
-html[data-surface="web"] .desktop-viewport:not(:has(#chat:not([hidden]))) {
-  height:auto!important;
-  min-height:0!important;
-  overflow:auto!important;
-}
-html[data-surface="web"] .page:not(#chat) .editor-workbench,
-html[data-surface="web"] .page:not(#chat) .users-workbench,
-html[data-surface="web"] .page:not(#chat) .settings-layout {
-  gap:16px!important;
-}
-html[data-surface="web"] .page:not(#chat) .ops-table-head,
-html[data-surface="web"] .page:not(#chat) .user-table-heading {
-  min-height:40px!important;
-  font-size:12px!important;
-  font-weight:500!important;
-}
-html[data-surface="web"] .page:not(#chat) .ops-table-row,
-html[data-surface="web"] .page:not(#chat) .user-table-row {
-  min-height:56px!important;
-  font-size:14px!important;
-}
-html[data-surface="web"] .page:not(#chat) .status {
-  font-size:12px!important;
-  line-height:1.2!important;
 }
 
 /* Chat page glass treatment while preserving its existing geometry and stability fixes. */
