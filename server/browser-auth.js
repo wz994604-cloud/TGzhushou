@@ -7,22 +7,9 @@ const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part 
 }));
 
 export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
-  // Old sessions have no proven account identity and never receive owner privileges.
-  await db.transaction(async () => {
-    let hasLoginUsername;
-    try {
-      hasLoginUsername = (await db.prepare("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='browser_sessions' AND column_name='login_username'").all()).length > 0;
-    } catch {
-      hasLoginUsername = (await db.prepare('PRAGMA table_info(browser_sessions)').all()).some(column => column.name === 'login_username');
-    }
-    if (!hasLoginUsername) {
-      await db.exec("ALTER TABLE browser_sessions ADD COLUMN login_username TEXT NOT NULL DEFAULT ''");
-      await db.prepare('UPDATE browser_sessions SET expires_at=0').run();
-    }
-  })();
   const base = String(publicUrl || '').replace(/\/$/, '');
   const salt = String(credentials.salt || 'tgzhushou-browser-login');
-  const accounts = (Array.isArray(credentials.accounts) ? credentials.accounts : [{ username: credentials.username, password: credentials.password }])
+  const accounts = (Array.isArray(credentials.accounts) ? credentials.accounts : [])
     .map(account => {
       if (account?.publisherIds !== undefined && (!Array.isArray(account.publisherIds) || account.publisherIds.some(id => !/^\d+$/.test(String(id)))))
         throw new Error('管理员 publisherIds 应为机器人 ID 数组');

@@ -1,4 +1,4 @@
-// Keep the application's synchronous statement API; adapt its SQLite bindings only.
+// Translate the application's portable query placeholders to PostgreSQL.
 export function postgresStatement(sql, args = []) {
   if (/^\s*CREATE TABLE\b/i.test(sql)) sql = sql.replace(/\bINTEGER\b/g, 'BIGINT');
   let index = 0;
@@ -13,11 +13,11 @@ export function postgresStatement(sql, args = []) {
   }
   const insert = /^\s*INSERT INTO\s+(\w+)/i.exec(sql);
   const identityTables = new Set(['targets','media','tasks','runs','deliveries','sticker_packs',
-    'sticker_pack_items','players','broadcasts','broadcast_deliveries','chat_messages','chat_events']);
+    'sticker_pack_items','broadcasts','broadcast_deliveries','chat_messages','chat_events']);
   if (insert && identityTables.has(insert[1]) && !/\bRETURNING\b/i.test(sql)) {
     sql = sql.replace(/;\s*$/, '') + ' RETURNING id';
   }
-  // SQLite cleanup triggers use a different syntax from PostgreSQL.
+  // Translate the cleanup trigger declaration to PostgreSQL syntax.
   const trigger = /^\s*CREATE TRIGGER IF NOT EXISTS (\w+) AFTER DELETE ON (\w+)\s+BEGIN DELETE FROM sent_changes WHERE kind='(\w+)' AND delivery_id=OLD.id; END$/i.exec(sql);
   if (trigger) {
     const [, name, table, kind] = trigger;

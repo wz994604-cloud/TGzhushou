@@ -7,6 +7,7 @@ import './style.css';
 import { mountWorkbench } from './workbench-shell.js';
 import { defaultButtonRow, normalizeButtonRows, reflowAutomaticButtonRows, emojiPopoverPosition, emojiMatches } from './workbench-utils.js';
 import { installSentEditor } from './sent-editor.js';
+import { createApiClient } from './api-client.js';
 
 const tg = window.Telegram?.WebApp;
 tg?.ready(); tg?.expand();
@@ -28,12 +29,10 @@ const playerCache = new Map();
 let playerPage = 1;
 let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
 const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
-const loadImage = createImageLoader(async url => {
-  const response = await fetch('/api' + url, { headers:{ 'x-telegram-init-data':initData, ...(selectedPublisherId ? { 'x-publisher-id':selectedPublisherId } : {}) } });
-  if (!response.ok) throw Object.assign(new Error('图片加载失败'), { status:response.status });
-  return response.blob();
-});
-const draftKey = () => data?.publisher?.legacy ? 'tgzhushou:draft:v1' : `tgzhushou:draft:${selectedPublisherId || 'none'}:v1`;
+const client = createApiClient({ initData, getPublisherId: () => selectedPublisherId });
+const { api } = client;
+const loadImage = createImageLoader(client.image);
+const draftKey = () => `tgzhushou:draft:${selectedPublisherId || 'none'}:v2`;
 function readRecentEmojis() {
   try {
     const stored = JSON.parse(localStorage.getItem(recentEmojiKey) || '[]');
@@ -52,15 +51,6 @@ async function loadSavedPacks() {
   if (!stickers.size && recentEmojis.length) displayPack({ title:'最近使用', stickers:recentEmojis });
   const bot=selectedPublisherId,r = await api('/sticker-packs/saved');if(bot!==selectedPublisherId)return;
   savedPacks = r.packs || []; renderSavedPackTabs();renderAssetPacks();
-}
-async function api(url, method = 'GET', body) {
-  const headers = { 'x-telegram-init-data':initData };
-  if (selectedPublisherId) headers['x-publisher-id'] = selectedPublisherId;
-  if (body && !(body instanceof FormData)) headers['content-type'] = 'application/json';
-  const response = await fetch(`/api${url}`, { method, headers, body:body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(result.error || `请求失败 (${response.status})`),{status:response.status});
-  return result;
 }
 function toast(message, error = false) { $('toast').textContent = message; $('toast').className = error ? 'toast error' : 'toast'; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').hidden = true, 6000); }
 async function action(fn, button) { if (button?.disabled) return; if (button) button.disabled = true; try { await fn(); } catch (error) { toast(error.message, true); } finally { if (button) button.disabled = false; } }
