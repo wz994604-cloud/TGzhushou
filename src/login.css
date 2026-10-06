@@ -26,20 +26,14 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
 
 #locked.login-shell {
   position: relative;
-  width: min(1280px, calc(100vw - 48px));
+  width: 100%;
   max-width: none;
-  min-height: min(740px, calc(100vh - 96px));
-  margin: 48px auto;
-  padding: 72px 24px 40px;
+  min-height: calc(100vh - var(--desktop-titlebar-height, 0px));
+  margin: 0;
+  padding: 36px 24px 48px;
   display: grid;
   place-items: center;
   align-content: center;
-  border: 1px solid rgba(255,255,255,.62);
-  border-radius: 32px;
-  background: rgba(255,255,255,.14);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.78), 0 28px 70px rgba(82, 75, 130, .16);
-  backdrop-filter: blur(24px) saturate(125%);
-  -webkit-backdrop-filter: blur(24px) saturate(125%);
 }
 
 #locked .login-card {
@@ -57,8 +51,8 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
 .login-brand > span:last-child { display:grid; gap:2px; }
 .login-brand strong { font-size:16px; line-height:1.2; }
 .login-brand small { color:#6e7690; font-size:12px; }
-.login-brand-mark { display:grid; place-items:center; width:40px; height:40px; color:#ec74ab; border:1px solid rgba(255,255,255,.78); border-radius:13px; background:rgba(255,255,255,.36); box-shadow:inset 0 1px 0 rgba(255,255,255,.82); }
-.login-brand-mark svg { width:25px; height:25px; }
+.login-brand-mark { display:grid; place-items:center; width:40px; height:40px; overflow:hidden; border:1px solid rgba(255,255,255,.78); border-radius:13px; background:rgba(255,255,255,.36); box-shadow:inset 0 1px 0 rgba(255,255,255,.82); }
+.login-brand-mark svg { width:24px; height:24px; }
 .login-card h2 { margin:0; color:#26334e; font-size:24px; line-height:1.3; letter-spacing:-.02em; }
 #locked .login-intro { margin:8px 0 28px; color:#737c96; font-size:14px; }
 .login-form { display:grid; gap:18px; }
@@ -82,13 +76,13 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
 .login-footer { position:absolute; bottom:22px; margin:0; color:rgba(80,91,126,.68); font-size:12px; }
 
 @media (max-width: 760px) {
-  #locked.login-shell { width:calc(100vw - 48px); min-height:calc(100vh - 48px); margin:24px auto; padding:40px 16px 52px; border-radius:24px; }
+  #locked.login-shell { width:100%; min-height:calc(100vh - 24px); margin:0; padding:24px 24px 52px; }
   #locked .login-card { padding:32px 24px 28px; border-radius:24px; }
   .login-footer { bottom:16px; }
 }
 
 @media (max-height: 700px) and (min-width: 761px) {
-  #locked.login-shell { min-height:calc(100vh - 48px); margin:24px auto; padding-top:40px; padding-bottom:36px; }
+  #locked.login-shell { min-height:calc(100vh - 24px); margin:0; padding-top:24px; padding-bottom:36px; }
   #locked .login-card { padding-top:30px; padding-bottom:26px; }
   .login-brand { margin-bottom:18px; }
   .login-intro { margin-bottom:18px; }
