@@ -1,5 +1,5 @@
 /* Login surface follows the approved light liquid-glass client composition. */
-body:has(#locked:not([hidden])) {
+html[data-surface="web"] body:has(#locked:not([hidden])) {
   min-height: 100vh;
   overflow-x: hidden;
   background:
@@ -27,6 +27,7 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
 #locked.login-shell {
   position: relative;
   width: min(1280px, calc(100vw - 48px));
+  max-width: none;
   min-height: min(740px, calc(100vh - 96px));
   margin: 48px auto;
   padding: 72px 24px 40px;
@@ -61,16 +62,16 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
 .login-card h2 { margin:0; color:#26334e; font-size:24px; line-height:1.3; letter-spacing:-.02em; }
 #locked .login-intro { margin:8px 0 28px; color:#737c96; font-size:14px; }
 .login-form { display:grid; gap:18px; }
-.login-form label { display:grid; gap:8px; color:#53607b; font-size:14px; }
+#locked .login-form label { display:grid; gap:8px; margin:0; color:#53607b; font-size:14px; font-weight:400; }
 .login-field { display:flex; align-items:center; min-height:54px; padding:0 14px; gap:10px; border:1px solid rgba(255,255,255,.66); border-radius:14px; background:rgba(239,247,255,.35); box-shadow:inset 0 1px 0 rgba(255,255,255,.6); transition:border-color .16s ease, box-shadow .16s ease, background .16s ease; }
 .login-field > span { color:#8994ae; font-size:18px; line-height:1; }
 .login-field:focus-within { border-color:rgba(232,111,168,.9); background:rgba(255,255,255,.43); box-shadow:0 0 0 3px rgba(235,114,171,.16), inset 0 1px 0 rgba(255,255,255,.8); }
-.login-field input { min-width:0; width:100%; height:50px; padding:0; border:0; outline:0; background:transparent; color:#293651; font:inherit; }
+#locked .login-field input { min-width:0; width:100%; height:50px; min-height:0; margin:0; padding:0; border:0; outline:0; background:transparent; color:#293651; font:inherit; }
 .login-field input::placeholder { color:#a7aec0; }
 .login-field input[aria-invalid="true"] { color:#b44365; }
 .login-field:has(input[aria-invalid="true"]) { border-color:rgba(190,67,101,.72); box-shadow:0 0 0 3px rgba(190,67,101,.12); }
 .login-field button { flex:0 0 auto; width:28px; height:28px; padding:0; border:0; background:transparent; color:#7d88a2; cursor:pointer; }
-.login-submit { width:100%; min-height:52px; margin-top:6px; border-radius:14px; background:linear-gradient(135deg, #ec77ae, #e65d9c); border-color:rgba(255,255,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.38), 0 9px 18px rgba(214,77,139,.2); }
+#locked .login-submit { width:100%; min-height:52px; margin-top:6px; border-radius:14px; background:linear-gradient(135deg, #ec77ae, #e65d9c); border-color:rgba(255,255,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.38), 0 9px 18px rgba(214,77,139,.2); }
 .login-submit:hover { filter:brightness(1.04); transform:translateY(-1px); }
 .login-submit:active { transform:translateY(0); }
 .login-submit:disabled { opacity:.66; cursor:wait; transform:none; }
