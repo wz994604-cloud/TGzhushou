@@ -1,9 +1,12 @@
 export const isDesktopClient = Boolean(window.__TAURI_INTERNALS__);
 
 let invokeTauri = null;
+let currentWindow = null;
 if (isDesktopClient) {
   try {
     ({ invoke: invokeTauri } = await import('@tauri-apps/api/core'));
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    currentWindow = getCurrentWindow();
   } catch (error) {
     console.error('桌面桥接加载失败', error);
   }
@@ -21,6 +24,11 @@ export async function initDesktopShell() {
   const minimize = document.querySelector('[data-window-action="minimize"]');
   const maximize = document.querySelector('[data-window-action="maximize"]');
   const close = document.querySelector('[data-window-action="close"]');
+  const titlebar = document.getElementById('desktopTitlebar');
+  titlebar?.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.target.closest('.desktop-titlebar-actions')) return;
+    currentWindow?.startDragging().catch(() => {});
+  });
   minimize?.addEventListener('click', () => invokeDesktop('minimize_window'));
   maximize?.addEventListener('click', async () => {
     const maximized = await invokeDesktop('toggle_maximize');
