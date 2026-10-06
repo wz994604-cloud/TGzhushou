@@ -1,0 +1,21 @@
+Repository cleanup verification
+BASELINE_COMMIT=203ad9deec464cc0e8f890a810b25cbb56defcd1
+CHANGED_BRANCH=feature/desktop-client-v1
+
+BASELINE command: git rev-parse HEAD
+BASELINE result: 203ad9deec464cc0e8f890a810b25cbb56defcd1
+BASELINE status: existing AGENTS/agent modifications and untracked design evidence preserved.
+
+MODIFIED command: npm run check
+MODIFIED result: exit 0; all server node syntax checks passed.
+MODIFIED command: npm test
+MODIFIED result: exit 0; 14 tests passed, 0 failed.
+MODIFIED command: npm run build
+MODIFIED result: exit 0; Vite transformed 739 modules and built dist.
+MODIFIED command: npm audit --json
+MODIFIED result: exit 0; 0 vulnerabilities.
+
+ROLLBACK command: .design/repository-cleanup-20261007/ROLLBACK.sh
+ROLLBACK result: restores the removed browser harness from HEAD and reinstalls dependencies; not run on the working tree so MODIFIED_FILE remains changed.
+
+Cleanup result: removed obsolete Playwright configs/specs tied to deleted tests/start-test-server.js; removed unused @playwright/test dependency; pinned source-map-js 1.2.2 through package overrides; hardened bootstrap/admin/login error fallbacks.

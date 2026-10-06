@@ -1,0 +1,7 @@
+Repository cleanup scope
+
+MODIFIED_FILE: tracked cleanup and robustness fixes in src/main.js, src/workbench-shell.js, package.json, package-lock.json; removed obsolete Playwright harness files that referenced deleted tests/start-test-server.js.
+BASELINE: 203ad9deec464cc0e8f890a810b25cbb56defcd1
+
+Changed files are intentionally limited to the current desktop/Mini App code and obsolete browser-test harness.
+Untracked .design evidence and current AGENTS/agent rules were preserved because they are local handoff/audit inputs, not proven stale code.
