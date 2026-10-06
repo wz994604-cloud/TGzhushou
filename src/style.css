@@ -3137,3 +3137,170 @@ html[data-surface=web] .primary { background:linear-gradient(135deg,#2192ff,#177
   html[data-surface=web] .publisher-switch { max-width:38%; }
   html[data-surface=web] .topbar-actions { display:none; }
 }
+
+/* Windows 11 Premium Glass UI — stage 1 visual refinement (web only). */
+html[data-surface="web"] {
+  --mica-pink:rgba(255,188,224,.34);
+  --mica-blue:rgba(142,207,255,.30);
+  --mica-purple:rgba(204,184,255,.28);
+  --glass-surface:rgba(255,255,255,.58);
+  --glass-surface-strong:rgba(255,255,255,.68);
+  --glass-border:rgba(255,255,255,.66);
+  --glass-shadow:0 16px 42px rgba(72,88,132,.12);
+}
+html[data-surface="web"] body {
+  min-width:320px;
+  background:
+    radial-gradient(850px 560px at 0% 0%,var(--mica-pink),transparent 68%),
+    radial-gradient(760px 540px at 100% 6%,var(--mica-blue),transparent 66%),
+    radial-gradient(740px 520px at 55% 100%,var(--mica-purple),transparent 72%),
+    linear-gradient(135deg,#f8ddea 0%,#dfeeff 52%,#eadff9 100%) !important;
+  background-attachment:fixed;
+}
+html[data-surface="web"] #app,
+html[data-surface="web"] .desktop-shell,
+html[data-surface="web"] .desktop-content,
+html[data-surface="web"] .desktop-viewport {
+  background:transparent !important;
+}
+html[data-surface="web"] .desktop-shell {
+  grid-template-columns:230px minmax(0,1fr) !important;
+  width:100%;
+  height:100dvh;
+  min-height:640px;
+  margin:0;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  overflow:hidden;
+}
+html[data-surface="web"] .desktop-content {
+  min-width:0;
+  min-height:0;
+  backdrop-filter:blur(20px) saturate(118%);
+  -webkit-backdrop-filter:blur(20px) saturate(118%);
+}
+html[data-surface="web"] .desktop-topbar {
+  background:var(--glass-surface) !important;
+  border-color:rgba(150,170,210,.18) !important;
+  box-shadow:0 1px 0 rgba(255,255,255,.54) inset;
+  backdrop-filter:blur(20px) saturate(125%);
+  -webkit-backdrop-filter:blur(20px) saturate(125%);
+}
+html[data-surface="web"] .desktop-shell>.app-rail,
+html[data-surface="web"] .app-rail {
+  width:230px !important;
+  min-width:230px !important;
+  background:
+    radial-gradient(420px 360px at 0% 0%,rgba(255,154,208,.52),transparent 76%),
+    linear-gradient(180deg,rgba(255,210,232,.74),rgba(235,214,249,.68) 52%,rgba(205,226,255,.76)) !important;
+  border-right:1px solid var(--glass-border) !important;
+  box-shadow:12px 0 34px rgba(98,93,151,.08);
+  backdrop-filter:blur(24px) saturate(122%);
+  -webkit-backdrop-filter:blur(24px) saturate(122%);
+}
+html[data-surface="web"] .rail-bot,
+html[data-surface="web"] .publisher-switch {
+  background:rgba(31,67,120,.78) !important;
+  border-color:rgba(255,255,255,.34) !important;
+  box-shadow:0 8px 20px rgba(45,75,129,.16), inset 0 1px 0 rgba(255,255,255,.14);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+}
+html[data-surface="web"] .rail-nav button {
+  min-height:38px;
+  padding-block:8px;
+}
+html[data-surface="web"] .rail-nav button.active {
+  background:rgba(23,89,155,.80) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 8px 20px rgba(39,86,144,.14);
+}
+html[data-surface="web"] .page:not(#chat) {
+  background:rgba(255,255,255,.20) !important;
+  backdrop-filter:blur(18px) saturate(112%);
+  -webkit-backdrop-filter:blur(18px) saturate(112%);
+}
+html[data-surface="web"] .page:not(#chat) .card,
+html[data-surface="web"] .page:not(#chat) .asset-card,
+html[data-surface="web"] .page:not(#chat) .surface-feedback,
+html[data-surface="web"] .page:not(#chat) .button-editor,
+html[data-surface="web"] .page:not(#chat) .message-preview {
+  background:var(--glass-surface) !important;
+  border-color:var(--glass-border) !important;
+  box-shadow:var(--glass-shadow) !important;
+  backdrop-filter:blur(18px) saturate(116%);
+  -webkit-backdrop-filter:blur(18px) saturate(116%);
+}
+html[data-surface="web"] .page:not(#chat) input,
+html[data-surface="web"] .page:not(#chat) select,
+html[data-surface="web"] .page:not(#chat) textarea,
+html[data-surface="web"] .page:not(#chat) .ql-toolbar.ql-snow,
+html[data-surface="web"] .page:not(#chat) .ql-container.ql-snow,
+html[data-surface="web"] .page:not(#chat) .ops-table-head,
+html[data-surface="web"] .page:not(#chat) .user-table-heading {
+  background:rgba(255,255,255,.52) !important;
+  border-color:rgba(150,173,210,.24) !important;
+}
+html[data-surface="web"] #chat .chat-list,
+html[data-surface="web"] #chat .chat-details,
+html[data-surface="web"] #chat .chat-head,
+html[data-surface="web"] #chat #chatComposer {
+  background:var(--glass-surface-strong) !important;
+  border-color:rgba(145,169,204,.22) !important;
+  backdrop-filter:blur(20px) saturate(116%);
+  -webkit-backdrop-filter:blur(20px) saturate(116%);
+}
+html[data-surface="web"] #chat .chat-list {
+  width:auto;
+}
+html[data-surface="web"] #chat .chat-main {
+  background:
+    radial-gradient(circle at 15% 8%,rgba(255,183,221,.22),transparent 34%),
+    radial-gradient(circle at 85% 10%,rgba(132,197,255,.24),transparent 38%),
+    rgba(231,243,255,.58) !important;
+}
+html[data-surface="web"] #chat .chat-conversation {
+  min-height:62px !important;
+  padding:8px 7px !important;
+  margin:2px 0 !important;
+  gap:8px !important;
+}
+html[data-surface="web"] #chat .chat-avatar {
+  flex-basis:38px !important;
+  width:38px !important;
+  height:38px !important;
+}
+html[data-surface="web"] #chat .chat-summary strong { font-size:12.5px !important; }
+html[data-surface="web"] #chat .chat-summary small { font-size:10.5px !important; }
+html[data-surface="web"] #chat .chat-meta,
+html[data-surface="web"] #chat .chat-meta small { font-size:9px !important; }
+html[data-surface="web"] #chat .chat-bubble { box-shadow:0 6px 16px rgba(80,111,156,.08); }
+html[data-surface="web"] #chat .details-card {
+  background:rgba(255,247,252,.58) !important;
+  border-color:rgba(255,255,255,.74) !important;
+  box-shadow:0 8px 22px rgba(91,94,136,.08) !important;
+  backdrop-filter:blur(16px) saturate(116%);
+  -webkit-backdrop-filter:blur(16px) saturate(116%);
+}
+html[data-surface="web"] .details-actions button:not(.primary) {
+  background:rgba(255,255,255,.52) !important;
+  border-color:rgba(255,255,255,.68) !important;
+}
+html[data-surface="web"] button,
+html[data-surface="web"] input,
+html[data-surface="web"] select,
+html[data-surface="web"] textarea,
+html[data-surface="web"] label { font-size:13px; }
+html[data-surface="web"] h2 { letter-spacing:-.01em; }
+html[data-surface="web"] .section-title { margin-bottom:12px; }
+@media (max-width:1279px) and (min-width:900px) {
+  html[data-surface="web"] .desktop-shell,
+  html[data-surface="web"] .desktop-shell>.app-rail,
+  html[data-surface="web"] .app-rail { width:218px !important;min-width:218px !important; }
+  html[data-surface="web"] .desktop-shell { grid-template-columns:218px minmax(0,1fr) !important; }
+}
+@media (max-width:899px) {
+  html[data-surface="web"] .desktop-shell { grid-template-columns:minmax(0,1fr) !important;min-height:0; }
+  html[data-surface="web"] .desktop-shell>.app-rail,
+  html[data-surface="web"] .app-rail { width:230px !important;min-width:230px !important; }
+}
