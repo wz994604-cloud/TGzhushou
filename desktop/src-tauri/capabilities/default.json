@@ -3,5 +3,12 @@
   "identifier": "default",
   "description": "Default permissions for the internal desktop client",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "remote": {
+    "urls": ["https://tgzhushou-production-c196.up.railway.app"]
+  },
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "opener:default"
+  ]
 }
