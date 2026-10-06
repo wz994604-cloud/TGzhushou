@@ -4,6 +4,7 @@ import { createImageLoader } from './image-loader.js';
 import { installLinkEditor } from './link-editor.js';
 import 'quill/dist/quill.snow.css';
 import './style.css';
+import './mini-ios-glass.css';
 import './desktop.css';
 import { initDesktopShell } from './desktop-bridge.js';
 import { mountWorkbench } from './workbench-shell.js';
