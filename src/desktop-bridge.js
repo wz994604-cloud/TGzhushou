@@ -29,13 +29,15 @@ export async function initDesktopShell() {
     if (event.button !== 0 || event.target.closest('.desktop-titlebar-actions')) return;
     currentWindow?.startDragging().catch(() => {});
   });
-  minimize?.addEventListener('click', () => invokeDesktop('minimize_window'));
+  minimize?.addEventListener('click', () => currentWindow?.minimize().catch(() => {}));
   maximize?.addEventListener('click', async () => {
-    const maximized = await invokeDesktop('toggle_maximize');
+    if (!currentWindow) return;
+    await currentWindow.toggleMaximize();
+    const maximized = await currentWindow.isMaximized();
     maximize.setAttribute('aria-label', maximized ? '还原窗口' : '最大化窗口');
     maximize.title = maximized ? '还原窗口' : '最大化窗口';
   });
-  close?.addEventListener('click', () => invokeDesktop('close_to_tray'));
+  close?.addEventListener('click', () => currentWindow?.hide().catch(() => {}));
   document.querySelector('[data-window-action="about"]')?.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('desktop-about'));
   });
