@@ -8,12 +8,16 @@
     "start": "node server/index.js",
     "build": "vite build",
     "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/auth.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/browser-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
-    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js"
+    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js",
+    "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
+    "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
+    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.1",
     "express": "^5.2.1",
     "multer": "^2.4.0",
     "pg": "^8.16.3",
@@ -22,6 +26,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@tauri-apps/cli": "^2.12.1",
     "vite": "^8.3.1"
   }
 }

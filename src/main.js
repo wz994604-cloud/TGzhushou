@@ -4,11 +4,14 @@ import { createImageLoader } from './image-loader.js';
 import { installLinkEditor } from './link-editor.js';
 import 'quill/dist/quill.snow.css';
 import './style.css';
+import './desktop.css';
+import { initDesktopShell } from './desktop-bridge.js';
 import { mountWorkbench } from './workbench-shell.js';
 import { defaultButtonRow, normalizeButtonRows, reflowAutomaticButtonRows, emojiPopoverPosition, emojiMatches } from './workbench-utils.js';
 import { installSentEditor } from './sent-editor.js';
 import { createApiClient } from './api-client.js';
 
+await initDesktopShell();
 const tg = window.Telegram?.WebApp;
 tg?.ready(); tg?.expand();
 document.documentElement.classList.toggle("tg-mini-app", Boolean(tg?.initData));
