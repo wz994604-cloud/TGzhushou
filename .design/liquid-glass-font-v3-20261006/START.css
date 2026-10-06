@@ -255,18 +255,18 @@ html[data-surface="web"] #settings.page>.section-title {
   border:0!important;
 }
 
-/* Shared glass surface: luminous upper edge, blue transmission and a shaded base. */
+/* Panels remain readable without nested shadows or repeated blur layers. */
 html[data-surface="web"] .page:not(#chat) .card,
 html[data-surface="web"] .page:not(#chat) .asset-card,
 html[data-surface="web"] .page:not(#chat) .surface-feedback,
 html[data-surface="web"] .page:not(#chat) .button-editor,
 html[data-surface="web"] .page:not(#chat) .message-preview {
-  background:var(--glass-panel)!important;
+  background:linear-gradient(145deg,rgba(36,58,112,.68),rgba(86,67,145,.48))!important;
   border-color:rgba(255,255,255,.30)!important;
-  box-shadow:var(--glass-shadow)!important;
+  box-shadow:0 14px 34px rgba(36,45,95,.18),inset 0 1px rgba(255,255,255,.16)!important;
   backdrop-filter:blur(18px) saturate(120%);
   -webkit-backdrop-filter:blur(18px) saturate(120%);
-  border-radius:14px!important;
+  border-radius:10px!important;
   padding:20px!important;
   color:#f7fbff!important;
 }
@@ -342,7 +342,7 @@ html[data-surface="web"] .page:not(#chat) .primary {
 
 html[data-surface="web"] .page:not(#chat) .button-editor,
 html[data-surface="web"] .page:not(#chat) .message-preview {
-  background:var(--glass-panel)!important;
+  background:linear-gradient(145deg,rgba(36,58,112,.68),rgba(86,67,145,.48))!important;
 }
 html[data-surface="web"] .page:not(#chat) .ql-toolbar.ql-snow { background:rgba(255,255,255,.72)!important; color:#1f2937!important; }
 html[data-surface="web"] .page:not(#chat) .ql-container.ql-snow { background:rgba(255,255,255,.94)!important; color:#1f2937!important; }
@@ -518,50 +518,3 @@ html[data-surface="web"] .details-avatar {
     backdrop-filter:blur(var(--chat-blur))!important;
   }
 }
-
-/* Section 24: layered Liquid Glass tokens, mapped to the existing Web shell. */
-html[data-surface="web"] {
-  --glass-panel:linear-gradient(118deg,rgba(183,221,255,.18),transparent 30%),linear-gradient(155deg,rgba(30,79,155,.84),rgba(36,54,111,.91) 64%,rgba(88,61,123,.85));
-  --glass-shadow:0 12px 28px rgba(24,42,94,.20),0 2px 5px rgba(25,47,96,.13),inset 0 1px 0 rgba(234,248,255,.68),inset 1px 0 0 rgba(217,239,255,.22),inset 0 -1px 0 rgba(9,24,69,.32);
-  --glass-ink:#f7fbff;--glass-muted:#c6d7ed;--glass-line:rgba(204,231,255,.28);
-}
-html[data-surface="web"],html[data-surface="web"] body,html[data-surface="web"] #app {
-  background:
-    radial-gradient(ellipse 95% 27% at 12% 15%,transparent 43%,rgba(255,233,250,.8) 47%,rgba(237,159,212,.38) 50%,transparent 55%),
-    radial-gradient(ellipse 85% 45% at 110% 75%,transparent 48%,rgba(219,248,255,.86) 50%,rgba(93,180,242,.36) 53%,transparent 59%),
-    radial-gradient(ellipse at 8% 5%,#efb5dd,transparent 53%),radial-gradient(ellipse at 88% 30%,#9bc8f0,transparent 56%),linear-gradient(135deg,#f3d4e9,#cfdef5 52%,#e8c7e6)!important;
-  background-attachment:fixed!important;
-}
-html[data-surface="web"] .desktop-shell>.app-rail {background:linear-gradient(165deg,rgba(246,218,243,.58),rgba(142,180,229,.32) 58%,rgba(233,212,240,.55))!important;border-right-color:rgba(255,255,255,.60)!important;box-shadow:inset -1px 0 rgba(255,255,255,.28),8px 0 28px rgba(48,66,124,.09)!important;}
-html[data-surface="web"] .desktop-topbar {background:linear-gradient(110deg,rgba(255,243,252,.65),rgba(207,230,253,.45))!important;box-shadow:inset 0 1px rgba(255,255,255,.7),0 3px 14px rgba(45,66,115,.08)!important;border-bottom-color:rgba(255,255,255,.55)!important;}
-html[data-surface="web"] .rail-bot.active {background:linear-gradient(120deg,rgba(255,255,255,.6),rgba(190,219,248,.38))!important;border-color:rgba(255,255,255,.65)!important;box-shadow:0 4px 12px rgba(50,73,125,.10),inset 0 1px rgba(255,255,255,.75)!important;}
-html[data-surface="web"] .rail-nav button.active,html[data-surface="web"] .rail-nav button[aria-current="page"] {background:linear-gradient(110deg,rgba(238,248,255,.82),rgba(158,204,255,.35))!important;box-shadow:inset 3px 0 var(--chat-accent),inset 0 1px rgba(255,255,255,.7),0 5px 14px rgba(32,78,153,.10)!important;}
-html[data-surface="web"] .page:not(#chat) {--text:var(--glass-ink);--muted:var(--glass-muted);--line:var(--glass-line);font:400 14px/22px var(--ui-font)!important;}
-html[data-surface="web"] .page:not(#chat) :is(button,input,select,textarea,.ql-editor),html[data-surface="web"] .desktop-editor-actions button,html[data-surface="web"] dialog :is(button,input,select,textarea) {font-family:var(--ui-font)!important;}
-html[data-surface="web"] .page:not(#chat) :is(input,select,textarea,.ql-editor) {font-size:14px!important;font-weight:400!important;line-height:22px!important;}
-html[data-surface="web"] .page:not(#chat) :is(label,.field-label) {font-size:14px;font-weight:600;line-height:22px;}
-html[data-surface="web"] .page:not(#chat) :is(h3,h4,details.card>summary) {font-size:16px!important;font-weight:600!important;line-height:24px!important;letter-spacing:.01em;}
-html[data-surface="web"] .page:not(#chat) :is(.hint,.muted,small,.status) {font-size:12px!important;font-weight:400!important;line-height:18px!important;}
-html[data-surface="web"] .page:not(#chat) :is(.card,.asset-card,.button-editor,.surface-feedback) :is(.hint,.muted,small,dt) {color:var(--glass-muted)!important;}
-html[data-surface="web"] .page:not(#chat)>.section-title p,html[data-surface="web"] .page:not(#chat)>p.hint {color:#455773!important;}
-html[data-surface="web"] .page:not(#chat) .card .card,html[data-surface="web"] .page:not(#chat) .button-editor {background:linear-gradient(135deg,rgba(131,184,241,.20),rgba(9,28,74,.28))!important;box-shadow:inset 0 1px rgba(222,244,255,.24),inset 0 -1px rgba(5,20,61,.25)!important;backdrop-filter:none;}
-html[data-surface="web"] .page:not(#chat) .telegram-preview-body {background:linear-gradient(145deg,rgba(127,189,234,.26),rgba(17,34,79,.38))!important;border:1px solid var(--glass-line);box-shadow:inset 0 2px 10px rgba(8,26,68,.18);border-radius:12px;}
-html[data-surface="web"] .page:not(#chat) .message-preview {background:rgba(247,251,255,.96)!important;color:#1f2937!important;box-shadow:0 4px 14px rgba(5,24,64,.16)!important;backdrop-filter:none!important;}
-html[data-surface="web"] .page:not(#chat) :is(.message-preview,.ql-editor) :is(p,span,a,li) {color:inherit!important;}
-html[data-surface="web"] .page:not(#chat) .ql-toolbar button {min-height:28px!important;padding:3px 5px!important;border-radius:4px!important;background:transparent!important;}
-html[data-surface="web"] .page:not(#chat) :is(input,select,textarea):not([type="checkbox"]):not([type="radio"]) {box-shadow:inset 0 1px 3px rgba(16,40,79,.12),0 1px rgba(255,255,255,.12)!important;}
-html[data-surface="web"] .page:not(#chat) :is(.ops-table-row,.ops-run-row,.user-table-row) {color:var(--glass-ink)!important;background:rgba(20,47,98,.28)!important;border-color:var(--glass-line)!important;}
-html[data-surface="web"] .page:not(#chat) :is(.ops-table-row,.ops-run-row,.user-table-row):hover {background:rgba(139,194,255,.18)!important;}
-html[data-surface="web"] .page:not(#chat) #targetChecks label {background:linear-gradient(120deg,rgba(139,194,255,.15),rgba(15,35,83,.2))!important;border-color:var(--glass-line)!important;box-shadow:inset 0 1px rgba(223,245,255,.15);}
-html[data-surface="web"] .page:not(#chat) :is(#targetChecks label,.user-table-row):has(input:checked) {background:rgba(78,161,245,.32)!important;box-shadow:inset 3px 0 #9bdcff!important;}
-html[data-surface="web"] .page:not(#chat) button:not(.ql-toolbar button),html[data-surface="web"] .desktop-editor-actions button {font-size:14px!important;font-weight:600!important;line-height:20px!important;transition:background .16s ease,box-shadow .16s ease,border-color .16s ease;}
-html[data-surface="web"] .page:not(#chat) .card button:not(.primary):not(.ql-toolbar button) {color:#f7fbff!important;background:linear-gradient(135deg,rgba(148,197,248,.28),rgba(40,65,121,.26))!important;border:1px solid rgba(208,231,255,.38)!important;box-shadow:inset 0 1px rgba(240,251,255,.22)!important;}
-html[data-surface="web"] .page:not(#chat) .primary,html[data-surface="web"] .desktop-editor-actions .primary {background:linear-gradient(140deg,#3b9fea,#296de0 56%,#7059c7)!important;border:1px solid rgba(177,225,255,.65)!important;color:white!important;box-shadow:inset 0 1px rgba(236,250,255,.55),0 5px 12px rgba(12,40,106,.22)!important;}
-html[data-surface="web"] .page:not(#chat) button:hover:not(:disabled):not(.ql-toolbar button) {box-shadow:inset 0 1px rgba(255,255,255,.65),0 4px 12px rgba(15,44,95,.22)!important;border-color:rgba(226,246,255,.8)!important;}
-html[data-surface="web"] .page:not(#chat) :is(button,input,select,textarea):focus-visible {outline:2px solid #72c9ff!important;outline-offset:3px;}
-html[data-surface="web"] .page:not(#chat) :is(button,input,select,textarea):disabled {opacity:.52;cursor:not-allowed;box-shadow:none!important;}
-html[data-surface="web"] .page:not(#chat) :is(.inline-error,.danger-text) {color:#ffcdcf!important;}
-html[data-surface="web"] .desktop-editor-actions {background:linear-gradient(110deg,rgba(238,223,244,.88),rgba(194,218,246,.86))!important;border-top:1px solid rgba(255,255,255,.7)!important;backdrop-filter:blur(18px);box-shadow:0 -6px 20px rgba(40,60,107,.12)!important;}
-html[data-surface="web"] dialog {background:linear-gradient(140deg,rgba(239,247,255,.97),rgba(224,231,248,.95))!important;border:1px solid rgba(255,255,255,.8)!important;box-shadow:var(--glass-shadow)!important;backdrop-filter:blur(20px);font-family:var(--ui-font)!important;}
-html[data-surface="web"] dialog::backdrop {background:rgba(12,27,62,.38);backdrop-filter:blur(4px);}
-@media (prefers-reduced-motion:reduce) {html[data-surface="web"] .page:not(#chat) button {transition:none!important;}}

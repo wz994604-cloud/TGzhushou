@@ -52,7 +52,7 @@ const pages=[
   ['自动化任务','tasks'],['发布记录','logs'],['系统设置','settings']
 ];
 
-test('web function pages keep real structure and the light glass treatment',async({page})=>{
+test('web function pages keep real structure and the liquid glass treatment',async({page})=>{
   const fixture=await setup(page);
   for(const [label,id] of pages){
     await page.getByRole('button',{name:label,exact:true}).click();
@@ -62,8 +62,14 @@ test('web function pages keep real structure and the light glass treatment',asyn
   const brand=await page.locator('.rail-brand-mark').evaluate(el=>{
     const style=getComputedStyle(el);return {background:style.backgroundColor,color:style.color,border:style.borderTopColor,shadow:style.boxShadow};
   });
-  expect(brand.color).toBe('rgb(31, 41, 55)');
+  const type=await page.locator('#settings h2').evaluate(el=>{
+    const style=getComputedStyle(el);return {family:style.fontFamily,size:style.fontSize,weight:style.fontWeight,line:style.lineHeight};
+  });
+  expect(brand.color).toBe('rgb(247, 251, 255)');
   expect(brand.shadow).toBe('none');
+  expect(type.family).toContain('思源黑体');
+  expect(type.size).toBe('20px');
+  expect(type.weight).toBe('600');
   expect(fixture.errors).toEqual([]);
 });
 

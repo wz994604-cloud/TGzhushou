@@ -58,7 +58,7 @@ test('chat refinement: same geometry, clear material and complete scoped publish
  if(phase==='baseline') {expect(errors).toEqual([]);return;}
  await expect(page.locator('#railBots #publisherSelect')).toHaveCount(1);
  await expect(page.locator('.desktop-topbar #publisherSelect')).toHaveCount(0);
- await expect(page.locator('[data-rail-tab="chat"]')).toHaveCSS('font-size','16px');
+ await expect(page.locator('[data-rail-tab="chat"]')).toHaveCSS('font-size','15px');
  await expect(page.locator('[data-rail-tab="chat"]')).toHaveCSS('height','54px');
  await expect(page.locator('[data-rail-tab="chat"] svg')).toHaveCSS('width','22px');
  await expect(page.locator('[data-rail-tab="chat"] svg')).toHaveCSS('color','rgb(20, 95, 168)');
