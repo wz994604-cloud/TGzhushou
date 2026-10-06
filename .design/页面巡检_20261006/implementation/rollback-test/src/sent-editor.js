@@ -6,18 +6,8 @@ export function installSentEditor({Quill,api,esc,toast,action,image,hydrateEmoji
   dialog.innerHTML=`<div class="section-title"><h3>已发消息管理</h3><button id="closeSent" class="quiet">关闭</button></div><p class="hint">仅修改选中的原消息，不影响活动模板或定时任务。批量编辑会用下面内容覆盖所选消息。</p><button id="selectSent" class="quiet">全选本次成功对象</button><button id="clearSent" class="quiet">清空选择</button><p id="sentProgress" role="status" class="sent-status"></p><div id="sentRecipients" class="user-scroll"></div><details id="sentContent"><summary>编辑已发内容</summary><p class="hint">先点某条记录的「载入内容」，再修改文案、超链、专属表情和按钮。</p><div id="sentToolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="sentBody"></div><div class="editor-footer"><button id="sentBodyEmoji" class="quiet" type="button">✦ 专属表情</button><button id="sentEditLink" class="quiet" type="button">添加 / 编辑链接</button></div><details id="sentEmojiPicker"><summary>表情包 <span id="sentEmojiTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="sentPack" placeholder="https://t.me/addemoji/表情包名"><button id="sentLoadPack" class="primary" type="button">加载</button></div><div id="sentSavedPacks" class="pack-tabs"></div></div><div id="sentEmojiGrid"></div></details><div id="sentButtons"></div><button id="sentAddButton" class="quiet" type="button">＋ 添加按钮</button><label id="sentPhotoLabel">替换原图片 <span id="sentPhotoHint" class="muted">原消息没有图片</span><input id="sentPhoto" type="file" accept="image/jpeg,image/png,image/webp" disabled></label></details><div class="wrap-actions"><button id="applySent" class="quiet">更新所选消息</button><button id="deleteSent" class="quiet danger-text">删除所选消息</button></div>`;
   document.body.append(dialog);
   const $=id=>dialog.querySelector('#'+id), editor=new Quill('#sentBody',{theme:'snow',modules:{toolbar:'#sentToolbar'},formats:['bold','italic','underline','link','customEmoji']});
-  const title=dialog.querySelector('.section-title h3');
-  const manageButton=document.createElement('button');manageButton.type='button';manageButton.id='enterSentManage';manageButton.className='quiet';manageButton.textContent='管理已发消息';
-  const backButton=document.createElement('button');backButton.type='button';backButton.id='backSentResults';backButton.className='quiet';backButton.textContent='返回结果';
-  const managePanel=document.createElement('div');managePanel.id='sentManagePanel';
-  dialog.querySelector('#sentProgress').before(manageButton,backButton);
-  for(const el of [dialog.querySelector('.section-title + .hint'),$('selectSent'),$('clearSent'),$('sentContent'),$('applySent').parentElement])managePanel.append(el);
-  dialog.append(managePanel);
   installLinkEditor(Quill,editor,{trigger:$('sentEditLink'),dialogId:'sentLinkDialog',idPrefix:'sent-'});
-  let kind,rows=[],selected=new Set(),buttons=[],loaded=false,running=false,originalMediaId=null,pickerTarget=null,lastRange=null,currentPack=null,savedPacks=[],mode='view';
-  function setMode(next){mode=next;const managing=mode==='manage';title.textContent=managing?'管理已发消息':'发布结果';managePanel.hidden=!managing;manageButton.hidden=managing;backButton.hidden=!managing;render();(managing?backButton:manageButton).focus();}
-  manageButton.onclick=()=>setMode('manage');
-  backButton.onclick=()=>{if(loaded&&!confirm('返回结果将放弃未提交的编辑，继续吗？'))return;setMode('view');};
+  let kind,rows=[],selected=new Set(),buttons=[],loaded=false,running=false,originalMediaId=null,pickerTarget=null,lastRange=null,currentPack=null,savedPacks=[];
   function renderButtons(){
     $('sentButtons').innerHTML=buttons.map((b,i)=>`<div class="button-editor" data-sent-button="${i}"><div class="section-title"><strong>按钮 ${i+1}</strong><button data-remove-sent-button="${i}" class="quiet danger-text" type="button">删除</button></div><label>按钮文字<input data-sent-button-field="text" value="${esc(b.text||'')}" maxlength="64" placeholder="留空 = 仅显示专属表情"></label><label>跳转链接<input data-sent-button-field="url" value="${esc(b.url||'')}" placeholder="https://t.me/…"></label><div class="grid"><label>颜色<select data-sent-button-field="style">${[['default','默认'],['primary','蓝色'],['success','绿色'],['danger','红色']].map(([v,t])=>`<option value="${v}" ${b.style===v?'selected':''}>${t}</option>`).join('')}</select></label><label>行号<input data-sent-button-field="row" type="number" min="1" max="12" value="${Number(b.row||0)+1}"></label></div><button data-sent-emoji="${i}" class="quiet" type="button">${esc(b.iconAlt||'✦')} ${b.iconId?'更换专属表情':'选择专属表情'}</button>${b.iconId?`<button data-clear-sent-emoji="${i}" class="quiet" type="button">移除表情</button>`:''}</div>`).join('');
   }
@@ -49,7 +39,7 @@ export function installSentEditor({Quill,api,esc,toast,action,image,hydrateEmoji
     $('sentEmojiPicker').open=false;
   }
   function render(){
-    $('sentRecipients').innerHTML=rows.map(r=>{const state=statusLabels[r.result||r.last_action||r.status]||r.result||r.last_action||r.status;return `<div class="list-row">${mode==='manage'?`<label class="check"><input type="checkbox" data-sent-id="${r.id}" ${selected.has(r.id)?'checked':''} ${r.status==='SUCCESS'&&!r.deleted?'':'disabled'}>`:'<div class="sent-result-row">'}<span>${esc(r.title||r.display_name||r.telegram_id)}<small>${esc(r.chat_id||r.telegram_id)}${r.telegram_message_id?' · 消息 ID '+esc(r.telegram_message_id):''} · ${esc(state)} ${esc(r.error_text||r.last_error||'')}</small></span>${mode==='manage'?'</label>':'</div>'}${mode==='manage'&&r.status==='SUCCESS'&&!r.deleted?`<button class="quiet" data-load-sent="${r.id}">载入内容</button>`:''}</div>`;}).join('')||'<p class="empty-state">没有可查看的目标结果。</p>';
+    $('sentRecipients').innerHTML=rows.map(r=>{const state=statusLabels[r.result||r.last_action||r.status]||r.result||r.last_action||r.status;return `<div class="list-row"><label class="check"><input type="checkbox" data-sent-id="${r.id}" ${selected.has(r.id)?'checked':''} ${r.status==='SUCCESS'&&!r.deleted?'':'disabled'}><span>${esc(r.title||r.display_name||r.telegram_id)}<small>${esc(r.chat_id||r.telegram_id)}${r.telegram_message_id?' · 消息 ID '+esc(r.telegram_message_id):''} · ${esc(state)} ${esc(r.error_text||r.last_error||'')}</small></span></label>${r.status==='SUCCESS'&&!r.deleted?`<button class="quiet" data-load-sent="${r.id}">载入内容</button>`:''}</div>`;}).join('');
   }
   $('sentRecipients').onchange=e=>{const id=Number(e.target.dataset.sentId);if(id)e.target.checked?selected.add(id):selected.delete(id);};
   $('sentRecipients').onclick=e=>action(async()=>{
@@ -75,11 +65,11 @@ for(const id of ids){const row=rows.find(r=>r.id===id);try{const result=await ap
     finally{running=false;dialog.querySelectorAll('button,input,select').forEach(n=>n.disabled=false);editor.enable(true);render();}
   }
   $('applySent').onclick=e=>action(()=>apply('edit'),e.currentTarget);$('deleteSent').onclick=e=>action(()=>apply('delete'),e.currentTarget);
-  return async(type,id,initialMode='view')=>{
+  return async(type,id)=>{
     kind=type;$('sentPhoto').value='';originalMediaId=null;$('sentPhoto').disabled=true;selected.clear();loaded=false;editor.setText('');buttons=[];renderButtons();$('sentContent').open=false;$('sentEmojiPicker').open=false;$('sentProgress').textContent='';
     const record=type==='chat'?{deliveries:[await api(`/sent/chat/${id}`)]}:await api(`/${type}/${id}`);rows=record.deliveries;
     // Read persisted outcomes, including edits/deletes from a previous session.
 
-    mode=initialMode;render();dialog.showModal();setMode(initialMode);editor.blur();
+    render();dialog.showModal();editor.blur();
   };
 }

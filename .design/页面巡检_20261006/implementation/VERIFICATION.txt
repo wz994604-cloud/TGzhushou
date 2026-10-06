@@ -1,0 +1,32 @@
+Branch: feature/web-final-ux
+HEAD: c7a720db5d4c9564ecbfb49d97e43a58c4acf5c9
+Source change: src/glass-theme-final.css foreground overrides only; src/main.js search, reply, asset context and run state; src/workbench-shell.js responsive controls and details; src/sent-editor.js read-only/view-management separation; two browser test files.
+Background: baseline CSS is a byte-for-byte prefix of modified CSS, including the global html/body/#app gradients, light bands and attachment rule. Result: BACKGROUND_CSS_PREFIX_IDENTICAL=True.
+Artifacts:
+MODIFIED_FILE: C:\Users\win11\Projects\飞机助手\.design\页面巡检_20261006\implementation\MODIFIED_FILE.zip
+DIFF_FILE: C:\Users\win11\Projects\飞机助手\.design\页面巡检_20261006\implementation\DIFF_FILE.patch
+VERIFICATION: C:\Users\win11\Projects\飞机助手\.design\页面巡检_20261006\implementation\VERIFICATION.txt
+ROLLBACK: C:\Users\win11\Projects\飞机助手\.design\页面巡检_20261006\implementation\ROLLBACK.sh
+
+BASELINE command: $env:UI_PHASE='final-ux-before'; npx playwright test --config tests/web-function-pages.config.js --grep 'web function pages|chat refinement'
+BASELINE input: origin/main c7a720d source, isolated synthetic API fixture, local Vite 127.0.0.1:8100.
+BASELINE literal result: 3 passed (19.1s)
+BASELINE exit status: 0
+
+MODIFIED command: npm run build; $env:UI_PHASE='final-ux-after'; npx playwright test --config tests/web-function-pages.config.js
+MODIFIED input: current six modified source/test files, same isolated fixture and local Vite.
+MODIFIED literal result: ✓ 728 modules transformed; ✓ built in 208ms; 9 passed (39.1s)
+MODIFIED exit status: 0
+Last CSS/page targeted command: npm run build; $env:UI_PHASE='final-ux-after'; npx playwright test --config tests/web-function-pages.config.js --grep 'web function pages keep real structure|narrow chat'
+Last CSS/page targeted literal result: ✓ built in 152ms; 2 passed (12.3s)
+Last CSS/page targeted exit status: 0
+Last source formatting check command: git diff --check -- src/glass-theme-final.css src/main.js src/workbench-shell.js src/sent-editor.js tests/browser/web-chat-refinement.spec.js tests/browser/web-function-pages.spec.js; node --check src/main.js; node --check src/workbench-shell.js; node --check src/sent-editor.js
+Last source formatting check literal result: no diff-check findings or syntax errors (Git emitted only LF-to-CRLF warnings)
+Last source formatting check exit status: 0
+
+ROLLBACK command: & 'C:\Program Files\Git\bin\bash.exe' '.design/页面巡检_20261006/implementation/ROLLBACK.sh' '.design/页面巡检_20261006/implementation/rollback-test'
+ROLLBACK input: separate copy of all six modified files in implementation/rollback-test; baseline source files stored in implementation/BASELINE.*.
+ROLLBACK literal result: ROLLBACK_EXIT=0; ROLLBACK_HASHES_6_OF_6=True; MAIN_RESTORED=True.
+ROLLBACK exit status: 0
+Restored behavior/status: separate copy matches the six original baseline files by SHA256; live src files remain modified. No merge, push or deployment; no production send. Existing unrelated modified/untracked documents were not changed or staged by this implementation.
+Screenshots: .design/web-ui-refinement/final-ux-after/narrow-892.png, chat-1100.png, chat-1440.png; .design/function-pages-20261006/final-ux-after/{editor,assets,players,tasks,logs,settings}.png; before images are in corresponding final-ux-before directories.

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+PATH="/c/Program Files/Git/usr/bin:$PATH"
+BASE="$(dirname "$0")"
+DEST="${1:?pass a target copy directory}"
+mkdir -p "$DEST/src"
+cp "$BASE/BASELINE.css" "$DEST/src/glass-theme-final.css"
+mkdir -p "$DEST/src"
+cp "$BASE/BASELINE.main.js" "$DEST/src/main.js"
+mkdir -p "$DEST/src"
+cp "$BASE/BASELINE.workbench-shell.js" "$DEST/src/workbench-shell.js"
+mkdir -p "$DEST/src"
+cp "$BASE/BASELINE.src.sent-editor.js" "$DEST/src/sent-editor.js"
+mkdir -p "$DEST/tests/browser"
+cp "$BASE/BASELINE.tests.browser.web-chat-refinement.spec.js" "$DEST/tests/browser/web-chat-refinement.spec.js"
+mkdir -p "$DEST/tests/browser"
+cp "$BASE/BASELINE.tests.browser.web-function-pages.spec.js" "$DEST/tests/browser/web-function-pages.spec.js"
