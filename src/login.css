@@ -71,7 +71,7 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
 .login-field input[aria-invalid="true"] { color:#b44365; }
 .login-field:has(input[aria-invalid="true"]) { border-color:rgba(190,67,101,.72); box-shadow:0 0 0 3px rgba(190,67,101,.12); }
 .login-field button { flex:0 0 auto; width:28px; height:28px; padding:0; border:0; background:transparent; color:#7d88a2; cursor:pointer; }
-#locked .login-submit { width:100%; min-height:52px; margin-top:6px; border-radius:14px; background:linear-gradient(135deg, #ec77ae, #e65d9c); border-color:rgba(255,255,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.38), 0 9px 18px rgba(214,77,139,.2); }
+#locked .login-submit { width:100%; min-height:52px; margin-top:6px; border-radius:14px; background:#b83e77; border-color:rgba(255,255,255,.28); box-shadow:inset 0 1px 0 rgba(255,255,255,.28), 0 6px 14px rgba(184,61,120,.22); }
 .login-submit:hover { filter:brightness(1.04); transform:translateY(-1px); }
 .login-submit:active { transform:translateY(0); }
 .login-submit:disabled { opacity:.66; cursor:wait; transform:none; }

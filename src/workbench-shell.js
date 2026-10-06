@@ -206,8 +206,9 @@ export function mountWorkbench({ mini, navigate, backChat }) {
       viewport.scrollTop=0;
     },
     account(data) {
-      const info=$('railAccountId');if(info)info.textContent=`${data.admin.name} · ID ${data.admin.id}`;
-      const top=workspace.querySelector('.topbar-account');if(top)top.textContent=data.admin.name||'管理账号';
+      const admin=data?.admin||{};
+      const info=$('railAccountId');if(info)info.textContent=admin.name&&admin.id?`${admin.name} · ID ${admin.id}`:'未登录';
+      const top=workspace.querySelector('.topbar-account');if(top)top.textContent=admin.name||'管理账号';
 
     },
     chat(chat) {
