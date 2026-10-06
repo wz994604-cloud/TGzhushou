@@ -1,0 +1,40 @@
+# VERIFICATION — desktop workspace search replacement
+
+Changed branch/field:
+- Branch: feature/desktop-client-v1
+- HEAD before change: e6ff29843ae91bdeb65b4b743aafba11767a72e1
+- Changed field: desktop top workspace search only; contextual chat-list search remains unchanged.
+
+Artifacts:
+- MODIFIED_FILE: .design/search-component-20261007/MODIFIED_FILE/
+- DIFF_FILE: .design/search-component-20261007/DIFF_FILE.patch
+- VERIFICATION: .design/search-component-20261007/VERIFICATION.txt
+- ROLLBACK: .design/search-component-20261007/ROLLBACK.sh
+
+BASELINE
+Command: node --check src/workbench-shell.js; npm run build
+Input: pre-change src/workbench-shell.js and src/style.css
+Literal result: vite v8.3.1; 739 modules transformed; built in 290ms; exit 0
+Status: PASS
+
+MODIFIED
+Command: node --check src/workbench-shell.js; npm run build
+Input: modified src/workbench-shell.js and src/style.css
+Literal result: vite v8.3.1; 739 modules transformed; dist/assets/index-B_6qvkVZ.css 129.04 kB; built in 185ms; exit 0
+Status: PASS
+
+ROLLBACK
+Command: C:\Program Files\Git\bin\bash.exe -lc './.design/search-component-20261007/ROLLBACK.sh && cmp .design/search-component-20261007/baseline/workbench-shell.js .design/search-component-20261007/rollback-test/workbench-shell.js && cmp .design/search-component-20261007/baseline/style.css .design/search-component-20261007/rollback-test/style.css'
+Input: rollback-test copies of MODIFIED_FILE plus baseline copies
+Literal result: rollback-test restored baseline copies; cmp baseline/workbench-shell.js rollback-test/workbench-shell.js; cmp baseline/style.css rollback-test/style.css; exit 0
+Status: PASS
+
+Targeted diff check:
+Command: git diff --check -- src/workbench-shell.js src/style.css
+Result: PASS (exit 0)
+
+Repository-wide git diff --check also reports pre-existing blank-line warnings in AGENTS.md and agent/*.md; those files were not changed for this task.
+
+Restored behavior/status:
+- Rollback copy matches the recorded baseline exactly.
+- Working tree intentionally remains modified with the new top search component.
