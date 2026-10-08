@@ -1,0 +1,33 @@
+# VERIFICATION — global macOS desktop UI phase 2
+
+Changed branch/field:
+- Branch: feature/desktop-client-v1
+- Changed field: desktop shell/navigation/chat/form/card styling; window remains 1024x720, minimum 860x620.
+
+Artifacts:
+- MODIFIED_FILE: .design/macos-global-ui-20261009/MODIFIED_FILE/
+- DIFF_FILE: .design/macos-global-ui-20261009/DIFF_FILE.patch
+- VERIFICATION: .design/macos-global-ui-20261009/VERIFICATION.txt
+- ROLLBACK: .design/macos-global-ui-20261009/ROLLBACK.sh
+
+BASELINE
+Command: git show HEAD:src/main.js; git cat-file -e HEAD:src/macos-desktop.css
+Input: pre-change desktop surface
+Literal result: main.js recovered; macos-desktop.css absent at HEAD; exit 0
+Status: PASS
+
+MODIFIED
+Command: node --check src/main.js; npm run build; git diff --check -- src/main.js src/macos-desktop.css
+Input: new macos-desktop.css imported after token layer
+Literal result: 737 modules transformed; built in 266ms; targeted diff check passed; exit 0
+Status: PASS
+
+ROLLBACK
+Command: C:\Program Files\Git\bin\bash.exe -lc './.design/macos-global-ui-20261009/ROLLBACK.sh'
+Input: rollback-test copies
+Literal result: rollback-test restored baseline copies; exit 0
+Status: PASS
+
+Restored behavior/status:
+- Rollback copies restored the recorded baseline.
+- Working tree intentionally remains modified for Phase 2.

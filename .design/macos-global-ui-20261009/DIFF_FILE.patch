@@ -1,0 +1,12 @@
+diff --git a/src/main.js b/src/main.js
+index bc8dcd5..c3bcefb 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -7,6 +7,7 @@ import './style.css';
+ import './mini-ios-glass.css';
+ import './desktop.css';
+ import './macos-tokens.css';
++import './macos-desktop.css';
+ import './login.css';
+ import { initDesktopShell } from './desktop-bridge.js';
+ import { mountWorkbench } from './workbench-shell.js';
