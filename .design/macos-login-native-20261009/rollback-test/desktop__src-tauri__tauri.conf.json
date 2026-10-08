@@ -19,7 +19,7 @@
         "height": 720,
         "minWidth": 860,
         "minHeight": 620,
-        "decorations": true,
+        "decorations": false,
         "resizable": true,
         "center": true,
         "visible": true,
@@ -43,4 +43,3 @@
     "createUpdaterArtifacts": false
   }
 }
-

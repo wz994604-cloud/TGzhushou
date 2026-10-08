@@ -1,0 +1,38 @@
+# VERIFICATION — native desktop login window
+
+Changed branch/field:
+- Branch: feature/desktop-client-v1
+- HEAD before change: 8837cdd62d973ea6e0c9f2f0127bd96665647bc1
+- Changed field: desktop window chrome and login viewport only.
+
+Artifacts:
+- MODIFIED_FILE: .design/macos-login-native-20261009/MODIFIED_FILE/
+- DIFF_FILE: .design/macos-login-native-20261009/DIFF_FILE.patch
+- VERIFICATION: .design/macos-login-native-20261009/VERIFICATION.txt
+- ROLLBACK: .design/macos-login-native-20261009/ROLLBACK.sh
+
+BASELINE
+Command: node --check src/main.js; node --check src/desktop-bridge.js; npm run build
+Input: HEAD 8837cdd desktop shell with custom HTML titlebar
+Literal result: vite v8.3.1; 739 modules transformed; built in 6.31s; exit 0
+Status: PASS
+
+MODIFIED
+Command: node --check src/desktop-bridge.js; node --check src/workbench-shell.js; npm run build; cargo check --manifest-path desktop/src-tauri/Cargo.toml; node -e "JSON.parse(require('fs').readFileSync('desktop/src-tauri/tauri.conf.json','utf8')); JSON.parse(require('fs').readFileSync('desktop/src-tauri/tauri.macos.conf.json','utf8'))"
+Input: native Tauri window configuration, native drag region, and login viewport styles
+Literal result: vite v8.3.1; 735 modules transformed; cargo check finished dev profile; Tauri configs valid; exit 0
+Status: PASS
+
+ROLLBACK
+Command: C:\Program Files\Git\bin\bash.exe -lc './.design/macos-login-native-20261009/ROLLBACK.sh && cmp .design/macos-login-native-20261009/baseline/index.html .design/macos-login-native-20261009/rollback-test/index.html'
+Input: rollback-test copies of MODIFIED_FILE plus baseline copies
+Literal result: rollback-test restored baseline copies; cmp baseline and rollback-test copies; exit 0
+Status: PASS
+
+Targeted diff check:
+Command: git diff --check -- index.html src/desktop-bridge.js src/desktop.css src/login.css src/workbench-shell.js desktop/src-tauri/tauri.conf.json desktop/src-tauri/tauri.macos.conf.json
+Result: PASS (exit 0)
+
+Restored behavior/status:
+- Rollback copy matches the recorded baseline exactly.
+- Working tree intentionally remains modified with native OS window chrome changes.

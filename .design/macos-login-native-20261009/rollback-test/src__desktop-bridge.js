@@ -1,0 +1,51 @@
+export const isDesktopClient = Boolean(window.__TAURI_INTERNALS__);
+
+let invokeTauri = null;
+let currentWindow = null;
+if (isDesktopClient) {
+  try {
+    ({ invoke: invokeTauri } = await import('@tauri-apps/api/core'));
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    currentWindow = getCurrentWindow();
+  } catch (error) {
+    console.error('桌面桥接加载失败', error);
+  }
+}
+
+export async function invokeDesktop(command, args = {}) {
+  if (!invokeTauri) throw new Error('当前不是桌面客户端');
+  return invokeTauri(command, args);
+}
+
+export async function initDesktopShell() {
+  if (!isDesktopClient) return false;
+  document.body.classList.add('desktop-client');
+  document.getElementById('desktopTitlebar')?.removeAttribute('hidden');
+  const minimize = document.querySelector('[data-window-action="minimize"]');
+  const maximize = document.querySelector('[data-window-action="maximize"]');
+  const close = document.querySelector('[data-window-action="close"]');
+  const titlebar = document.getElementById('desktopTitlebar');
+  titlebar?.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.target.closest('.desktop-titlebar-actions')) return;
+    currentWindow?.startDragging().catch(() => {});
+  });
+  minimize?.addEventListener('click', () => currentWindow?.minimize().catch(() => {}));
+  maximize?.addEventListener('click', async () => {
+    if (!currentWindow) return;
+    await currentWindow.toggleMaximize();
+    const maximized = await currentWindow.isMaximized();
+    maximize.setAttribute('aria-label', maximized ? '还原窗口' : '最大化窗口');
+    maximize.title = maximized ? '还原窗口' : '最大化窗口';
+  });
+  close?.addEventListener('click', () => currentWindow?.hide().catch(() => {}));
+  document.querySelector('[data-window-action="about"]')?.addEventListener('click', () => {
+    document.dispatchEvent(new CustomEvent('desktop-about'));
+  });
+  return true;
+}
+
+export async function openExternal(url) {
+  if (!/^https?:\/\//i.test(url)) throw new Error('仅允许打开 HTTP(S) 链接');
+  if (isDesktopClient && invokeTauri) return invokeDesktop('open_external', { url });
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
