@@ -1,0 +1,146 @@
+diff --git a/desktop/src-tauri/tauri.conf.json b/desktop/src-tauri/tauri.conf.json
+index 3f9d6a7..81c5752 100644
+--- a/desktop/src-tauri/tauri.conf.json
++++ b/desktop/src-tauri/tauri.conf.json
+@@ -19,7 +19,7 @@
+         "height": 720,
+         "minWidth": 860,
+         "minHeight": 620,
+-        "decorations": false,
++        "decorations": true,
+         "resizable": true,
+         "center": true,
+         "visible": true,
+diff --git a/index.html b/index.html
+index 54822e6..1bd2b34 100644
+--- a/index.html
++++ b/index.html
+@@ -1,3 +1,3 @@
+ <!doctype html>
+ <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#f7f8fc"><meta name="manifest" content="/manifest.webmanifest"><title>活动中枢</title><script src="https://telegram.org/js/telegram-web-app.js"></script><link rel="stylesheet" href="/src/figma-chat-final.css"><link rel="stylesheet" href="/src/chat-stability.css"><link rel="stylesheet" href="/src/glass-theme-final.css"></head>
+-<body><div id="desktopTitlebar" class="desktop-titlebar" hidden data-tauri-drag-region><div class="desktop-titlebar-brand"><span class="desktop-titlebar-mark">✈</span><strong>飞机助手</strong><span class="desktop-titlebar-status">个人内部版</span></div><div class="desktop-titlebar-actions" data-tauri-drag-region="false"><button type="button" data-window-action="about" aria-label="关于客户端" title="关于客户端">ⓘ</button><button type="button" data-window-action="minimize" aria-label="最小化窗口" title="最小化">—</button><button type="button" data-window-action="maximize" aria-label="最大化窗口" title="最大化">□</button><button type="button" data-window-action="close" aria-label="最小化到托盘" title="最小化到托盘">×</button></div></div><div id="app"></div><script type="module" src="/src/main.js"></script></body></html>
++<body><div id="desktopDragRegion" class="desktop-drag-region" hidden data-tauri-drag-region aria-hidden="true"></div><div id="app"></div><script type="module" src="/src/main.js"></script></body></html>
+diff --git a/src/desktop-bridge.js b/src/desktop-bridge.js
+index 3f83dc9..87bf55d 100644
+--- a/src/desktop-bridge.js
++++ b/src/desktop-bridge.js
+@@ -1,12 +1,9 @@
+ export const isDesktopClient = Boolean(window.__TAURI_INTERNALS__);
+
+ let invokeTauri = null;
+-let currentWindow = null;
+ if (isDesktopClient) {
+   try {
+     ({ invoke: invokeTauri } = await import('@tauri-apps/api/core'));
+-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+-    currentWindow = getCurrentWindow();
+   } catch (error) {
+     console.error('桌面桥接加载失败', error);
+   }
+@@ -20,27 +17,17 @@ export async function invokeDesktop(command, args = {}) {
+ export async function initDesktopShell() {
+   if (!isDesktopClient) return false;
+   document.body.classList.add('desktop-client');
+-  document.getElementById('desktopTitlebar')?.removeAttribute('hidden');
+-  const minimize = document.querySelector('[data-window-action="minimize"]');
+-  const maximize = document.querySelector('[data-window-action="maximize"]');
+-  const close = document.querySelector('[data-window-action="close"]');
+-  const titlebar = document.getElementById('desktopTitlebar');
+-  titlebar?.addEventListener('pointerdown', event => {
+-    if (event.button !== 0 || event.target.closest('.desktop-titlebar-actions')) return;
+-    currentWindow?.startDragging().catch(() => {});
+-  });
+-  minimize?.addEventListener('click', () => currentWindow?.minimize().catch(() => {}));
+-  maximize?.addEventListener('click', async () => {
+-    if (!currentWindow) return;
+-    await currentWindow.toggleMaximize();
+-    const maximized = await currentWindow.isMaximized();
+-    maximize.setAttribute('aria-label', maximized ? '还原窗口' : '最大化窗口');
+-    maximize.title = maximized ? '还原窗口' : '最大化窗口';
+-  });
+-  close?.addEventListener('click', () => currentWindow?.hide().catch(() => {}));
+-  document.querySelector('[data-window-action="about"]')?.addEventListener('click', () => {
+-    document.dispatchEvent(new CustomEvent('desktop-about'));
+-  });
++  if (/Mac/i.test(`${navigator.platform || ''} ${navigator.userAgent || ''}`)) {
++    document.body.classList.add('desktop-macos');
++    const dragRegion = document.getElementById('desktopDragRegion');
++    dragRegion?.removeAttribute('hidden');
++    const workspace = document.getElementById('workspace');
++    if (workspace) {
++      const syncDragRegion = () => { dragRegion.hidden = !workspace.hidden; };
++      new MutationObserver(syncDragRegion).observe(workspace, { attributes:true, attributeFilter:['hidden'] });
++      syncDragRegion();
++    }
++  }
+   return true;
+ }
+
+diff --git a/src/desktop.css b/src/desktop.css
+index 806c560..dfe0c9f 100644
+--- a/src/desktop.css
++++ b/src/desktop.css
+@@ -1,12 +1,10 @@
+-html body.desktop-client { --desktop-titlebar-height:36px; }
+-body.desktop-client { padding-top:var(--desktop-titlebar-height); }
+-.desktop-titlebar { position:fixed;inset:0 0 auto 0;height:var(--desktop-titlebar-height);z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 12px;background:linear-gradient(110deg,rgba(255,243,252,.88),rgba(207,230,253,.82));border-bottom:1px solid rgba(255,255,255,.7);box-shadow:0 2px 10px rgba(45,66,115,.08);color:#233554;user-select:none; }
+-.desktop-titlebar-brand,.desktop-titlebar-actions { display:flex;align-items:center;gap:8px; }
+-.desktop-titlebar-mark { display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#7f7a9c;color:#fff;font-size:13px; }
+-.desktop-titlebar-status { color:#60728f;font-size:11px; }
+-.desktop-titlebar-actions button { width:34px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:#233554;font-size:16px;line-height:1; }
+-.desktop-titlebar-actions button:hover { background:rgba(255,255,255,.65); }
+-.desktop-titlebar-actions [data-window-action="close"]:hover { background:#d9536a;color:#fff; }
+-body.desktop-client #app,body.desktop-client .desktop-shell { min-height:calc(100vh - var(--desktop-titlebar-height)); }
+-body.desktop-client .desktop-shell { height:calc(100vh - var(--desktop-titlebar-height)); }
+-@media (max-width:1100px) { body.desktop-client .desktop-titlebar-status { display:none; } }
++/* Window chrome is provided by Tauri/the host OS. No HTML titlebar or fake controls. */
++html body.desktop-client { --desktop-titlebar-height:0px; }
++body.desktop-client { padding-top:0; }
++body.desktop-client #app,body.desktop-client .desktop-shell { min-height:100vh; }
++body.desktop-client .desktop-shell { height:100vh; }
++.desktop-drag-region { display:none; }
++body.desktop-macos .desktop-drag-region { display:block;position:fixed;inset:0 0 auto 0;height:34px;z-index:1000; }
++body.desktop-macos #workspace:not([hidden]) ~ #desktopDragRegion { display:none; }
++body.desktop-macos .desktop-topbar[data-tauri-drag-region] { -webkit-app-region:drag; }
++body.desktop-macos .desktop-topbar[data-tauri-drag-region] :is(button,input,select,[data-tauri-drag-region="false"]) { -webkit-app-region:no-drag; }
+diff --git a/src/login.css b/src/login.css
+index a91262b..d53dfa0 100644
+--- a/src/login.css
++++ b/src/login.css
+@@ -36,6 +36,13 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
+   align-content: center;
+ }
+
++/* Native macOS titlebar overlays the webview; keep the form centered while allowing content underneath it. */
++body.desktop-client #locked.login-shell {
++  min-height:100vh;
++  padding-top:72px;
++  padding-bottom:48px;
++}
++
+ #locked .login-card {
+   width: min(480px, 100%);
+   padding: 42px 40px 36px;
+diff --git a/src/workbench-shell.js b/src/workbench-shell.js
+index e88f0d6..d5a908f 100644
+--- a/src/workbench-shell.js
++++ b/src/workbench-shell.js
+@@ -78,13 +78,18 @@ export function mountWorkbench({ mini, navigate, backChat }) {
+       else b.disabled=true;
+     });
+     const top=node('header','desktop-topbar');
++    if (document.body.classList.contains('desktop-macos')) top.setAttribute('data-tauri-drag-region','');
+     const toggle=button('打开导航','menu',()=>{workspace.classList.toggle('navigation-open');toggle.setAttribute('aria-expanded',String(workspace.classList.contains('navigation-open')));}); toggle.classList.add('web-menu');toggle.setAttribute('aria-expanded','false');
++    toggle.setAttribute('data-tauri-drag-region','false');
+     const search=node('form','workspace-search',`<span class="workspace-search-glow" aria-hidden="true"></span><span class="workspace-search-icon">${icon('search')}</span><input type="search" aria-label="搜索会话" placeholder="搜索…"><button class="workspace-search-filter" type="button" aria-label="筛选会话" title="筛选会话（即将开放）" disabled>${icon('filter')}</button>`);
++    search.setAttribute('data-tauri-drag-region','false');
+     search.onsubmit=event=>{event.preventDefault();$('chatSearch').value=search.querySelector('input').value;navigate('chat');$('chatSearch').dispatchEvent(new Event('input',{bubbles:true}));};
+     publisher.querySelector('label').classList.add('sr-only');
+     const topActions=node('div','topbar-actions');
++    topActions.setAttribute('data-tauri-drag-region','false');
+     for(const [label,glyph] of [['新建','plus'],['通知','bell'],['外观','moon']]) { const b=button(label,glyph,null); b.disabled=true; b.dataset.placeholder='soon'; b.title=`${label}｜即将开放`; topActions.append(b); }
+     const account=node('button','topbar-account','管理账号'); account.type='button'; account.onclick=()=>navigate('settings');
++    account.setAttribute('data-tauri-drag-region','false');
+     rail.querySelector('#railBots').append(publisher);
+     top.append(toggle,search,topActions,account); content.prepend(top); workspace.replaceChildren(rail,content);
+     details=node('aside','chat-details','<div class="details-heading"><div><span class="details-kicker">当前会话</span><h3>会话资料</h3></div></div><div class="details-profile"><div class="details-avatar">?</div><h3 class="details-title">请选择会话</h3><p class="details-handle">未选择会话</p><span class="details-status is-placeholder">状态未接入</span></div><div class="details-actions"><button class="primary" type="button" data-details-send>发送消息</button><button class="secondary is-placeholder" type="button" disabled>加标签</button><button class="secondary is-placeholder" type="button" disabled>备注</button><button class="secondary is-placeholder" type="button" disabled>更多</button></div><section class="details-card"><h4>用户信息</h4><dl></dl></section><section class="details-card details-tags"><h4>标签</h4><span class="empty-state">即将开放</span></section><section class="details-card details-media"><h4>媒体</h4><span class="empty-state">即将开放</span></section>');

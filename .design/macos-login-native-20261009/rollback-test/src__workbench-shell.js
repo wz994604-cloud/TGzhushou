@@ -78,18 +78,13 @@ export function mountWorkbench({ mini, navigate, backChat }) {
       else b.disabled=true;
     });
     const top=node('header','desktop-topbar');
-    if (document.body.classList.contains('desktop-macos')) top.setAttribute('data-tauri-drag-region','');
     const toggle=button('打开导航','menu',()=>{workspace.classList.toggle('navigation-open');toggle.setAttribute('aria-expanded',String(workspace.classList.contains('navigation-open')));}); toggle.classList.add('web-menu');toggle.setAttribute('aria-expanded','false');
-    toggle.setAttribute('data-tauri-drag-region','false');
     const search=node('form','workspace-search',`<span class="workspace-search-glow" aria-hidden="true"></span><span class="workspace-search-icon">${icon('search')}</span><input type="search" aria-label="搜索会话" placeholder="搜索…"><button class="workspace-search-filter" type="button" aria-label="筛选会话" title="筛选会话（即将开放）" disabled>${icon('filter')}</button>`);
-    search.setAttribute('data-tauri-drag-region','false');
     search.onsubmit=event=>{event.preventDefault();$('chatSearch').value=search.querySelector('input').value;navigate('chat');$('chatSearch').dispatchEvent(new Event('input',{bubbles:true}));};
     publisher.querySelector('label').classList.add('sr-only');
     const topActions=node('div','topbar-actions');
-    topActions.setAttribute('data-tauri-drag-region','false');
     for(const [label,glyph] of [['新建','plus'],['通知','bell'],['外观','moon']]) { const b=button(label,glyph,null); b.disabled=true; b.dataset.placeholder='soon'; b.title=`${label}｜即将开放`; topActions.append(b); }
     const account=node('button','topbar-account','管理账号'); account.type='button'; account.onclick=()=>navigate('settings');
-    account.setAttribute('data-tauri-drag-region','false');
     rail.querySelector('#railBots').append(publisher);
     top.append(toggle,search,topActions,account); content.prepend(top); workspace.replaceChildren(rail,content);
     details=node('aside','chat-details','<div class="details-heading"><div><span class="details-kicker">当前会话</span><h3>会话资料</h3></div></div><div class="details-profile"><div class="details-avatar">?</div><h3 class="details-title">请选择会话</h3><p class="details-handle">未选择会话</p><span class="details-status is-placeholder">状态未接入</span></div><div class="details-actions"><button class="primary" type="button" data-details-send>发送消息</button><button class="secondary is-placeholder" type="button" disabled>加标签</button><button class="secondary is-placeholder" type="button" disabled>备注</button><button class="secondary is-placeholder" type="button" disabled>更多</button></div><section class="details-card"><h4>用户信息</h4><dl></dl></section><section class="details-card details-tags"><h4>标签</h4><span class="empty-state">即将开放</span></section><section class="details-card details-media"><h4>媒体</h4><span class="empty-state">即将开放</span></section>');

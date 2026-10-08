@@ -36,13 +36,6 @@ body:has(#locked:not([hidden])) .app-header { display: none; }
   align-content: center;
 }
 
-/* Native macOS titlebar overlays the webview; keep the form centered while allowing content underneath it. */
-body.desktop-client #locked.login-shell {
-  min-height:100vh;
-  padding-top:72px;
-  padding-bottom:48px;
-}
-
 #locked .login-card {
   width: min(480px, 100%);
   padding: 42px 40px 36px;
