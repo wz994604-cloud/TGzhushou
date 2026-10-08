@@ -1,0 +1,35 @@
+/* Shared macOS-oriented design tokens for the desktop surface. */
+html[data-surface="web"],
+body.desktop-client {
+  --macos-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --macos-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --macos-blue: #0a84ff;
+  --macos-blue-pressed: #0066cc;
+  --macos-pink: #e54894;
+  --macos-ink: #1d2433;
+  --macos-secondary-ink: #667085;
+  --macos-tertiary-ink: #8e99ab;
+  --macos-separator: rgba(60, 68, 82, .18);
+  --macos-surface: rgba(255, 255, 255, .72);
+  --macos-surface-strong: rgba(255, 255, 255, .88);
+  --macos-surface-inset: rgba(235, 239, 246, .72);
+  --macos-glass-border: rgba(255, 255, 255, .68);
+  --macos-glass-highlight: rgba(255, 255, 255, .82);
+  --macos-shadow-window: 0 24px 72px rgba(38, 44, 64, .22);
+  --macos-shadow-card: 0 10px 28px rgba(38, 44, 64, .14);
+  --macos-radius-window: 14px;
+  --macos-radius-card: 12px;
+  --macos-radius-control: 8px;
+  --macos-radius-pill: 999px;
+  --macos-space-1: 4px;
+  --macos-space-2: 8px;
+  --macos-space-3: 12px;
+  --macos-space-4: 16px;
+  --macos-space-5: 20px;
+  --macos-space-6: 24px;
+  --macos-control-height: 32px;
+  --macos-control-height-large: 40px;
+}
+
+body.desktop-client { font-family: var(--macos-font); }
+html[data-surface="web"] :is(button, input, select, textarea) { font-family: var(--macos-font); }

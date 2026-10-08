@@ -1,0 +1,33 @@
+# VERIFICATION — macOS token foundation
+
+Changed branch/field:
+- Branch: feature/desktop-client-v1
+- Changed field: shared macOS desktop tokens and login page token adoption.
+
+Artifacts:
+- MODIFIED_FILE: .design/macos-design-system-20261009/MODIFIED_FILE/
+- DIFF_FILE: .design/macos-design-system-20261009/DIFF_FILE.patch
+- VERIFICATION: .design/macos-design-system-20261009/VERIFICATION.txt
+- ROLLBACK: .design/macos-design-system-20261009/ROLLBACK.sh
+
+BASELINE
+Command: git show HEAD:src/main.js; git show HEAD:src/login.css
+Input: pre-change desktop/login styles
+Literal result: source recovered from HEAD; exit 0
+Status: PASS
+
+MODIFIED
+Command: node --check src/main.js; npm run build; git diff --check -- src/main.js src/macos-tokens.css src/login.css
+Input: new src/macos-tokens.css plus login token references
+Literal result: 736 modules transformed; built in 285ms; targeted diff check passed; exit 0
+Status: PASS
+
+ROLLBACK
+Command: C:\Program Files\Git\bin\bash.exe -lc './.design/macos-design-system-20261009/ROLLBACK.sh'
+Input: rollback-test copies
+Literal result: rollback-test restored baseline copies; exit 0
+Status: PASS
+
+Restored behavior/status:
+- Rollback copies are restored to the recorded baseline.
+- Working tree intentionally remains modified for the macOS token migration.
