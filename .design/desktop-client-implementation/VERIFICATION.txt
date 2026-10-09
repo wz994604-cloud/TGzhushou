@@ -1,0 +1,22 @@
+Branch: feature/desktop-client-v1
+Base HEAD: 541ddb87f048c2eeb9dace83aaf96ebb4faa9fb8
+Scope: personal internal Windows client only. No Mini App, backend, database, auth, API, or Railway changes.
+Changed: index.html; src/main.js; src/desktop-bridge.js; src/desktop.css; package.json; package-lock.json; .gitignore; desktop/src-tauri/*; desktop/README.md.
+
+BASELINE command: git rev-parse HEAD; git status --short --branch; git fetch origin
+BASELINE input: existing workspace on feature/web-final-ux; existing UI/plan documents retained.
+BASELINE result: HEAD 541ddb8; git fetch origin returned .git/FETCH_HEAD permission denied; origin/main was already verified at 541ddb8 before branch creation.
+BASELINE exit: fetch 255; other baseline reads 0.
+
+MODIFIED command: node --check src/main.js; node --check src/desktop-bridge.js; npm run build; npm test; cargo check --manifest-path desktop/src-tauri/Cargo.toml; npm run desktop:build; npx playwright test --config tests/web-function-pages.config.js --grep 'web function pages keep real structure|Mini selector'
+MODIFIED input: feature/desktop-client-v1, local Tauri 2 dependencies, Windows WebView2/MSVC, isolated browser fixture.
+MODIFIED result: JS checks 0; Vite 733 modules transformed and build exit 0; 14 Node tests passed; cargo check finished successfully; portable executable created at C:\Users\win11\Projects\飞机助手\desktop\src-tauri\target\release\feiji-auto-desktop.exe (10469376 bytes); 2 web/Mini regression tests passed.
+MODIFIED exit: 0 for each listed successful command.
+
+PACKAGE note: npm run desktop:package attempted NSIS but was blocked by network socket error 10013 while downloading NSIS resources. Internal scope therefore uses the verified portable executable from desktop:build; no signing, updater, or WebView2 runtime packaging configured.
+
+ROLLBACK command: bash .design/desktop-client-implementation/ROLLBACK.sh .design/desktop-client-implementation/rollback-test
+ROLLBACK input: separate copy containing all modified and new files.
+ROLLBACK result: ROLLBACK_EXIT=0; RESTORED_INDEX=True; NEW_BRIDGE_REMOVED=True.
+ROLLBACK exit: 0. Live files remain implemented.
+Artifacts: MODIFIED_FILE.zip, DIFF_FILE.patch, VERIFICATION.txt, ROLLBACK.sh in .design/desktop-client-implementation.

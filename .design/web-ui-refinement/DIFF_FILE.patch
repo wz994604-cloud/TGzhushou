@@ -1,0 +1,532 @@
+diff --git a/src/glass-theme-final.css b/src/glass-theme-final.css
+index bced140..10a9db1 100644
+--- a/src/glass-theme-final.css
++++ b/src/glass-theme-final.css
+@@ -1,11 +1,36 @@
+-/* Final desktop glass theme. Visual-only override; business logic is unchanged. */
++/* Web chat refinement. Existing geometry and other page treatments are retained. */
++html[data-surface="web"] {
++  --chat-text:#1f2937;
++  --chat-muted:#5f6b7a;
++  --chat-secondary:#697586;
++  --chat-accent:#1677e8;
++  --chat-rail:rgba(255,255,255,.20);
++  --chat-top:rgba(255,255,255,.48);
++  --chat-panel:rgba(255,255,255,.62);
++  --chat-canvas:rgba(245,250,255,.36);
++  --chat-composer:rgba(255,255,255,.84);
++  --chat-input:rgba(255,255,255,.94);
++  --chat-bot:rgba(255,255,255,.38);
++  --chat-selected:rgba(22,119,232,.12);
++  --chat-hover:rgba(255,255,255,.28);
++  --chat-line:rgba(112,139,174,.20);
++  --chat-blur:18px;
++}
++html[data-surface="web"] .app-rail,
++html[data-surface="web"] .desktop-topbar,
++html[data-surface="web"] #chat,
++html[data-surface="web"] #chat :is(button,input,textarea,select,.ql-editor),
++html[data-surface="web"] .app-rail :is(button,select) {
++  font-family:"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif!important;
++  color:var(--chat-text);
++}
++
+ html[data-surface="web"],
+ html[data-surface="web"] body,
+ html[data-surface="web"] #app {
+   background:
+     radial-gradient(circle at 12% 8%, rgba(255,173,216,.34), transparent 34%),
+     radial-gradient(circle at 82% 12%, rgba(157,207,255,.30), transparent 36%),
+-    radial-gradient(circle at 56% 88%, rgba(212,188,255,.22), transparent 42%),
+     linear-gradient(135deg,#f9eef7 0%,#eef6ff 48%,#f8edf7 100%)!important;
+ }
+ 
+@@ -25,7 +50,7 @@ html[data-surface="web"] .desktop-topbar {
+   padding:10px 18px!important;
+   gap:12px!important;
+   border-bottom:1px solid rgba(132,154,193,.18)!important;
+-  background:rgba(255,255,255,.44)!important;
++  background:var(--chat-top)!important;
+   backdrop-filter:blur(18px) saturate(118%);
+   -webkit-backdrop-filter:blur(18px) saturate(118%);
+ }
+@@ -62,11 +87,9 @@ html[data-surface="web"] .app-rail {
+   padding:16px 14px 12px!important;
+   gap:10px!important;
+   border-right:1px solid rgba(142,164,205,.20)!important;
+-  background:
+-    radial-gradient(circle at 10% 0%,rgba(255,161,205,.48),transparent 42%),
+-    linear-gradient(180deg,rgba(255,211,232,.72) 0%,rgba(238,219,248,.64) 48%,rgba(213,228,255,.70) 100%)!important;
+-  backdrop-filter:blur(18px) saturate(116%);
+-  -webkit-backdrop-filter:blur(18px) saturate(116%);
++  background:var(--chat-rail)!important;
++  backdrop-filter:blur(var(--chat-blur));
++  -webkit-backdrop-filter:blur(var(--chat-blur));
+ }
+ 
+ html[data-surface="web"] .rail-brand {
+@@ -74,6 +97,7 @@ html[data-surface="web"] .rail-brand {
+ }
+ 
+ html[data-surface="web"] .rail-brand-copy strong {
++  color:var(--chat-text)!important;
+   font-size:15px!important;
+ }
+ 
+@@ -82,65 +106,107 @@ html[data-surface="web"] .rail-brand-copy small {
+ }
+ 
+ html[data-surface="web"] .rail-bots {
+-  min-height:44px!important;
++  min-height:56px!important;
++  position:relative;
+ }
+ 
+ html[data-surface="web"] .rail-bot {
+-  min-height:44px!important;
+-  padding:7px 9px!important;
++  height:56px!important;
++  min-height:56px!important;
++  padding:7px 12px!important;
++  gap:10px!important;
++  color:var(--chat-text)!important;
+   border:1px solid rgba(255,255,255,.12)!important;
+-  border-radius:10px!important;
++  border-radius:8px!important;
+ }
+ 
+ html[data-surface="web"] .rail-bot img,
+ html[data-surface="web"] .rail-bot>span:first-child {
+-  width:30px!important;
+-  height:30px!important;
++  width:40px!important;
++  height:40px!important;
++  flex-basis:40px!important;
+ }
+ 
+ html[data-surface="web"] .rail-bot img {
+-  left:9px!important;
++  left:12px!important;
+   top:7px!important;
+ }
+ 
+ html[data-surface="web"] .rail-bot-name {
+-  font-size:11.5px!important;
++  font-size:14px!important;
++  font-weight:600!important;
+ }
+ 
+ html[data-surface="web"] .rail-bot.active {
+-  background:linear-gradient(135deg,rgba(23,58,95,.90),rgba(47,70,114,.78))!important;
+-  border-color:rgba(255,255,255,.18)!important;
+-  box-shadow:0 8px 22px rgba(38,67,106,.12)!important;
+-  backdrop-filter:blur(14px);
+-  -webkit-backdrop-filter:blur(14px);
++  background:var(--chat-bot)!important;
++  border-color:var(--chat-line)!important;
++  box-shadow:none!important;
++}
++/* One native selector over the identity block; all authorized options stay in the same select. */
++html[data-surface="web"] .rail-bots .publisher-switch {
++  position:absolute;inset:0;min-width:0!important;max-width:none!important;
++}
++html[data-surface="web"] .rail-bots #publisherSelect {
++  width:100%;height:56px;min-height:56px!important;margin:0;
++  border:0!important;border-radius:8px;appearance:none;
++  background:transparent!important;color:transparent!important;cursor:pointer;
+ }
++html[data-surface="web"] .rail-bots #publisherSelect option {
++  color:var(--chat-text);background:#fff;
++}
++html[data-surface="web"] .rail-bots:focus-within {
++  outline:2px solid var(--chat-accent);outline-offset:2px;border-radius:8px;
++}
++html[data-surface="web"] .rail-bot-arrow {
++  flex:0 0 16px;margin-left:auto;color:var(--chat-muted);font-size:16px;
++}
++html[data-surface="web"] .rail-bots:has(select:disabled) .rail-bot-arrow { visibility:hidden; }
++
+ 
+ html[data-surface="web"] .rail-nav {
+-  gap:3px!important;
++  gap:4px!important;
+ }
+ 
+ html[data-surface="web"] .rail-group-label {
+-  font-size:11px!important;
+-  padding:8px 10px 4px!important;
++  font-size:12px!important;
++  font-weight:500!important;
++  color:var(--chat-secondary)!important;
++  padding:16px 12px 4px!important;
+ }
+ 
+ html[data-surface="web"] .rail-nav button {
+-  min-height:39px!important;
+-  padding:8px 10px!important;
+-  border-radius:9px!important;
+-  font-size:13px!important;
+-  gap:10px!important;
++  min-height:54px!important;
++  height:54px;flex-shrink:0;
++  padding:12px!important;
++  border-radius:8px!important;
++  font-size:16px!important;font-weight:500!important;line-height:24px;
++  color:var(--chat-text)!important;
++  gap:12px!important;
+ }
+ 
+ html[data-surface="web"] .rail-nav button:hover:not(:disabled) {
+-  background:rgba(255,255,255,.34)!important;
++  background:var(--chat-hover)!important;
+ }
+ 
+ html[data-surface="web"] .rail-nav button.active,
+ html[data-surface="web"] .rail-nav button[aria-current="page"] {
+-  background:linear-gradient(135deg,rgba(20,61,99,.96),rgba(24,80,128,.90))!important;
+-  border-color:rgba(255,255,255,.10)!important;
+-  box-shadow:0 7px 18px rgba(38,74,118,.13)!important;
++  background:var(--chat-selected)!important;
++  color:#145fa8!important;font-weight:600!important;
++  border-color:transparent!important;
++  box-shadow:inset 3px 0 var(--chat-accent)!important;
++}
++html[data-surface="web"] .rail-nav button .nav-glyph,
++html[data-surface="web"] .rail-nav button svg,
++html[data-surface="web"] .rail-nav button.active .nav-glyph,
++html[data-surface="web"] .rail-nav button.active svg,
++html[data-surface="web"] .rail-nav button[aria-current="page"] .nav-glyph,
++html[data-surface="web"] .rail-nav button[aria-current="page"] svg {
++  width:22px!important;height:22px!important;flex-basis:22px;
++  color:inherit!important;
++}
++@media (max-height:740px) {
++  html[data-surface="web"] .rail-nav button {height:46px;min-height:46px!important;}
++  html[data-surface="web"] .rail-group-label {padding-top:12px!important;}
+ }
+ 
+ html[data-surface="web"] .rail-account {
+@@ -235,25 +301,23 @@ html[data-surface="web"] #chat .chat-shell {
+ 
+ html[data-surface="web"] #chat .chat-list,
+ html[data-surface="web"] #chat .chat-details {
+-  background:rgba(255,255,255,.54)!important;
+-  border-color:rgba(145,169,204,.18)!important;
+-  backdrop-filter:blur(16px) saturate(112%);
+-  -webkit-backdrop-filter:blur(16px) saturate(112%);
++  background:var(--chat-panel)!important;
++  border-color:var(--chat-line)!important;
++  backdrop-filter:blur(var(--chat-blur));
++  -webkit-backdrop-filter:blur(var(--chat-blur));
+ }
+ 
+ html[data-surface="web"] #chat .chat-main {
+-  background:
+-    radial-gradient(circle at 26% 12%,rgba(255,185,220,.14),transparent 34%),
+-    radial-gradient(circle at 78% 18%,rgba(143,201,255,.17),transparent 39%),
+-    rgba(235,246,255,.58)!important;
++  background:var(--chat-canvas)!important;
++}
++html[data-surface="web"] #chat .chat-messages {
++  background-color:transparent!important;
+ }
+ 
+ html[data-surface="web"] #chat .chat-head,
+ html[data-surface="web"] #chat #chatComposer {
+-  background:rgba(255,255,255,.54)!important;
+-  border-color:rgba(145,169,204,.18)!important;
+-  backdrop-filter:blur(14px);
+-  -webkit-backdrop-filter:blur(14px);
++  background:var(--chat-composer)!important;
++  border-color:var(--chat-line)!important;
+ }
+ 
+ html[data-surface="web"] #chat .chat-head {
+@@ -273,36 +337,35 @@ html[data-surface="web"] #chat .chat-avatar {
+ }
+ 
+ html[data-surface="web"] #chat .chat-summary strong {
+-  font-size:13px!important;
++  font-size:14px!important;
+ }
+ 
+ html[data-surface="web"] #chat .chat-summary small {
+-  font-size:11px!important;
++  font-size:12px!important;
++  color:var(--chat-muted)!important;
+   margin-top:3px!important;
+ }
+ 
+ html[data-surface="web"] #chat .chat-meta,
+ html[data-surface="web"] #chat .chat-meta small {
+-  font-size:9.5px!important;
++  font-size:12px!important;color:var(--chat-secondary)!important;
+ }
+ 
+ html[data-surface="web"] #chat .chat-conversation.selected {
+-  background:linear-gradient(90deg,rgba(226,241,255,.68),rgba(247,241,251,.46))!important;
++  background:var(--chat-selected)!important;
+   box-shadow:inset 3px 0 #1677ed!important;
+ }
+ 
+ html[data-surface="web"] #chat #chatSearch,
+ html[data-surface="web"] #chat .chat-list input {
+-  background:rgba(255,255,255,.48)!important;
+-  border-color:rgba(145,169,204,.20)!important;
++  background:var(--chat-input)!important;
++  border-color:var(--chat-line)!important;
+ }
+ 
+ html[data-surface="web"] #chat .details-card {
+-  background:rgba(255,255,255,.50)!important;
+-  border-color:rgba(255,255,255,.62)!important;
+-  box-shadow:0 5px 16px rgba(63,86,126,.025)!important;
+-  backdrop-filter:blur(12px);
+-  -webkit-backdrop-filter:blur(12px);
++  background:var(--chat-bot)!important;
++  border-color:var(--chat-line)!important;
++  box-shadow:none!important;
+ }
+ 
+ html[data-surface="web"] #chat .details-actions button:not(.primary) {
+@@ -313,6 +376,23 @@ html[data-surface="web"] #chat .details-actions .primary {
+   background:#167cf3!important;
+ }
+ 
++html[data-surface="web"] #chat .details-status.is-placeholder {
++  color:var(--chat-muted)!important;background:rgba(95,107,122,.08)!important;
++}
++html[data-surface="web"] #chat :is(.chat-bubble,#chatInput,.ql-toolbar) {
++  background:var(--chat-input);font-size:14px;line-height:1.5;
++}
++html[data-surface="web"] #chat .chat-bubble.out {background:#e8f1ff!important;}
++html[data-surface="web"] #chat :is(.primary,#chatSend) {
++  background:var(--chat-accent)!important;color:#fff!important;box-shadow:none!important;
++}
++html[data-surface="web"] #chat :is(button,input,textarea):focus-visible,
++html[data-surface="web"] .rail-nav button:focus-visible {
++  outline:2px solid var(--chat-accent);outline-offset:2px;
++}
++html[data-surface="web"] #chat :is(h2,#chatTitle) {font-size:20px;font-weight:600;}
++html[data-surface="web"] #chat .details-heading h3 {font-size:16px!important;font-weight:600;}
++html[data-surface="web"] #chat .details-card dt {color:var(--chat-muted);}
+ html[data-surface="web"] .details-avatar {
+   width:64px!important;
+   height:64px!important;
+@@ -350,5 +430,7 @@ html[data-surface="web"] .details-avatar {
+   html[data-surface="web"] .app-rail {
+     width:236px!important;
+     min-width:236px!important;
++    background:rgba(255,255,255,.94)!important;
++    backdrop-filter:blur(var(--chat-blur))!important;
+   }
+ }
+diff --git a/src/main.js b/src/main.js
+index ff908bd..420f33c 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -534,7 +534,18 @@ $('assetPacks').onclick=event=>{const i=event.target.dataset.assetPack;if(i===un
+ function openAssetPicker(target){if(target==='chat'&&!activeChat)target='body';changeTab(target==='chat'?'chat':'editor');openPicker(target,$(target==='chat'?'chatEmoji':'bodyEmoji'));}
+ $('openAssetEditor').onclick=()=>changeTab('editor');$('openAssetEmoji').onclick=()=>{openAssetPicker(lastEditorTarget);$('packSettings').open=true;};
+ function populateTargets(selected = []) { $('targetChecks').innerHTML=data.targets.map(t=>`<label class="check"><input type="checkbox" name="target" value="${t.id}" ${selected.includes(t.id)?'checked':''} ${t.can_publish?'':'disabled'}><span>${esc(t.title)}<small>${esc(t.last_error || t.chat_id)}</small></span></label>`).join('')||'<p class="muted">请先在「设置」中添加群或频道。</p>'; }
+-async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=result;selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=`${data.admin.name} · ID ${data.admin.id}`;ui.account(data);action(loadAdminAccounts); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length; if($('railBots')) $('railBots').innerHTML=data.publishers.filter(p=>p.id===data.publisher?.id).map(p=>`<button type="button" class="rail-bot ${p.id===data.publisher?.id?'active':''}" data-bot-id="${esc(p.id)}" title="切换到 @${esc(p.username||p.id)}" aria-label="切换到 @${esc(p.username||p.id)}" aria-pressed="${p.id===data.publisher?.id}"><span aria-hidden="true">${esc((p.username||p.id).replace(/^@/,'').slice(0,1).toUpperCase())}</span><span class="rail-bot-name">@${esc(p.username||p.id)}</span></button>`).join(''); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
++async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=result;selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=`${data.admin.name} · ID ${data.admin.id}`;ui.account(data);action(loadAdminAccounts); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length||(!initData&&publisherChanging); renderRailPublisher(); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
++function renderRailPublisher() {
++  const rail=$('railBots');if(!rail)return;
++  rail.querySelector('.rail-bot')?.remove();
++  const current=data?.publisher;
++  const label=current?'@'+publisherLabel(current.id):'尚未配置发布机器人';
++  const visual=document.createElement('div');visual.className='rail-bot active';visual.dataset.botId=current?.id||'';
++  visual.setAttribute('aria-hidden','true');
++  visual.innerHTML='<span>'+esc(label.replace(/^@/,'').slice(0,1).toUpperCase())+'</span><span class="rail-bot-name">'+esc(label)+'</span><span class="rail-bot-arrow">⌄</span>';
++  rail.prepend(visual);
++  $('publisherSelect').title=label;
++}
+ function publisherLabel(id) { return data?.publishers?.find(p=>String(p.id)===String(id))?.username || id; }
+ function updateMobileBotSwitch() { const node=$('mobileBotSwitch'); if(!node)return; const current=data?.publisher?.id||selectedPublisherId; node.textContent=(publisherLabel(current)||'?').replace(/^@/,'').slice(0,1).toUpperCase(); node.title=`切换到 @${publisherLabel(current)}`; node.setAttribute('aria-label',node.title); }
+ 
+@@ -553,11 +564,23 @@ async function switchPublisher(id) {
+   await loadPlayers(); await loadRuns();
+   if (data.publisher) await loadFfaStatus();
+   await loadConversations();await loadInboxStatus();
+-  }finally{publisherChanging=false;}
++  }finally{publisherChanging=false;if(!initData)$('publisherSelect').disabled=!data?.publishers?.length;}
+ }
+ $('boundPublisherList').onclick=event=>{const id=event.target.dataset.boundBot;if(id)action(()=>switchPublisher(id),event.target);};
+-$('publisherSelect').onchange=event=>action(async()=>{await switchPublisher(event.target.value);toast(`已切换到 @${publisherLabel(event.target.value)}`);},event.currentTarget);
+-if($('railBots')) $('railBots').onclick=event=>{const button=event.target.closest('[data-bot-id]'),id=button?.dataset.botId;if(id)action(async()=>{await switchPublisher(id);toast(`已切换到 @${publisherLabel(id)}`);});};
++$('publisherSelect').onchange=event=>action(async()=>{
++  const select=event.currentTarget,id=select.value;
++  try { await switchPublisher(id);toast(`已切换到 @${publisherLabel(data?.publisher?.id||selectedPublisherId)}`); }
++  catch(error) {
++    if(initData)throw error;
++    // Bootstrap is authoritative. Restore the last confirmed scope after a failed switch.
++    const confirmedId=data?.publisher?.id||'';
++    if(selectedPublisherId!==confirmedId){selectedPublisherId=confirmedId;publisherRevision++;clearPlayerContext();}
++    if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);
++    else localStorage.removeItem('tgzhushou:selected-publisher');
++    select.value=selectedPublisherId;renderRailPublisher();loadRailBotAvatars();
++    throw error;
++  }
++},event.currentTarget);
+ $('mobileBotSwitch').onclick=event=>action(async()=>{const current=data?.publisher?.id||selectedPublisherId;const next=data?.publishers?.find(p=>String(p.id)!==String(current));if(next){await switchPublisher(next.id);toast(`已切换到 @${publisherLabel(next.id)}`);}},event.currentTarget);
+ function showTasks() {
+   $('noTimedTasks').hidden=data.tasks.some(t=>JSON.parse(t.schedule_json).kind!=='MANUAL');
+diff --git a/src/workbench-shell.js b/src/workbench-shell.js
+index 58e710c..7af73d9 100644
+--- a/src/workbench-shell.js
++++ b/src/workbench-shell.js
+@@ -84,7 +84,8 @@ export function mountWorkbench({ mini, navigate, backChat }) {
+     const topActions=node('div','topbar-actions');
+     for(const [label,glyph] of [['新建','plus'],['通知','bell'],['外观','moon']]) { const b=button(label,glyph,null); b.disabled=true; b.dataset.placeholder='soon'; b.title=`${label}｜即将开放`; topActions.append(b); }
+     const account=node('button','topbar-account','管理账号'); account.type='button'; account.onclick=()=>navigate('settings');
+-    top.append(toggle,search,publisher,topActions,account); content.prepend(top); workspace.replaceChildren(rail,content);
++    rail.querySelector('#railBots').append(publisher);
++    top.append(toggle,search,topActions,account); content.prepend(top); workspace.replaceChildren(rail,content);
+     details=node('aside','chat-details','<div class="details-heading"><div><span class="details-kicker">当前会话</span><h3>会话资料</h3></div></div><div class="details-profile"><div class="details-avatar">?</div><h3 class="details-title">请选择会话</h3><p class="details-handle">未选择会话</p><span class="details-status is-placeholder">状态未接入</span></div><div class="details-actions"><button class="primary" type="button" data-details-send>发送消息</button><button class="secondary is-placeholder" type="button" disabled>加标签</button><button class="secondary is-placeholder" type="button" disabled>备注</button><button class="secondary is-placeholder" type="button" disabled>更多</button></div><section class="details-card"><h4>用户信息</h4><dl></dl></section><section class="details-card details-tags"><h4>标签</h4><span class="empty-state">即将开放</span></section><section class="details-card details-media"><h4>媒体</h4><span class="empty-state">即将开放</span></section>');
+     details.setAttribute('aria-label','会话资料');
+     const close=button('关闭会话资料','close',()=>{workspace.classList.remove('details-open');$('showChatDetails').setAttribute('aria-expanded','false');$('showChatDetails').focus();}); details.querySelector('.details-heading').append(close);
+@@ -202,6 +203,9 @@ export function mountWorkbench({ mini, navigate, backChat }) {
+       if(!chat && $('chatMessages')) $('chatMessages').innerHTML='<p class="chat-empty">选择左侧会话，开始处理消息</p>';
+       if(!details)return;
+       details.hidden=mini?!chat:false;
++      const send=details.querySelector('[data-details-send]');
++      send.disabled=!chat;
++      send.title=chat?'聚焦消息输入框':'请先选择会话';
+       details.querySelector('.details-title').textContent=chat?.title||'请选择会话';
+       details.querySelector('.details-avatar').textContent=(chat?.title||'?').slice(0,1);
+       details.querySelector('.details-handle').textContent=chat?`ID ${chat.chat_id}`:'未选择会话';
+diff --git a/tests/browser/web-chat-refinement.spec.js b/tests/browser/web-chat-refinement.spec.js
+new file mode 100644
+index 0000000..b0537ad
+--- /dev/null
++++ b/tests/browser/web-chat-refinement.spec.js
+@@ -0,0 +1,119 @@
++import {test,expect} from '@playwright/test';
++import fs from 'node:fs';
++const phase=process.env.UI_PHASE || 'modified';
++const shots='.design/web-ui-refinement/'+phase;fs.mkdirSync(shots,{recursive:true});
++const now=Date.UTC(2026,9,4,4),png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/C9sAAAAASUVORK5CYII=','base64');
++// Explicitly isolated UI fixtures: no production accounts, webhooks or Telegram sends.
++async function setup(page,{mini=false,empty=false}={}){
++ const calls=[],errors=[];let ready=false,packs=[],id=10;
++ const conversations=empty?[]:[{chat_id:'80001',title:'测试联系人甲',unread_count:1,last_message_text:'这是一条测试消息',last_message_at:now},{chat_id:'80002',title:'测试联系人乙',unread_count:0,last_message_text:'谢谢',last_message_at:now-3600000}];
++ const tasks=[{id:1,name:'手动草稿（测试）',status:'DRAFT',schedule_json:'{"kind":"MANUAL"}',next_at:null}];
++ const target={id:1,title:'测试频道',chat_id:'-1001',can_publish:1};
++ const messages=Array.from({length:50},(_,i)=>({id:i+1,telegram_message_id:i+1,direction:i%2?'OUT':'IN',status:'SUCCESS',text:'用于滚动和时间验证的合成测试消息 '+i,sent_at:now-(i<25?86400000:0)+i*1000}));
++ page.on('pageerror',e=>errors.push(e.message));
++ await page.route('https://telegram.org/js/telegram-web-app.js',r=>r.fulfill({contentType:'application/javascript',body:mini?'window.Telegram={WebApp:{initData:"synthetic-ui-fixture",ready(){},expand(){}}};':''}));
++ await page.route('**/api/**',async r=>{
++   const req=r.request(),u=new URL(req.url()),path=u.pathname.slice(4),body=req.postDataJSON?.bind(req);let result;
++   calls.push({path,method:req.method(),body:req.postData(),publisher:req.headers()['x-publisher-id']});
++   if(path.includes('avatars')||path.startsWith('/sticker-image')||/^\/media\/\d+$/.test(path))return r.fulfill({contentType:'image/png',body:png});
++   if(path==='/bootstrap')result={admin:{id:'123456',name:'测试管理员'},publisher:{id:req.headers()['x-publisher-id']||'222222',username:'test_publisher',legacy:true},publishers:[{id:'222222',username:'test_publisher'},{id:'333333',username:'test_second'}],targets:[target,{id:2,title:'无发布权限目标',chat_id:'-1002',can_publish:0,last_error:'机器人不是管理员'}],tasks};
++   else if(path==='/ffa')result={configured:false,baseUrl:'https://example.invalid'};
++   else if(path==='/inbox/status')result={status:ready?'READY':'EXTERNAL'};
++   else if(path==='/inbox/enable'){ready=true;result={ok:true};}
++   else if(path==='/chat/conversations')result={rows:conversations.filter(c=>!u.searchParams.get('q')||c.chat_id.includes(u.searchParams.get('q'))||c.title.includes(u.searchParams.get('q'))),next:null,cursor:50,totalUnread:1};
++   else if(path.endsWith('/messages'))result={rows:messages,next:null};
++   else if(path.endsWith('/read'))result={ok:true};
++   else if(path==='/chat/updates')result={rows:[],cursor:50};
++   else if(path.endsWith('/send')&&path.startsWith('/chat/'))result={ok:true};
++   else if(path==='/players')result={rows:empty?[]:[{telegram_id:'80001',display_name:'测试联系人甲',username:'test_a',active:1,last_seen:now},{telegram_id:'80002',display_name:'测试联系人乙',username:'test_b',active:0,last_seen:now}],total:empty?0:2};
++   else if(path==='/players/ids')result={rows:[{telegram_id:'80001',display_name:'测试联系人甲'}]};
++   else if(path==='/broadcasts')result=empty?[]:[{id:2,name:'用户发布测试',status:'FAILED',success_count:1,failed_count:1,pending_count:0,created_at:now}];
++   else if(path==='/runs')result=empty?[]:[{id:1,name:'频道发布测试',created_at:now,success_count:1,failed_count:1,unknown_count:0,total:2}];
++   else if(path==='/runs/1')result={id:1,deliveries:[{id:1,chat_id:'-1002',title:'测试目标',status:'FAILED',error_text:'测试：机器人缺少权限'}]};
++   else if(path==='/sticker-packs/saved'&&req.method()==='GET')result={packs};
++   else if(path==='/sticker-packs/saved'){packs=[body()];result={ok:true};}
++   else if(path==='/sticker-packs'){
++      if(body().pack.includes('bad'))return r.fulfill({status:400,json:{error:'测试：表情包链接无效'}});
++      result={name:'test_pack',title:'合成专属表情包',stickers:[{id:'5432101234567890123',alt:'🔥'},{id:'5432101234567890124',alt:'💎'}]};
++   }
++   else if(path==='/chat/media')result={id:id++,mime:req.postData()?.includes('video/mp4')?'video/mp4':req.postData()?.includes('text/plain')?'text/plain':'image/png',size:123};
++   else if((path==='/tasks'&&req.method()==='POST')||(path==='/tasks/9'&&req.method()==='PUT')){const payload=body();result={id:9,...payload};tasks.push({id:9,name:payload.name,status:'DRAFT',schedule_json:JSON.stringify(payload.schedule)});}
++   else if(path==='/tasks/9/send')result={runId:10};
++   else return r.fulfill({status:404,json:{error:'UNEXPECTED UI FIXTURE REQUEST '+path}});
++   return r.fulfill({json:result});
++ });
++ await page.goto('/');await expect(page.locator('#workspace')).toBeVisible();await expect(page.locator('[data-chat-id="80001"]')).toBeVisible();
++ return {calls,errors};
++}
++test('chat refinement: same geometry, clear material and complete scoped publisher selection', async({page})=>{
++ const {calls,errors}=await setup(page);
++ await expect(page.locator('#publisherSelect option')).toHaveCount(2);
++ if(phase!=='baseline')await expect(page.locator('[data-details-send]')).toBeDisabled();
++ await page.screenshot({path:shots+'/empty.png'});
++ await page.locator('[data-chat-id="80001"]').click();
++ await expect(page.locator('.chat-bubble')).toHaveCount(50);
++ await page.screenshot({path:shots+'/selected.png'});
++ const styles=await page.evaluate(()=>({styles:[...document.styleSheets].map(s=>s.href||'inline'),computed:['.desktop-shell','.chat-shell','.app-rail','.rail-bot','.rail-nav button','.desktop-topbar','.chat-list'].map(q=>{const s=getComputedStyle(document.querySelector(q));return {selector:q,background:s.background,columns:s.gridTemplateColumns,font:s.fontSize,height:s.height};})}));
++ fs.writeFileSync(shots+'/computed.json',JSON.stringify(styles,null,2));
++ if(phase==='baseline') {expect(errors).toEqual([]);return;}
++ await expect(page.locator('#railBots #publisherSelect')).toHaveCount(1);
++ await expect(page.locator('.desktop-topbar #publisherSelect')).toHaveCount(0);
++ await expect(page.locator('[data-rail-tab="chat"]')).toHaveCSS('font-size','16px');
++ await expect(page.locator('[data-rail-tab="chat"]')).toHaveCSS('height','54px');
++ await expect(page.locator('[data-rail-tab="chat"] svg')).toHaveCSS('width','22px');
++ await expect(page.locator('[data-rail-tab="chat"] svg')).toHaveCSS('color','rgb(20, 95, 168)');
++ await expect(page.locator('#chatSend')).toHaveCSS('color','rgb(255, 255, 255)');
++ await expect(page.locator('.details-status')).toHaveCSS('color','rgb(95, 107, 122)');
++ await expect(page.locator('.details-actions button:disabled')).toHaveCount(3);
++ let release;const held=new Promise(resolve=>release=resolve);
++ await page.route('**/api/bootstrap',async r=>{await held;await r.fallback();});
++ await page.locator('#publisherSelect').selectOption('333333');
++ await expect(page.locator('#publisherSelect')).toBeDisabled();
++ release();
++ await expect(page.locator('#publisherSelect')).toHaveValue('333333');
++ await expect(page.locator('#chatComposer')).toBeHidden();
++ await expect(page.locator('[data-details-send]')).toBeDisabled();
++ expect(calls.some(c=>c.path==='/bootstrap')).toBe(true);
++ await expect(page.locator('.rail-bot-name')).toHaveText('@test_second');
++ await expect(page.locator('#publisherSelect')).toBeEnabled();
++ await page.unroute('**/api/bootstrap');
++ await expect.poll(()=>calls.some(c=>c.path==='/chat/conversations'&&c.publisher==='333333')).toBe(true);
++ await page.locator('#publisherSelect').selectOption('222222');
++ await expect(page.locator('#publisherSelect')).toHaveValue('222222');
++ await expect(page.locator('#publisherSelect')).toBeEnabled();
++ await page.route('**/api/bootstrap',r=>r.fulfill({status:500,json:{error:'测试切换失败'}}));
++ await page.locator('#publisherSelect').selectOption('333333');
++ await expect(page.locator('#toast')).toContainText('测试切换失败');
++ await expect(page.locator('#publisherSelect')).toHaveValue('222222');
++ await expect(page.locator('#publisherSelect')).toBeEnabled();
++ expect(await page.evaluate(()=>localStorage.getItem('tgzhushou:selected-publisher'))).toBe('222222');
++ await page.unroute('**/api/bootstrap');
++ await page.route('**/api/bootstrap',r=>r.request().headers()['x-publisher-id']==='333333'?r.fulfill({status:403,json:{error:'测试：无机器人权限'}}):r.fallback());
++ await page.locator('#publisherSelect').selectOption('333333');
++ await expect(page.locator('#publisherSelect')).toHaveValue('222222');
++ await expect(page.locator('#publisherSelect')).toBeEnabled();
++ await expect(page.locator('#toast')).toContainText('已切换到 @test_publisher');
++ await page.unroute('**/api/bootstrap');
++ await page.locator('#publisherSelect').focus();
++ await page.locator('#publisherSelect').press('Escape');
++ await expect(page.locator('#publisherSelect')).toBeFocused();
++ for(const size of [{width:1536,height:600},{width:1229,height:720},{width:1024,height:600},{width:390,height:844}]){
++   await page.setViewportSize(size);
++   if(size.width<900)await page.getByRole('button',{name:'打开导航'}).click();
++   await page.locator('[data-rail-tab="settings"]').scrollIntoViewIfNeeded();
++   await expect(page.locator('[data-rail-tab="settings"]')).toBeInViewport();
++   await expect(page.locator('.rail-account')).toBeInViewport();
++   await expect(page.locator('#publisherSelect')).toBeVisible();
++   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
++   await page.screenshot({path:shots+`/responsive-${size.width}-${size.height}.png`});
++ }
++ expect(errors).toEqual([]);
++});
++test('Mini selector remains in its own topbar',async({page})=>{
++ await page.setViewportSize({width:390,height:844});
++ const {errors}=await setup(page,{mini:true});
++ await expect(page.locator('.mini-topbar #publisherSelect')).toHaveCount(1);
++ await expect(page.locator('.app-rail')).toHaveCount(0);
++ await expect(page.locator('#publisherSelect option')).toHaveCount(2);
++ expect(errors).toEqual([]);
++});
+diff --git a/tests/web-chat-refinement.config.js b/tests/web-chat-refinement.config.js
+new file mode 100644
+index 0000000..3997c9d
+--- /dev/null
++++ b/tests/web-chat-refinement.config.js
+@@ -0,0 +1,3 @@
++import {defineConfig} from '@playwright/test';
++export default defineConfig({testDir:'./browser',testMatch:'web-chat-refinement.spec.js',workers:1,timeout:30000,
++use:{baseURL:'http://127.0.0.1:8100',channel:'chrome',viewport:{width:1536,height:900}}});

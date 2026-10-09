@@ -1,0 +1,69 @@
+目录：C:\Users\win11\Projects\飞机助手
+身份：唯一前端开发者
+分支：feature/web-chat-refinement
+基线 HEAD：59c4c8029021ae97a99f5e075f18cad8e78ec1e8
+实现提交：8995fec87d9eee983aafb175850be0a6b2be0f9a
+变更：三个前端文件、两个相关测试文件；机器人原生 select 迁移到侧栏；data.publishers 完整列表、switchPublisher、权限回退保留；Web 切换等待/失败同步；54/46px 导航、16px 字、22px 图标、透明材质、中性未知状态。
+MODIFIED_FILE=C:\Users\win11\Projects\飞机助手\.design\web-ui-refinement\MODIFIED_FILE.zip
+DIFF_FILE=C:\Users\win11\Projects\飞机助手\.design\web-ui-refinement\DIFF_FILE.patch
+VERIFICATION=C:\Users\win11\Projects\飞机助手\.design\web-ui-refinement\VERIFICATION.txt
+ROLLBACK=C:\Users\win11\Projects\飞机助手\.design\web-ui-refinement\ROLLBACK.sh
+
+BASELINE
+command: node --test tests/publisher-selection.test.js
+input: 原始 src/main.js、server/index.js；测试内 stale/valid-bot fixture。
+literal output: ℹ tests 2 / ℹ pass 2 / ℹ fail 0
+exit: 0
+baseline build command: npm run build
+literal output: ✓ 727 modules transformed. / ✓ built in 8.52s
+exit: 0
+baseline browser: UI_PHASE=baseline; npx playwright test --config tests/web-chat-refinement.config.js
+literal result: ok 1 ... (1.6s)
+进程退出：自动 webServer 清理挂起后手动中断，exit 1。该截图和用例执行成功，但不把整个命令写成通过。后续移除自动 webServer，由独立本地 preview 服务支撑测试，正常退出。
+
+MODIFIED
+command: node --check src/main.js; node --check src/workbench-shell.js
+input: 两个修改后的源码文件。
+literal output: 无输出
+exit: 0（各命令）
+command: node --test tests/publisher-selection.test.js
+input: 修改后源码；既有 fixture。
+literal output: ℹ tests 2 / ℹ pass 2 / ℹ fail 0
+exit: 0
+command: npm run build
+input: 当前 Vite 入口及三个前端文件。
+literal output: ✓ 727 modules transformed. / ✓ built in 179ms
+exit: 0
+command: $env:UI_PHASE='modified'; npx playwright test --config tests/web-chat-refinement.config.js
+input: 1536×900 与低高、等效缩放宽度、390×844；脱敏 API mock；待切换、500、403、Mini 入口。
+literal output: 2 passed (4.3s)
+exit: 0
+command: git diff HEAD^ HEAD --check
+literal output: 无输出
+exit: 0
+
+ROLLBACK
+command: & 'C:/Program Files/Git/bin/bash.exe' .design/web-ui-refinement/ROLLBACK.sh .design/web-ui-refinement/rollback-test
+input: 回滚测试副本（不是 src 原文件）。
+literal output: Restored 3 baseline files
+exit: 0
+command: node .design/web-ui-refinement/verify-rollback.mjs
+input: baseline-* 与 rollback-test 三文件、仍已修改的 src 三文件。
+literal output: ROLLBACK PASS: 3 hashes match; original selector and navigation restored; source changes retained
+exit: 0
+恢复：三份文件逐字节 SHA256 相同；刷新选择恢复的 VM 测试通过；原顶栏 select 和 39px 导航规则恢复；src 与 MODIFIED_FILE 保持新版。
+command: bash -c '/usr/bin/chmod +x .design/web-ui-refinement/ROLLBACK.sh && test -x .design/web-ui-refinement/ROLLBACK.sh && echo EXECUTABLE'
+literal output: EXECUTABLE
+exit: 0
+
+原始 SHA256：
+main.js=152749860FAB710E5FE7929695EB0C145239FF43F4E366DEA903F3BEC6547763
+workbench-shell.js=F84FB41B548AB6163647AB64E12089A719CCA4889A8933F248DFB79FAA86F66E
+glass-theme-final.css=1F1B0DA804F109D7944E81FEE71CC1FC23C00E9FAFA1DE2DCBDE1B21C1C6B770
+
+失败记录：初始 webServer cwd 默认 tests，找不到 vite；补 cwd 后改独立 preview，解决清理挂起。旧 fixture 假设 enableInbox 可见，但未授予管理权限，改等待会话加载。测试把第二机器人名称误写为第一名称；修正期待。切换期间 select 被 refresh 提前启用，修复 Web 等待态。第一次 rollback 因 Bash PATH 没有 dirname/cp 失败，脚本显式设置 /usr/bin:/bin 后成功。初始两个测试 EOF 多余空行，清理后 diff --check 通过。
+
+状态：本地已提交；推送首次被自动审查拦截；用户随后明确确认推送到 wz994604-cloud/TGzhushou，git push -u origin feature/web-chat-refinement 成功（exit 0），git ls-remote 核对远端为 8995fec87d9eee983aafb175850be0a6b2be0f9a；未合并、未部署。原三个身份文件和既有设计产物没有修改或纳入提交。验收报告和证据保存在当前项目设计目录，未创建其他项目目录或 Agent。
+
+
+MERGE: GitHub merge_pull_request(PR=8, method=merge, expected_head_sha=8995fec87d9eee983aafb175850be0a6b2be0f9a) => merged=true, sha=4b334633be9def4b14fdac9406a2dfbf543acc02. git fetch origin + git rev-parse origin/main => 4b334633be9def4b14fdac9406a2dfbf543acc02, exit 0. git merge-base --is-ancestor 8995fec87d9eee983aafb175850be0a6b2be0f9a origin/main => exit 0. No manual deployment. Existing workspace modifications retained.

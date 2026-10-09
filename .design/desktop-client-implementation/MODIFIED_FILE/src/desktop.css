@@ -1,0 +1,12 @@
+html body.desktop-client { --desktop-titlebar-height:36px; }
+body.desktop-client { padding-top:var(--desktop-titlebar-height); }
+.desktop-titlebar { position:fixed;inset:0 0 auto 0;height:var(--desktop-titlebar-height);z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 12px;background:linear-gradient(110deg,rgba(255,243,252,.88),rgba(207,230,253,.82));border-bottom:1px solid rgba(255,255,255,.7);box-shadow:0 2px 10px rgba(45,66,115,.08);color:#233554;user-select:none; }
+.desktop-titlebar-brand,.desktop-titlebar-actions { display:flex;align-items:center;gap:8px; }
+.desktop-titlebar-mark { display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#7f7a9c;color:#fff;font-size:13px; }
+.desktop-titlebar-status { color:#60728f;font-size:11px; }
+.desktop-titlebar-actions button { width:34px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:#233554;font-size:16px;line-height:1; }
+.desktop-titlebar-actions button:hover { background:rgba(255,255,255,.65); }
+.desktop-titlebar-actions [data-window-action="close"]:hover { background:#d9536a;color:#fff; }
+body.desktop-client #app,body.desktop-client .desktop-shell { min-height:calc(100vh - var(--desktop-titlebar-height)); }
+body.desktop-client .desktop-shell { height:calc(100vh - var(--desktop-titlebar-height)); }
+@media (max-width:1100px) { body.desktop-client .desktop-titlebar-status { display:none; } }
