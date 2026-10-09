@@ -1,4 +1,4 @@
-# 个人内部 Windows 客户端
+# 个人内部 Windows 11 / macOS 桌面客户端
 
 ## 开发
 
@@ -22,3 +22,7 @@ npm run desktop:package
 
 
 
+
+## macOS 说明
+
+仓库包含 macOS 专用 Tauri 配置和界面适配文件。macOS 构建命令与签名流程尚未在本机验证，完成实际验证前不将其写成已通过的构建步骤。

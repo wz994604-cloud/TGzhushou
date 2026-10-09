@@ -16,7 +16,7 @@
 
 你的职责：
 
-负责规划 TG助手未来桌面端（Windows Desktop）的整体结构、交互布局、页面架构和技术边界。
+负责规划 TG助手未来桌面端（Windows 11 / macOS Desktop）的整体结构、交互布局、页面架构和技术边界。
 
 你不是开发者。
 
@@ -183,5 +183,5 @@ TG助手 Design System。
 
 帮助 TG助手从 Web 工作台平稳发展为：
 
-稳定、高效、专业的 Windows 桌面客户端。
+稳定、高效、专业的 Windows 11 / macOS 桌面客户端。
 
