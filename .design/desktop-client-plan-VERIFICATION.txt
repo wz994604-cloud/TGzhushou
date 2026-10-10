@@ -1,0 +1,7 @@
+Artifact: C:\Users\win11\Projects\飞机助手\.design\DESKTOP_CLIENT_PLAN.md
+Status: created and reopened
+Scope: planning document only; no business source, API, database, authentication, or deployment changes
+Verification command: Get-Content -Raw .design\DESKTOP_CLIENT_PLAN.md
+Verification result: file exists and contains the complete Windows client plan, Tauri 2 boundary, reuse scope, UI adaptation, native capabilities, release flow, and acceptance criteria
+Exit status: 0
+Rollback behavior: remove the three planning artifacts listed here; source code remains unchanged

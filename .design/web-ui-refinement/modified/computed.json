@@ -1,0 +1,56 @@
+{
+  "styles": [
+    "http://127.0.0.1:8100/assets/index-m1YYc7ba.css"
+  ],
+  "computed": [
+    {
+      "selector": ".desktop-shell",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0px 0px / auto padding-box border-box",
+      "columns": "236px 1300px",
+      "font": "14px",
+      "height": "900px"
+    },
+    {
+      "selector": ".chat-shell",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0px 0px / auto padding-box border-box",
+      "columns": "370px 584px 344px",
+      "font": "14px",
+      "height": "838px"
+    },
+    {
+      "selector": ".app-rail",
+      "background": "rgba(255, 255, 255, 0.2) none repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "900px"
+    },
+    {
+      "selector": ".rail-bot",
+      "background": "rgba(255, 255, 255, 0.38) none repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "56px"
+    },
+    {
+      "selector": ".rail-nav button",
+      "background": "rgba(22, 119, 232, 0.12) none repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "16px",
+      "height": "54px"
+    },
+    {
+      "selector": ".desktop-topbar",
+      "background": "rgba(255, 255, 255, 0.48) none repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "62px"
+    },
+    {
+      "selector": ".chat-list",
+      "background": "rgba(255, 255, 255, 0.62) none repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "838px"
+    }
+  ]
+}

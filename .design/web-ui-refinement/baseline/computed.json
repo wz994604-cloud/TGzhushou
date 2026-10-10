@@ -1,0 +1,56 @@
+{
+  "styles": [
+    "http://127.0.0.1:8100/assets/index-Bci5PZhm.css"
+  ],
+  "computed": [
+    {
+      "selector": ".desktop-shell",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0px 0px / auto padding-box border-box",
+      "columns": "236px 1300px",
+      "font": "14px",
+      "height": "900px"
+    },
+    {
+      "selector": ".chat-shell",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0px 0px / auto padding-box border-box",
+      "columns": "370px 584px 344px",
+      "font": "14px",
+      "height": "838px"
+    },
+    {
+      "selector": ".app-rail",
+      "background": "radial-gradient(circle at 10% 0px, rgba(255, 161, 205, 0.48), rgba(0, 0, 0, 0) 42%) repeat scroll 0% 0% / auto padding-box border-box, rgba(0, 0, 0, 0) linear-gradient(rgba(255, 211, 232, 0.72) 0%, rgba(238, 219, 248, 0.64) 48%, rgba(213, 228, 255, 0.7) 100%) repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "900px"
+    },
+    {
+      "selector": ".rail-bot",
+      "background": "rgba(0, 0, 0, 0) linear-gradient(135deg, rgba(23, 58, 95, 0.9), rgba(47, 70, 114, 0.78)) repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "46px"
+    },
+    {
+      "selector": ".rail-nav button",
+      "background": "rgba(0, 0, 0, 0) linear-gradient(135deg, rgba(20, 61, 99, 0.96), rgba(24, 80, 128, 0.9)) repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "13px",
+      "height": "39px"
+    },
+    {
+      "selector": ".desktop-topbar",
+      "background": "rgba(255, 255, 255, 0.44) none repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "62px"
+    },
+    {
+      "selector": ".chat-list",
+      "background": "rgba(255, 255, 255, 0.54) none repeat scroll 0% 0% / auto padding-box border-box",
+      "columns": "none",
+      "font": "14px",
+      "height": "838px"
+    }
+  ]
+}
