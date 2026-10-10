@@ -1,11 +1,277 @@
+diff --git a/.design/serverless-migration/MODIFIED_FILE b/.design/serverless-migration/MODIFIED_FILE
+new file mode 100644
+index 0000000..c3ea6ec
+--- /dev/null
++++ b/.design/serverless-migration/MODIFIED_FILE
+@@ -0,0 +1,36 @@
++{
++  "name": "tgzhushou",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "vite --host 127.0.0.1",
++    "start": "node server/index.js",
++    "build": "vite build",
++    "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/auth.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/browser-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
++    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js",
++    "serverless:check": "node scripts/serverless-structure-check.mjs && node scripts/serverless-schema-check.mjs",
++    "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
++    "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
++    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
++  },
++  "engines": {
++    "node": ">=22"
++  },
++  "dependencies": {
++    "@tauri-apps/api": "^2.12.1",
++    "express": "^5.2.1",
++    "multer": "^2.4.0",
++    "pg": "^8.16.3",
++    "quill": "2.0.2",
++    "sharp": "0.35.5"
++  },
++  "devDependencies": {
++    "@tauri-apps/cli": "^2.12.1",
++    "@tgcloud/cli": "0.2.0",
++    "vite": "^8.3.1"
++  },
++  "overrides": {
++    "source-map-js": "1.2.2"
++  }
++}
+diff --git a/.design/serverless-migration/MODIFIED_FILE.baseline b/.design/serverless-migration/MODIFIED_FILE.baseline
+new file mode 100644
+index 0000000..a11bb6c
+--- /dev/null
++++ b/.design/serverless-migration/MODIFIED_FILE.baseline
+@@ -0,0 +1,34 @@
++{
++  "name": "tgzhushou",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "vite --host 127.0.0.1",
++    "start": "node server/index.js",
++    "build": "vite build",
++    "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/auth.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/browser-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
++    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js",
++    "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
++    "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
++    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
++  },
++  "engines": {
++    "node": ">=22"
++  },
++  "dependencies": {
++    "@tauri-apps/api": "^2.12.1",
++    "express": "^5.2.1",
++    "multer": "^2.4.0",
++    "pg": "^8.16.3",
++    "quill": "2.0.2",
++    "sharp": "0.35.5"
++  },
++  "devDependencies": {
++    "@tauri-apps/cli": "^2.12.1",
++    "vite": "^8.3.1"
++  },
++  "overrides": {
++    "source-map-js": "1.2.2"
++  }
++}
+diff --git a/.design/serverless-migration/ROLLBACK.sh b/.design/serverless-migration/ROLLBACK.sh
+new file mode 100644
+index 0000000..8973fa6
+--- /dev/null
++++ b/.design/serverless-migration/ROLLBACK.sh
+@@ -0,0 +1,7 @@
++#!/usr/bin/env bash
++set -euo pipefail
++TARGET="${1:-.design/serverless-migration/rollback-test/package.json}"
++BASELINE="${2:-.design/serverless-migration/MODIFIED_FILE.baseline}"
++mkdir -p "$(dirname "$TARGET")"
++cp "$BASELINE" "$TARGET"
++printf 'ROLLBACK_OK restored=%s hash=%s\n' "$TARGET" "$(shasum -a 256 "$TARGET" | awk '{print $1}')"
+diff --git a/.design/serverless-migration/VERIFICATION.txt b/.design/serverless-migration/VERIFICATION.txt
+new file mode 100644
+index 0000000..6259ca6
+--- /dev/null
++++ b/.design/serverless-migration/VERIFICATION.txt
+@@ -0,0 +1,68 @@
++VERIFICATION
++
++Changed branch/field: feature/serverless-migration; Serverless scaffold, locked CLI dependency, 18-table schema, frontend API base/fallback switch, and rollback artifacts.
++
++Artifacts:
++- MODIFIED_FILE: .design/serverless-migration/MODIFIED_FILE
++- DIFF_FILE: .design/serverless-migration/DIFF_FILE.patch
++- VERIFICATION.txt: .design/serverless-migration/VERIFICATION.txt
++- ROLLBACK.sh: .design/serverless-migration/ROLLBACK.sh
++
++BASELINE
++Command: shasum -a 256 .design/serverless-migration/MODIFIED_FILE.baseline
++Input: package.json at HEAD before migration scaffold
++Literal output/result: 810e6b31b1ad59802ca23a7c8bf3b398425d7c788db2742d8247ee875b65ccd2
++Exit status: 0
++
++MODIFIED
++Command: pnpm run build
++Input: current Vite project
++Literal output/result: vite build passed; 737 modules transformed; dist generated
++Exit status: 0
++Command: pnpm run check
++Input: existing Express/PostgreSQL server modules
++Literal output/result: all node --check commands passed
++Exit status: 0
++Command: pnpm test
++Input: existing plus API fallback tests
++Literal output/result: 16 tests passed, 0 failed
++Exit status: 0
++Command: pnpm run serverless:check
++Input: tgcloud.jsonc and tgcloud/schema.js
++Literal output/result: Serverless structure check passed: 5 required paths; Serverless schema check passed: 18 tables
++Exit status: 0
++Command: git -c core.whitespace=cr-at-eol diff --check
++Input: current migration diff
++Literal output/result: no whitespace errors
++Exit status: 0
++
++ROLLBACK
++Command: .design/serverless-migration/ROLLBACK.sh .design/serverless-migration/rollback-test/package.json .design/serverless-migration/MODIFIED_FILE.baseline
++Input: copy of modified package.json
++Literal output/result: ROLLBACK_OK; restored hash 810e6b31b1ad59802ca23a7c8bf3b398425d7c788db2742d8247ee875b65ccd2 matching baseline
++Exit status: 0
++
++Modified artifact hash: f089fa0503c3725c53a958c77e68d64e6088c6b9510d57d5a848ba1afacfc952
++Restored behavior/status: rollback was tested on a copy only; current source remains modified on the migration branch. Old Express/PostgreSQL remains available as rollback baseline. No CLI Token was stored, no Serverless deployment was attempted, and no Railway production resource was changed.
++
++SERVERLESS DEPLOYMENT
++Command: pnpm exec tgcloud push
++Input: tgcloud schema, smoke handler, health endpoint, current dist/
++Literal output/result: deployed 4 changes; static 9 files uploaded; URL https://app8899848334.tgcloud.ai/
++Exit status: 0
++Command: pnpm exec tgcloud migrate
++Input: new empty Serverless database
++Literal output/result: Migration complete. Applied: 18, skipped: 0.
++Exit status: 0
++Command: pnpm exec tgcloud status
++Input: linked app8899848334
++Literal output/result: Local revision 1; Webhook in sync; working directory clean; static up to date
++Exit status: 0
++Command: pnpm exec tgcloud run endpoints/health '{}'
++Input: empty endpoint payload
++Literal output/result: {ok:true,service:'tgzhushou-serverless'}
++Exit status: 0
++Command: curl -fsSI https://app8899848334.tgcloud.ai/
++Input: deployed static root
++Literal output/result: HTTP/2 200
++Exit status: 0
+diff --git a/.design/serverless-migration/rollback-test/package.json b/.design/serverless-migration/rollback-test/package.json
+new file mode 100644
+index 0000000..a11bb6c
+--- /dev/null
++++ b/.design/serverless-migration/rollback-test/package.json
+@@ -0,0 +1,34 @@
++{
++  "name": "tgzhushou",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "vite --host 127.0.0.1",
++    "start": "node server/index.js",
++    "build": "vite build",
++    "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/auth.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/browser-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
++    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js",
++    "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
++    "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
++    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
++  },
++  "engines": {
++    "node": ">=22"
++  },
++  "dependencies": {
++    "@tauri-apps/api": "^2.12.1",
++    "express": "^5.2.1",
++    "multer": "^2.4.0",
++    "pg": "^8.16.3",
++    "quill": "2.0.2",
++    "sharp": "0.35.5"
++  },
++  "devDependencies": {
++    "@tauri-apps/cli": "^2.12.1",
++    "vite": "^8.3.1"
++  },
++  "overrides": {
++    "source-map-js": "1.2.2"
++  }
++}
+diff --git a/.gitignore b/.gitignore
+index 2e0599a..5b02b71 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -13,3 +13,5 @@ playwright-report/
+ artifacts/
+ desktop/src-tauri/target/
+ desktop/src-tauri/gen/
++
++.tgcloud/
 diff --git a/docs/SERVERLESS_MIGRATION.md b/docs/SERVERLESS_MIGRATION.md
-index 149e6e8..4b656d6 100644
---- a/docs/SERVERLESS_MIGRATION.md
+new file mode 100644
+index 0000000..ef908eb
+--- /dev/null
 +++ b/docs/SERVERLESS_MIGRATION.md
-@@ -47,3 +47,19 @@
- - 不迁移正式 PostgreSQL 数据。
- - 不更改正式机器人 webhook。
- - 不在仓库保存 Serverless CLI Token。
+@@ -0,0 +1,72 @@
++# Telegram Serverless 迁移说明
++
++> 状态：Phase 1 盘点完成；当前不改变 Railway 生产运行方式。
++
++## 目标架构
++
++- Telegram Mini App 前端：Vite `dist/`，由 Telegram Serverless 静态托管。
++- Telegram 后端：迁移到 `tgcloud/handlers`、`tgcloud/endpoints`、`tgcloud/lib` 和 `tgcloud/schema.js`。
++- Tauri 桌面端：保留现有 `desktop/`，通过同一套云端接口访问。
++- 迁移完成前：Railway/Express/PostgreSQL 继续作为生产实现。
++
++## 当前实现到 Serverless 的映射
++
++| 当前模块 | Serverless 目标 | 迁移方式 |
++|---|---|---|
++| `server/index.js` Express 路由 | `tgcloud/endpoints/*` | 按资源拆分，不保留 Express 启动器 |
++| `server/telegram.js` | `tgcloud/lib/telegram.js` | 优先改用 Serverless `sdk/api` |
++| `server/chat.js` | `handlers/*` + `endpoints/chat/*` | 消息接收与 Mini App 查询分离 |
++| `server/routes-tasks.js` | `endpoints/tasks/*` | 将权限检查移到 endpoint 上下文 |
++| `server/publishers.js` | `endpoints/publishers/*` + `lib/publishers.js` | 保留多机器人数据模型，重新实现凭据管理 |
++| `server/schema.sql` / `server/db.js` | `tgcloud/schema.js` | PostgreSQL SQL 改写为 Serverless SQLite schema/query builder |
++| `server/auth.js` / `server/browser-auth.js` | endpoint `ctx.initData` 鉴权 | 移除网页登录一次性链接作为主路径 |
++| `server/scheduler.js` | 事件触发或外部调度 | 不保留常驻 `setInterval` |
++| `server/media-store.js` / `sharp` | Telegram 文件或外部对象存储 | 不依赖本地持久化目录 |
++
++## 不能直接复制的部分
++
++- Express `app.listen()`、中间件和 `multer` 上传流程。
++- PostgreSQL 连接池、`DATABASE_URL` 和 PostgreSQL 专用 SQL。
++- 依赖常驻进程的 15 秒 Scheduler。
++- `MEDIA_DIR` 本地文件持久化。
++- Tauri 原生能力本身不迁移到 Serverless。
++
++## 迁移顺序
++
++1. 建立 `tgcloud/` 项目骨架并部署最小 handler/endpoint。
++2. 迁移 schema 和只读 bootstrap 接口。
++3. 迁移 Telegram `initData` 鉴权与机器人选择。
++4. 迁移任务、聊天、玩家和发布接口。
++5. 迁移媒体和调度能力。
++6. 切换前端 API 客户端，执行测试机器人验收。
++7. 完成数据迁移与正式机器人切换。
++
++## 当前生产保护
++
++- 不删除或覆盖 Railway 服务。
++- 不迁移正式 PostgreSQL 数据。
++- 不更改正式机器人 webhook。
++- 不在仓库保存 Serverless CLI Token。
 +
 +## 前端切换开关
 +
@@ -22,6 +288,13 @@ index 149e6e8..4b656d6 100644
 +```
 +
 +未注入配置时，前端保持原来的相对 `/api` 行为。配置 Serverless 主地址后，网络错误、5xx 或 404 会回退到 Railway；401/403 等鉴权错误不会静默切换。
++
++## 当前部署状态
++
++- 已通过 CLI 绑定 `app8899848334`。
++- 已部署静态前端、最小 message handler、health endpoint 和 18 张新表 schema。
++- Serverless 静态地址：`https://app8899848334.tgcloud.ai/`
++- 旧 Railway/Express/PostgreSQL 仍未停用；当前未迁移旧数据。
 diff --git a/package.json b/package.json
 index a11bb6c..c3ea6ec 100644
 --- a/package.json
@@ -44,6 +317,1927 @@ index a11bb6c..c3ea6ec 100644
      "vite": "^8.3.1"
    },
    "overrides": {
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+new file mode 100644
+index 0000000..b311d70
+--- /dev/null
++++ b/pnpm-lock.yaml
+@@ -0,0 +1,1860 @@
++lockfileVersion: '9.0'
++
++settings:
++  autoInstallPeers: true
++  excludeLinksFromLockfile: false
++
++importers:
++
++  .:
++    dependencies:
++      '@tauri-apps/api':
++        specifier: ^2.12.1
++        version: 2.12.2
++      express:
++        specifier: ^5.2.1
++        version: 5.2.1
++      multer:
++        specifier: ^2.4.0
++        version: 2.4.0
++      pg:
++        specifier: ^8.16.3
++        version: 8.23.1
++      quill:
++        specifier: 2.0.2
++        version: 2.0.2
++      sharp:
++        specifier: 0.35.5
++        version: 0.35.5
++    devDependencies:
++      '@tauri-apps/cli':
++        specifier: ^2.12.1
++        version: 2.12.1
++      '@tgcloud/cli':
++        specifier: 0.2.0
++        version: 0.2.0
++      vite:
++        specifier: ^8.3.1
++        version: 8.3.4
++
++packages:
++
++  '@emnapi/runtime@1.11.3':
++    resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
++
++  '@img/colour@1.1.0':
++    resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
++    engines: {node: '>=18'}
++
++  '@img/sharp-darwin-arm64@0.35.5':
++    resolution: {integrity: sha512-QRUlFQ0WxvdWyqqG/WtI3iupfD5rBzmCHXSdPsY91sAtVtTo7Q4cb6zOccZ3gqEqkr0f1As1ehLqmEpDsRf+lg==}
++    engines: {node: '>=20.9.0'}
++    cpu: [arm64]
++    os: [darwin]
++
++  '@img/sharp-darwin-x64@0.35.5':
++    resolution: {integrity: sha512-+BR255RhDlpygUpOc/Jdt1nT6DQ3XG/ERo5wbcdOf5Q320dKtPCKPLR1LJs9VGXRaMa8l1uUa0tkCNOXiAxZUw==}
++    engines: {node: '>=20.9.0'}
++    cpu: [x64]
++    os: [darwin]
++
++  '@img/sharp-freebsd-wasm32@0.35.5':
++    resolution: {integrity: sha512-Y/z91nEZ4uIBX5X3nfTovjU9lHNKFYbL2lpHCLVNmXQK03VIZvXBBt0KxbPGp2SdGSF+2mQU4e+hQaWOt86iAw==}
++    engines: {node: '>=20.9.0'}
++    os: [freebsd]
++
++  '@img/sharp-libvips-darwin-arm64@1.3.4':
++    resolution: {integrity: sha512-5R89nBYiRdUlSWJxPhO+GVtaXzXSxKnRu/xqMn3KTA3L9EB9Oy/P+Nn2f2vlhPuUdy/Zusb2DarbyTpGCfEDuw==}
++    cpu: [arm64]
++    os: [darwin]
++
++  '@img/sharp-libvips-darwin-x64@1.3.4':
++    resolution: {integrity: sha512-iR2OKH80yi0U+dUplyh3/xdpFvps6YkCwsXenIJxqxR1v9o+xtKTGbS9H7cps+2Vxjc8B1j96p75NmTGjIhtpQ==}
++    cpu: [x64]
++    os: [darwin]
++
++  '@img/sharp-libvips-linux-arm64@1.3.4':
++    resolution: {integrity: sha512-Y3dgX/6lE2QhQb+Gxy0WZxfg9MEm/JBjamZpS2IklP7xIQoKN4hzAm7KcMVGtaVDt3neE9OKBC7vAfonA/Lr1A==}
++    cpu: [arm64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-libvips-linux-arm@1.3.4':
++    resolution: {integrity: sha512-LmRtTsOHuvM2+wlO2Db37dx5MiZhB0FvSunciw48YjdOkZz9KAiRbm8ujeMOA1INqmei5NapFxYEK1D1ZSidmw==}
++    cpu: [arm]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-libvips-linux-ppc64@1.3.4':
++    resolution: {integrity: sha512-Le6boB8Tai0Nis+gIxIpKx68UDVVIqdR8Tin5Yf1z2LJJQLDJvCDRqRu+jC2qCoD+eIomonmOwB4smBRxfVpYQ==}
++    cpu: [ppc64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-libvips-linux-riscv64@1.3.4':
++    resolution: {integrity: sha512-aHkkIEHPRdQEegJN20MLmGtxYD9R2wQr3Cwpddnu5+YKMt6Uzax7S9h5gpZTo8wyrGuZSlfQ63OevL5mTyOC7Q==}
++    cpu: [riscv64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-libvips-linux-s390x@1.3.4':
++    resolution: {integrity: sha512-ra/mB6MikESDUO7Yg+Mi95bFBb9GsObURuhnOv3OqknjGe9sZrG8tCe9q0xSIGrtLgvgw0gKnFWcK4blSgQOuQ==}
++    cpu: [s390x]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-libvips-linux-x64@1.3.4':
++    resolution: {integrity: sha512-GJ//SSXbnwSDes02umB3nDJLFcQzw8a18V8fyhqr6tV515tOEMdImjjxj1AoafMRz56F3PHgftnj1QEKSU1zkw==}
++    cpu: [x64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-libvips-linuxmusl-arm64@1.3.4':
++    resolution: {integrity: sha512-hvulFwtjUcagsis6BBxHwGFwWoNZjgYmULGVrZcyfNbjA8hKILbRxGg15/7w5HDyXHXUos/j6baAWqnCyQ2DWA==}
++    cpu: [arm64]
++    os: [linux]
++    libc: [musl]
++
++  '@img/sharp-libvips-linuxmusl-x64@1.3.4':
++    resolution: {integrity: sha512-6zXKeE/p39I1AmA3cJG35eyBGNqNddLnUXjhwBnsGjFPWqf5VKkDBEqaEkPDoTEtkxwi2vv8Tcr2mDyP4So7Fg==}
++    cpu: [x64]
++    os: [linux]
++    libc: [musl]
++
++  '@img/sharp-linux-arm64@0.35.5':
++    resolution: {integrity: sha512-LYVx5JTsOM2CBzmxreh+nl64/3H6Xb09iSLknqH47z2T2DFFxDeFLP5y4dJwe6H7uGQlHPyEEtIqyo3DYsRwdQ==}
++    engines: {node: '>=20.9.0'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-linux-arm@0.35.5':
++    resolution: {integrity: sha512-LEaXK2WdXVK5ykcw0buWyPMsmLLL2vpHLD6yrNSW+JGEL3BZPA4tpKN6iaMc4AxTTAoaX/sU1rOL51lcIz48ZQ==}
++    engines: {node: '>=20.9.0'}
++    cpu: [arm]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-linux-ppc64@0.35.5':
++    resolution: {integrity: sha512-QVxAAq8evVRI9ia2vqgwrmWucn5Dfv+JdWzj75pD8omHLPSP7f8p20O8jxzjCcuCEQEOtYOZUmX1hkiZ0kdevA==}
++    engines: {node: '>=20.9.0'}
++    cpu: [ppc64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-linux-riscv64@0.35.5':
++    resolution: {integrity: sha512-LtdreXguaavKODPIfzJ4kffx7UNt1omwtK0rch4EBbbSTXPnxWmYSayXdLJw0fJzQ97kHt1gL/yh4tvU+nCyRQ==}
++    engines: {node: '>=20.9.0'}
++    cpu: [riscv64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-linux-s390x@0.35.5':
++    resolution: {integrity: sha512-UZasTOFiYzotTsGOCu42BfUzP6Tu6Do/947iRm1RsLKvlllxwGcn4RN27LibGWceix4Y+Pmw3jsnTcCQIgWjqA==}
++    engines: {node: '>=20.9.0'}
++    cpu: [s390x]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-linux-x64@0.35.5':
++    resolution: {integrity: sha512-SxFtLTeJInhAA9Q836kux2vZNeOBQEx658qvbboZScr0wIARym3IcGmW7KpVD5sbVg0Ojy+udFQdayYIZyoNog==}
++    engines: {node: '>=20.9.0'}
++    cpu: [x64]
++    os: [linux]
++    libc: [glibc]
++
++  '@img/sharp-linuxmusl-arm64@0.35.5':
++    resolution: {integrity: sha512-9HbMclmI1zlNkFRs3z9/eBtDjfD0sGlrX1z6b1qwmiFY5ElDLh4BC0LPBdVp7z1DXFiKlIcznf+ZlsuZzLxQqg==}
++    engines: {node: '>=20.9.0'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [musl]
++
++  '@img/sharp-linuxmusl-x64@0.35.5':
++    resolution: {integrity: sha512-4KOphqB035HrVdqLZfCgMzzERrQkkzOwRhl4OAkRO1YCldbaFjySXMaK534Mo0V+LndnlJk+sbUyLeU0ULyD1A==}
++    engines: {node: '>=20.9.0'}
++    cpu: [x64]
++    os: [linux]
++    libc: [musl]
++
++  '@img/sharp-wasm32@0.35.5':
++    resolution: {integrity: sha512-Ptsga1su4tQx+LLF1ECS9U6nz5kmrXKo6XVbtR48Ke3ZRxxgaWBu7IDtEe1quo8hiupwm6WFqxVlXaSf7IINGQ==}
++    engines: {node: '>=20.9.0'}
++
++  '@img/sharp-webcontainers-wasm32@0.35.5':
++    resolution: {integrity: sha512-hfhF/FmoQyTUkA0bIKFOtw536BQSeBMe6BF6QyWlrPxT754+TFLaZ7sKKTfvvM0yJgKgaYTwnFCIZ/GuDw5SUA==}
++    engines: {node: '>=20.9.0'}
++    cpu: [wasm32]
++
++  '@img/sharp-win32-arm64@0.35.5':
++    resolution: {integrity: sha512-X4t7g+7ZA5DKblCBEXGjUqqemj4vczING/5viFwAL8h4N3qYeyjwdCvRLHi4EdOUI+2Z7UFlp1VM+p/AuEtm6Q==}
++    engines: {node: '>=20.9.0'}
++    cpu: [arm64]
++    os: [win32]
++
++  '@img/sharp-win32-ia32@0.35.5':
++    resolution: {integrity: sha512-5Zm82LoBc43nhwNybZlG7Y1KO//Zhsn306fQl29ZOuStHLGTo3BWL83q3cznX0poxSAMuYL1On/BHBxkBeKr6A==}
++    engines: {node: ^20.9.0}
++    cpu: [ia32]
++    os: [win32]
++
++  '@img/sharp-win32-x64@0.35.5':
++    resolution: {integrity: sha512-x76eH0vEiHlcMQu8Y8IenntaACtddpT6W0wmXtWrnKcnKI7ME5DdgqhAD6SEWOEl1v2zDvkZDhFA9KnURwpfqg==}
++    engines: {node: '>=20.9.0'}
++    cpu: [x64]
++    os: [win32]
++
++  '@oxc-project/types@0.153.0':
++    resolution: {integrity: sha512-jSNrRIyvPVLL5E1z/tS5zLAprosGz/FuI1PWwEOz59j3E4TTTzSpqKb/RDGqJhhW0QHYISGXxq582wGx6T11Tw==}
++
++  '@rolldown/binding-android-arm-eabi@1.2.13':
++    resolution: {integrity: sha512-Vu/NICrgdRvUOeaJZIyB2FP63s6fO/4ud5l8dXmxDx9yDyn+mN0y+gsvsVviSli+T361Aqo0h46EuMoobrwawA==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm]
++    os: [android]
++
++  '@rolldown/binding-android-arm64@1.2.13':
++    resolution: {integrity: sha512-6LEoIrGy5vvCd2boNnv2soPSUZj/PRvhp8R/t9KlX+mIZxThIE/ZqxrGXxmuNX0FuvQFvLdZr7S4HrYpYBVhEQ==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm64]
++    os: [android]
++
++  '@rolldown/binding-darwin-arm64@1.2.13':
++    resolution: {integrity: sha512-CaJSRzlQ6Q+zkDMVA9OkVxBjVoPRCDEE3v0FSJ9kIQBgRjFApA3Si4ijhbNVUji7ZJt+PfO0e46qy4nPInHUPA==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm64]
++    os: [darwin]
++
++  '@rolldown/binding-darwin-x64@1.2.13':
++    resolution: {integrity: sha512-e4r340I5hxSzJkD3YJBxgzq/rJ3wwxwdLLb2FPt1Zpyem20nrQPT11DDEEkazwxaHumH8wpglsp/Ozgj/wT6mw==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [x64]
++    os: [darwin]
++
++  '@rolldown/binding-freebsd-x64@1.2.13':
++    resolution: {integrity: sha512-hoBWDZ4/K/mJKVMbsgUd1jfpA2DiOrJ54mpegObU9TBHBBrtX4FLIXJJQRDPZ/2Dn91GvPob+Z2hwKJzf4E5SQ==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [x64]
++    os: [freebsd]
++
++  '@rolldown/binding-linux-arm-gnueabihf@1.2.13':
++    resolution: {integrity: sha512-oF9fZu3vTWnTiVAkDFxU9PJLt1nh20K9RRpuHsR7ZnE2L7XookBbDBVLojCVSLGbvtSlxeUNnjAj6DbNsKyzbg==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm]
++    os: [linux]
++
++  '@rolldown/binding-linux-arm64-gnu@1.2.13':
++    resolution: {integrity: sha512-DTpb/+jMiqWMPgphn4ksW1zW+XLJ6dJJ9FMvnIk9I291LhCctMPhMYJrP5t9p6C9qa3KXadDdUEZHBaPh3kNxQ==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm64]
++    os: [linux]
++    libc: [glibc]
++
++  '@rolldown/binding-linux-arm64-musl@1.2.13':
++    resolution: {integrity: sha512-xU+Kvv9N2A3SY35zFh1FWWNjxbadE/BKeqnkXe7vScU4GZsw757BlVmDLITZEq8DPpk6m7uoDYkK7P+x/uU5Ow==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm64]
++    os: [linux]
++    libc: [musl]
++
++  '@rolldown/binding-linux-ppc64-gnu@1.2.13':
++    resolution: {integrity: sha512-XMk/hnhh25oQ756Lclb1Q11h4ll0xC0Esa5w4Vzp+mAE2S3AGJgeM0SonrIgY8fHhjarb6hcoTuwoFG0VVP2ig==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [ppc64]
++    os: [linux]
++    libc: [glibc]
++
++  '@rolldown/binding-linux-s390x-gnu@1.2.13':
++    resolution: {integrity: sha512-U1BoTHYmlywE2n3HUWjzZ+8EQsKr+OwpxYuDWaubx42tUL8QSL7nOqRz/NVHanibbFP3M1Rxuprz/wNcbMKjqw==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [s390x]
++    os: [linux]
++    libc: [glibc]
++
++  '@rolldown/binding-linux-x64-gnu@1.2.13':
++    resolution: {integrity: sha512-J4cm80Pc6wEwV5AZ42o62sIQgDk+Y7R2s646jIwuvO+4V46QB58N4vVuMPWCBaNgursXLpmUWJV//WQAkPvHBQ==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [x64]
++    os: [linux]
++    libc: [glibc]
++
++  '@rolldown/binding-linux-x64-musl@1.2.13':
++    resolution: {integrity: sha512-W0euZS40U4V6JkmEnVCIX9mcsL6cbXQ4X8c2w+MMOIjFg68TXUW+u3RT+2e1t1pv9mg/EP3pDtK3POXdQ7Rxyw==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [x64]
++    os: [linux]
++    libc: [musl]
++
++  '@rolldown/binding-openharmony-arm64@1.2.13':
++    resolution: {integrity: sha512-do/AF/4n9MRshia3a5aXoy8xM2c6mgfT6D7H/dY6my5z+hfCIR4ab7mk4IRj++nsEQpKy39kd0DQnDq+r692tw==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm64]
++    os: [openharmony]
++
++  '@rolldown/binding-win32-arm64-msvc@1.2.13':
++    resolution: {integrity: sha512-6FtUf2cJZobutJdxnGYX8z0vtbgqU0b2v8vfBhkXb9wp2MppMFtkunE+IaOntyi01rkIQoPW2GHABtfzsC0BRQ==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [arm64]
++    os: [win32]
++
++  '@rolldown/binding-win32-x64-msvc@1.2.13':
++    resolution: {integrity: sha512-UKhFaZTeTcbKrb3iU82m17jVcPEAoqDkCN5MBqgPyZSwp/cQmib21crTS0DdH7T1B7wZRWEI89YQAOJMet5yhg==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    cpu: [x64]
++    os: [win32]
++
++  '@rolldown/pluginutils@1.0.1':
++    resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
++
++  '@tauri-apps/api@2.12.2':
++    resolution: {integrity: sha512-cr0FYEsbSQIeEuIIoC8bwdiHW3YlziMYOZ0j3R7F6kkIHSVrrZnV6CSjv/VQvFoyuERGxFc8NMtLJDXi5wYOYg==}
++
++  '@tauri-apps/cli-darwin-arm64@2.12.1':
++    resolution: {integrity: sha512-8bMnbpJ2jKO/ufrOPL65EMHC3ptw7fzeraoQkwibyfGLqIl+UCWsC0152kmNbW6r9NvVQduXqAZF5mH1QgTWhw==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [darwin]
++
++  '@tauri-apps/cli-darwin-x64@2.12.1':
++    resolution: {integrity: sha512-G+2qte8GNqNlEZ9ftd21rbu/APVkl3r/nzNDI7LVxEoqJWVNe9GbEgQUMH1r4PHT20Z2UxR3KjCkltIb0e/Wjg==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [darwin]
++
++  '@tauri-apps/cli-linux-arm-gnueabihf@2.12.1':
++    resolution: {integrity: sha512-5b3n4DaTW+A1Zntnh4Yn44VyLrlPEpB8kMOBRfWkzNnzolBk+AYhKIfKjCLmoC8Mob3ETodxAEOMkE2YPKEWzQ==}
++    engines: {node: '>= 10'}
++    cpu: [arm]
++    os: [linux]
++
++  '@tauri-apps/cli-linux-arm64-gnu@2.12.1':
++    resolution: {integrity: sha512-APArHhDu+8pXSCkCQmvaz1nD3d8WTmlCoSS/oG475TJ6AATBvyQOAmf5qELgsQ4s2+8MOsop0Zd699RKELF1Cw==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [glibc]
++
++  '@tauri-apps/cli-linux-arm64-musl@2.12.1':
++    resolution: {integrity: sha512-JaCxcLoV0oGtllVkLr4UAHWG/wTfkEunnUqnsEsGYOp0VRxnUwHg63wFBD0jU2ul5eFfSLIDS4RF2gfzsSo5Jg==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [musl]
++
++  '@tauri-apps/cli-linux-riscv64-gnu@2.12.1':
++    resolution: {integrity: sha512-K5+VXM7+SGVDwZleA2+lMgvbTVuA5e1tkiVEawu1Yxj26ZyEfO8h8xTC1rBdRX2xgJDSwCk6vPUBCS6i+Z5slQ==}
++    engines: {node: '>= 10'}
++    cpu: [riscv64]
++    os: [linux]
++    libc: [glibc]
++
++  '@tauri-apps/cli-linux-x64-gnu@2.12.1':
++    resolution: {integrity: sha512-Z1QGPr49HJZMktu+Spu6Q1b/f9ANadXvqZZZt2645ua1x1ev6prOgp85eiGv2jRzohFEMLo6aJyaLjLUX5KIvA==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [linux]
++    libc: [glibc]
++
++  '@tauri-apps/cli-linux-x64-musl@2.12.1':
++    resolution: {integrity: sha512-nHuEhRPOMSJ/8RRhtMRxB9B9lVr7xxpe4DapBz8x1GIau3vdzjHHJ1hAfmw+PyayPLZ6XoaVIHPgI17rX6ii8w==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [linux]
++    libc: [musl]
++
++  '@tauri-apps/cli-win32-arm64-msvc@2.12.1':
++    resolution: {integrity: sha512-I0oPk2uGh86R8dAs2X5OxSP+/GqSc8jh1Px3l8EqrocSNivsRHDTh2k3PVOqdv163dlV6PIVvmhZAbH/lPfZrA==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [win32]
++
++  '@tauri-apps/cli-win32-ia32-msvc@2.12.1':
++    resolution: {integrity: sha512-baNZRBfepAJ5qNFRMwzgBk94xQmkcmTZrNDjZjnzrq2vAaTC3NAhallb/zo3hyoCGQlMS13sdovktrg46NZz6Q==}
++    engines: {node: '>= 10'}
++    cpu: [ia32]
++    os: [win32]
++
++  '@tauri-apps/cli-win32-x64-msvc@2.12.1':
++    resolution: {integrity: sha512-dIFaKslrzcbesb+bBh+E1R9km241pHyj32w6D9FPtvQeYpRUFbiCLEa/2S+S0UnIytfxepp4P+X8IerGqnXeYg==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [win32]
++
++  '@tauri-apps/cli@2.12.1':
++    resolution: {integrity: sha512-kEDEiGzG+yAc5FeLxtXpES/VN+F2C8H0r4gDVtfRLKxT9np9101d9REG/Kgo2lr0hKi0IpDsODiHnU3+naOmLg==}
++    engines: {node: '>= 10'}
++    hasBin: true
++
++  '@tgcloud/cli@0.2.0':
++    resolution: {integrity: sha512-YBlmOY8hh+mU0et+yoYcUG1P3aQ6qbffi19JOzn/Du8Ha0nHNGk5ScavwpB1xJ7ubcMV0UdOPGZsfPk8lDt1Ow==}
++    engines: {node: '>=18.0.0'}
++    hasBin: true
++
++  accepts@2.0.0:
++    resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
++    engines: {node: '>= 0.6'}
++
++  ansi-regex@6.4.0:
++    resolution: {integrity: sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==}
++    engines: {node: '>=12'}
++
++  append-field@1.0.0:
++    resolution: {integrity: sha512-klpgFSWLW1ZEs8svjfb7g4qWY0YS5imI82dTg+QahUvJ8YqAY0P10Uk8tTyh9ZGuYEZEMaeJYCF5BFuX552hsw==}
++
++  body-parser@2.3.0:
++    resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
++    engines: {node: '>=18'}
++
++  busboy@1.6.0:
++    resolution: {integrity: sha512-8SFQbg/0hQ9xy3UNTB0YEnsNBbWfhf7RtnzpL7TkBiTBRfrQ9Fxcnz7VJsleJpyp6rVLvXiuORqjlHi5q+PYuA==}
++    engines: {node: '>=10.16.0'}
++
++  bytes@3.1.2:
++    resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
++    engines: {node: '>= 0.8'}
++
++  call-bind-apply-helpers@1.0.2:
++    resolution: {integrity: sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==}
++    engines: {node: '>= 0.4'}
++
++  call-bound@1.0.4:
++    resolution: {integrity: sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==}
++    engines: {node: '>= 0.4'}
++
++  chalk@5.6.2:
++    resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
++    engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
++
++  cli-cursor@5.0.0:
++    resolution: {integrity: sha512-aCj4O5wKyszjMmDT4tZj93kxyydN/K5zPWSCe6/0AV/AA1pqe5ZBIw0a2ZfPQV7lL5/yb5HsUreJ6UFAF1tEQw==}
++    engines: {node: '>=18'}
++
++  cli-spinners@2.9.2:
++    resolution: {integrity: sha512-ywqV+5MmyL4E7ybXgKys4DugZbX0FC6LnwrhjuykIjnK9k8OQacQ7axGKnjDXWNhns0xot3bZI5h55H8yo9cJg==}
++    engines: {node: '>=6'}
++
++  commander@12.1.0:
++    resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
++    engines: {node: '>=18'}
++
++  content-disposition@1.1.0:
++    resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
++    engines: {node: '>=18'}
++
++  content-type@1.0.5:
++    resolution: {integrity: sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==}
++    engines: {node: '>= 0.6'}
++
++  content-type@2.1.0:
++    resolution: {integrity: sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==}
++    engines: {node: '>=18'}
++
++  cookie-signature@1.2.2:
++    resolution: {integrity: sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg==}
++    engines: {node: '>=6.6.0'}
++
++  cookie@0.7.2:
++    resolution: {integrity: sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==}
++    engines: {node: '>= 0.6'}
++
++  debug@4.4.3:
++    resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
++    engines: {node: '>=6.0'}
++    peerDependencies:
++      supports-color: '*'
++    peerDependenciesMeta:
++      supports-color:
++        optional: true
++
++  depd@2.0.0:
++    resolution: {integrity: sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==}
++    engines: {node: '>= 0.8'}
++
++  detect-libc@2.1.2:
++    resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
++    engines: {node: '>=8'}
++
++  diff@9.0.0:
++    resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
++    engines: {node: '>=0.3.1'}
++
++  dunder-proto@1.0.1:
++    resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
++    engines: {node: '>= 0.4'}
++
++  ee-first@1.1.1:
++    resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
++
++  emoji-regex@10.6.0:
++    resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
++
++  encodeurl@2.0.0:
++    resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
++    engines: {node: '>= 0.8'}
++
++  es-define-property@1.0.1:
++    resolution: {integrity: sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==}
++    engines: {node: '>= 0.4'}
++
++  es-errors@1.3.0:
++    resolution: {integrity: sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==}
++    engines: {node: '>= 0.4'}
++
++  es-object-atoms@1.1.2:
++    resolution: {integrity: sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==}
++    engines: {node: '>= 0.4'}
++
++  escape-html@1.0.3:
++    resolution: {integrity: sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow==}
++
++  etag@1.8.1:
++    resolution: {integrity: sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==}
++    engines: {node: '>= 0.6'}
++
++  eventemitter3@5.0.4:
++    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
++
++  express@5.2.1:
++    resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
++    engines: {node: '>= 18'}
++
++  fast-diff@1.3.0:
++    resolution: {integrity: sha512-VxPP4NqbUjj6MaAOafWeUn2cXWLcCtljklUtZf0Ind4XQ+QPtmA0b18zZy0jIQx+ExRVCR/ZQpBmik5lXshNsw==}
++
++  fdir@6.5.0:
++    resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
++    engines: {node: '>=12.0.0'}
++    peerDependencies:
++      picomatch: ^3 || ^4
++    peerDependenciesMeta:
++      picomatch:
++        optional: true
++
++  finalhandler@2.1.1:
++    resolution: {integrity: sha512-S8KoZgRZN+a5rNwqTxlZZePjT/4cnm0ROV70LedRHZ0p8u9fRID0hJUZQpkKLzro8LfmC8sx23bY6tVNxv8pQA==}
++    engines: {node: '>= 18.0.0'}
++
++  forwarded@0.2.0:
++    resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
++    engines: {node: '>= 0.6'}
++
++  fresh@2.0.0:
++    resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
++    engines: {node: '>= 0.8'}
++
++  fsevents@2.3.3:
++    resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
++    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
++    os: [darwin]
++
++  function-bind@1.1.2:
++    resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
++
++  get-east-asian-width@1.7.0:
++    resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==}
++    engines: {node: '>=18'}
++
++  get-intrinsic@1.3.0:
++    resolution: {integrity: sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==}
++    engines: {node: '>= 0.4'}
++
++  get-proto@1.0.1:
++    resolution: {integrity: sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==}
++    engines: {node: '>= 0.4'}
++
++  gopd@1.2.0:
++    resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
++    engines: {node: '>= 0.4'}
++
++  has-symbols@1.1.0:
++    resolution: {integrity: sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==}
++    engines: {node: '>= 0.4'}
++
++  hasown@2.0.4:
++    resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
++    engines: {node: '>= 0.4'}
++
++  http-errors@2.0.1:
++    resolution: {integrity: sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==}
++    engines: {node: '>= 0.8'}
++
++  iconv-lite@0.7.3:
++    resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
++    engines: {node: '>=0.10.0'}
++
++  inherits@2.0.4:
++    resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
++
++  ipaddr.js@1.9.1:
++    resolution: {integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==}
++    engines: {node: '>= 0.10'}
++
++  is-interactive@2.0.0:
++    resolution: {integrity: sha512-qP1vozQRI+BMOPcjFzrjXuQvdak2pHNUMZoeG2eRbiSqyvbEf/wQtEOTOX1guk6E3t36RkaqiSt8A/6YElNxLQ==}
++    engines: {node: '>=12'}
++
++  is-promise@4.0.0:
++    resolution: {integrity: sha512-hvpoI6korhJMnej285dSg6nu1+e6uxs7zG3BYAm5byqDsgJNWwxzM6z6iZiAgQR4TJ30JmBTOwqZUw3WlyH3AQ==}
++
++  is-unicode-supported@1.3.0:
++    resolution: {integrity: sha512-43r2mRvz+8JRIKnWJ+3j8JtjRKZ6GmjzfaE/qiBJnikNnYv/6bagRJ1kUhNk8R5EX/GkobD+r+sfxCPJsiKBLQ==}
++    engines: {node: '>=12'}
++
++  is-unicode-supported@2.1.0:
++    resolution: {integrity: sha512-mE00Gnza5EEB3Ds0HfMyllZzbBrmLOX3vfWoj9A9PEnTfratQ/BcaJOuMhnkhjXvb2+FkY3VuHqtAGpTPmglFQ==}
++    engines: {node: '>=18'}
++
++  json5@2.2.3:
++    resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
++    engines: {node: '>=6'}
++    hasBin: true
++
++  lightningcss-android-arm64@1.33.0:
++    resolution: {integrity: sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [arm64]
++    os: [android]
++
++  lightningcss-darwin-arm64@1.33.0:
++    resolution: {integrity: sha512-Sciaz8eenNTKn9b3t7+xr0ipTp9YxKQY4npwQ3mrRuL0BAVHBLyZxofhaKBAVtzmtRZ/zTyo0/to4B1uWG/Djg==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [arm64]
++    os: [darwin]
++
++  lightningcss-darwin-x64@1.33.0:
++    resolution: {integrity: sha512-Z5UPAxzrjlWNNyGy6i65cJzzvgJ5D3T6wMvs+gWpY9d7qRhANrxqAp6LhxIgZhWEw18RfJTGcRxjuLIBr+m8XQ==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [x64]
++    os: [darwin]
++
++  lightningcss-freebsd-x64@1.33.0:
++    resolution: {integrity: sha512-QQM/Ti/hQajJwCY+RiWuCZ9sdtI/XQk7nDK5vC8kkdwixezOlDgvDx7+RT+QjK6FcFT4MpsuoBnHIo/O3StRRg==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [x64]
++    os: [freebsd]
++
++  lightningcss-linux-arm-gnueabihf@1.33.0:
++    resolution: {integrity: sha512-N7FVBe6iS24MlM6R/4RBTxGhQheZGs7tiQ9U32UtF75NzP5Q7xWPRqLBCKxlRQRk3rY1jCIPLzx7WzOhuUIRLQ==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [arm]
++    os: [linux]
++
++  lightningcss-linux-arm64-gnu@1.33.0:
++    resolution: {integrity: sha512-j2v/itmy4HlNxlc6voKXYgBqNi0Ng2LShg4z7GufpEgs05P+2suBVyi9I6YHq5uoVFx9ETin3eCEhLVyXGQnKg==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [glibc]
++
++  lightningcss-linux-arm64-musl@1.33.0:
++    resolution: {integrity: sha512-yiO5ROMuYQgXbC60yjZU5CYSFZGKXL0HFATXt9mHJn1+zW55oCtMI9NfcVhYLMFDL7gV7oBPon/EmMMGg2OvtQ==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [musl]
++
++  lightningcss-linux-x64-gnu@1.33.0:
++    resolution: {integrity: sha512-ar+Ju7LmcN0Jo4FpL4hpFybwNG9/3A/Br5KW2n2jyODg3MEZXaDYADdemoNS+BDNfMgKvylJLj4S5tyRActuAg==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [x64]
++    os: [linux]
++    libc: [glibc]
++
++  lightningcss-linux-x64-musl@1.33.0:
++    resolution: {integrity: sha512-RYiYbkokw0trfKqqzfF55lginwEPrD3OJDfTuJzFs1MK6iFnDenaz1fqLLtX4ITG3OktJQXOeTaw1awrBAlZPw==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [x64]
++    os: [linux]
++    libc: [musl]
++
++  lightningcss-win32-arm64-msvc@1.33.0:
++    resolution: {integrity: sha512-1K+MPfLSFVpphzpdbfkhlWk6wBrTObBzS2T6db10PNOZgR9GoVsAWzwNyuhUYYbTp23j+4RrncfujZ4uAzXvwA==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [arm64]
++    os: [win32]
++
++  lightningcss-win32-x64-msvc@1.33.0:
++    resolution: {integrity: sha512-OlEICDx/Xl0FqSp4bry8zFnCvGpig3Gl4gCquvYwHuqJKEC1+n9NgDniFvqHGmMv1ZkqDJrDqKKSykTDX+ehuA==}
++    engines: {node: '>= 12.0.0'}
++    cpu: [x64]
++    os: [win32]
++
++  lightningcss@1.33.0:
++    resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
++    engines: {node: '>= 12.0.0'}
++
++  lodash-es@4.18.1:
++    resolution: {integrity: sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A==}
++
++  lodash.clonedeep@4.5.0:
++    resolution: {integrity: sha512-H5ZhCF25riFd9uB5UCkVKo61m3S/xZk1x4wA6yp/L3RFP6Z/eHH1ymQcGLo7J3GMPfm0V/7m1tryHuGVxpqEBQ==}
++
++  lodash.isequal@4.5.0:
++    resolution: {integrity: sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ==}
++    deprecated: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
++
++  log-symbols@6.0.0:
++    resolution: {integrity: sha512-i24m8rpwhmPIS4zscNzK6MSEhk0DUWa/8iYQWxhffV8jkI4Phvs3F+quL5xvS0gdQR0FyTCMMH33Y78dDTzzIw==}
++    engines: {node: '>=18'}
++
++  math-intrinsics@1.1.0:
++    resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
++    engines: {node: '>= 0.4'}
++
++  media-typer@0.3.0:
++    resolution: {integrity: sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ==}
++    engines: {node: '>= 0.6'}
++
++  media-typer@1.1.1:
++    resolution: {integrity: sha512-yz3xRaG20c6/BOzvYoDaGtPmGscs7YivItZEEqe6GbwNfHuxu9YNmvnEkMzKldAGY4/80pRcQRZSEnhquk9XuQ==}
++    engines: {node: '>= 0.8'}
++
++  merge-descriptors@2.0.0:
++    resolution: {integrity: sha512-Snk314V5ayFLhp3fkUREub6WtjBfPdCPY1Ln8/8munuLuiYhsABgBVWsozAG+MWMbVEvcdcpbi9R7ww22l9Q3g==}
++    engines: {node: '>=18'}
++
++  mime-db@1.52.0:
++    resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
++    engines: {node: '>= 0.6'}
++
++  mime-db@1.54.0:
++    resolution: {integrity: sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==}
++    engines: {node: '>= 0.6'}
++
++  mime-types@2.1.35:
++    resolution: {integrity: sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==}
++    engines: {node: '>= 0.6'}
++
++  mime-types@3.0.2:
++    resolution: {integrity: sha512-Lbgzdk0h4juoQ9fCKXW4by0UJqj+nOOrI9MJ1sSj4nI8aI2eo1qmvQEie4VD1glsS250n15LsWsYtCugiStS5A==}
++    engines: {node: '>=18'}
++
++  mimic-function@5.0.1:
++    resolution: {integrity: sha512-VP79XUPxV2CigYP3jWwAUFSku2aKqBH7uTAapFWCBqutsbmDo96KY5o8uh6U+/YSIn5OxJnXp73beVkpqMIGhA==}
++    engines: {node: '>=18'}
++
++  ms@2.1.3:
++    resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
++
++  multer@2.4.0:
++    resolution: {integrity: sha512-7dqa0ZcFfzbefdTuIkzOSMvZWC0J7FLqBOjJUZvDCXShIURWKxAyTT1wHhnE5q19c7jOJf43IYYKjBmZVZmvhg==}
++    engines: {node: '>= 10.16.0'}
++
++  nanoid@3.3.20:
++    resolution: {integrity: sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==}
++    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
++    hasBin: true
++
++  negotiator@1.1.0:
++    resolution: {integrity: sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg==}
++    engines: {node: '>=18'}
++
++  object-inspect@1.13.4:
++    resolution: {integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==}
++    engines: {node: '>= 0.4'}
++
++  on-finished@2.4.1:
++    resolution: {integrity: sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==}
++    engines: {node: '>= 0.8'}
++
++  once@1.4.0:
++    resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
++
++  onetime@7.0.0:
++    resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
++    engines: {node: '>=18'}
++
++  ora@8.2.0:
++    resolution: {integrity: sha512-weP+BZ8MVNnlCm8c0Qdc1WSWq4Qn7I+9CJGm7Qali6g44e/PUzbjNqJX5NJ9ljlNMosfJvg1fKEGILklK9cwnw==}
++    engines: {node: '>=18'}
++
++  parchment@3.0.0:
++    resolution: {integrity: sha512-HUrJFQ/StvgmXRcQ1ftY6VEZUq3jA2t9ncFN4F84J/vN0/FPpQF+8FKXb3l6fLces6q0uOHj6NJn+2xvZnxO6A==}
++
++  parseurl@1.3.3:
++    resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
++    engines: {node: '>= 0.8'}
++
++  path-to-regexp@8.4.2:
++    resolution: {integrity: sha512-qRcuIdP69NPm4qbACK+aDogI5CBDMi1jKe0ry5rSQJz8JVLsC7jV8XpiJjGRLLol3N+R5ihGYcrPLTno6pAdBA==}
++
++  pg-cloudflare@1.4.1:
++    resolution: {integrity: sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ==}
++
++  pg-connection-string@2.14.1:
++    resolution: {integrity: sha512-qR3kGNPBLpCNtz0evbKA0Y/MRFXwSSdT+pTJvYp/bXTcReZbvX1kzF0IyTc1QnxqF7AZbOeBhNL8R5mYQZV/MA==}
++
++  pg-int8@1.0.1:
++    resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
++    engines: {node: '>=4.0.0'}
++
++  pg-pool@3.14.0:
++    resolution: {integrity: sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==}
++    peerDependencies:
++      pg: '>=8.0'
++
++  pg-protocol@1.16.1:
++    resolution: {integrity: sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg==}
++
++  pg-types@2.2.0:
++    resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
++    engines: {node: '>=4'}
++
++  pg@8.23.1:
++    resolution: {integrity: sha512-aL96AHANtWjPLDOLqnhx+ngp9+UK7ETEU8VJrDCGvsSSi/mGLcWYsS6Herg7lmaBJe4uwrfqsa7gTEFaSizDoQ==}
++    engines: {node: '>= 16.0.0'}
++    peerDependencies:
++      pg-native: '>=3.0.1'
++    peerDependenciesMeta:
++      pg-native:
++        optional: true
++
++  pgpass@1.0.5:
++    resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
++
++  picocolors@1.1.1:
++    resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
++
++  picomatch@4.0.7:
++    resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
++    engines: {node: '>=12'}
++
++  postcss@8.5.29:
++    resolution: {integrity: sha512-49cGhUbXj8Qenv0iTMxA1cFBzxXoctpC9Ujd77t1WcbJIr6nF/eI7g/8MgxrYldFRuAXvja7xQRwavoW7kgrxQ==}
++    engines: {node: ^10 || ^12 || >=14}
++
++  postgres-array@2.0.0:
++    resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
++    engines: {node: '>=4'}
++
++  postgres-bytea@1.0.1:
++    resolution: {integrity: sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==}
++    engines: {node: '>=0.10.0'}
++
++  postgres-date@1.0.7:
++    resolution: {integrity: sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==}
++    engines: {node: '>=0.10.0'}
++
++  postgres-interval@1.2.0:
++    resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
++    engines: {node: '>=0.10.0'}
++
++  proxy-addr@2.0.8:
++    resolution: {integrity: sha512-5nnx0yGyVUcY6t9RnWcARWtwT9F1D8O9rt08htPvnd49W1IgZtmLkhu9WfMzQj1cFxjHIO6connUNVW5k7AVyQ==}
++    engines: {node: '>= 0.10'}
++
++  qs@6.16.0:
++    resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
++    engines: {node: '>=0.6'}
++
++  quill-delta@5.1.0:
++    resolution: {integrity: sha512-X74oCeRI4/p0ucjb5Ma8adTXd9Scumz367kkMK5V/IatcX6A0vlgLgKbzXWy5nZmCGeNJm2oQX0d2Eqj+ZIlCA==}
++    engines: {node: '>= 12.0.0'}
++
++  quill@2.0.2:
++    resolution: {integrity: sha512-QfazNrhMakEdRG57IoYFwffUIr04LWJxbS/ZkidRFXYCQt63c1gK6Z7IHUXMx/Vh25WgPBU42oBaNzQ0K1R/xw==}
++    engines: {npm: '>=8.2.3'}
++
++  range-parser@1.3.0:
++    resolution: {integrity: sha512-hek2mFQpPuI4E1BBKrSto+BU3e3x4xuarsbiwr3+lf7p44juvFMV0XFWQAP3xUyqXA4RrXLIoaSUGbSt056ZMw==}
++    engines: {node: '>= 0.6'}
++
++  raw-body@3.0.2:
++    resolution: {integrity: sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==}
++    engines: {node: '>= 0.10'}
++
++  restore-cursor@5.1.0:
++    resolution: {integrity: sha512-oMA2dcrw6u0YfxJQXm342bFKX/E4sG9rbTzO9ptUcR/e8A33cHuvStiYOwH7fszkZlZ1z/ta9AAoPk2F4qIOHA==}
++    engines: {node: '>=18'}
++
++  rolldown@1.2.13:
++    resolution: {integrity: sha512-/5apOkwWxtACcQtZ5WlrAsKS4JwXVThQPJZ3RqIruRY9UG9M8e0VlXN068xum/JRKA4aIUoJ13ghe/kGCvidiQ==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    hasBin: true
++
++  router@2.2.0:
++    resolution: {integrity: sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==}
++    engines: {node: '>= 18'}
++
++  safer-buffer@2.1.2:
++    resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
++
++  semver@7.8.5:
++    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
++    engines: {node: '>=10'}
++    hasBin: true
++
++  send@1.2.1:
++    resolution: {integrity: sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==}
++    engines: {node: '>= 18'}
++
++  serve-static@2.2.1:
++    resolution: {integrity: sha512-xRXBn0pPqQTVQiC8wyQrKs2MOlX24zQ0POGaj0kultvoOCstBQM5yvOhAVSUwOMjQtTvsPWoNCHfPGwaaQJhTw==}
++    engines: {node: '>= 18'}
++
++  setprototypeof@1.2.0:
++    resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
++
++  sharp@0.35.5:
++    resolution: {integrity: sha512-Ywn4OnzGukp7CDMrp08RQ50YKmuwG47brZgIVPTvBaaAfQlRlygrRqSrxdCiL9M+LlzLBiJ68IR1QqvzHyjC7g==}
++    engines: {node: '>=20.9.0'}
++    peerDependencies:
++      '@types/node': '*'
++    peerDependenciesMeta:
++      '@types/node':
++        optional: true
++
++  side-channel-list@1.0.1:
++    resolution: {integrity: sha512-mjn/0bi/oUURjc5Xl7IaWi/OJJJumuoJFQJfDDyO46+hBWsfaVM65TBHq2eoZBhzl9EchxOijpkbRC8SVBQU0w==}
++    engines: {node: '>= 0.4'}
++
++  side-channel-map@1.0.1:
++    resolution: {integrity: sha512-VCjCNfgMsby3tTdo02nbjtM/ewra6jPHmpThenkTYh8pG9ucZ/1P8So4u4FGBek/BjpOVsDCMoLA/iuBKIFXRA==}
++    engines: {node: '>= 0.4'}
++
++  side-channel-weakmap@1.0.2:
++    resolution: {integrity: sha512-WPS/HvHQTYnHisLo9McqBHOJk2FkHO/tlpvldyrnem4aeQp4hai3gythswg6p01oSoTl58rcpiFAjF2br2Ak2A==}
++    engines: {node: '>= 0.4'}
++
++  side-channel@1.1.1:
++    resolution: {integrity: sha512-6x6dK6zJdpTzF4sQeNYxwtvBzf6Eg4GtlesS94HOvTudUeyK2WXAaIfmDgsyslYrRBeFIlsi54AYsFGUuhmvrQ==}
++    engines: {node: '>= 0.4'}
++
++  signal-exit@4.1.0:
++    resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
++    engines: {node: '>=14'}
++
++  source-map-js@1.2.2:
++    resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
++    engines: {node: '>=0.10.0'}
++
++  split2@4.2.0:
++    resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
++    engines: {node: '>= 10.x'}
++
++  statuses@2.0.2:
++    resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
++    engines: {node: '>= 0.8'}
++
++  stdin-discarder@0.2.2:
++    resolution: {integrity: sha512-UhDfHmA92YAlNnCfhmq0VeNL5bDbiZGg7sZ2IvPsXubGkiNa9EC+tUTsjBRsYUAz87btI6/1wf4XoVvQ3uRnmQ==}
++    engines: {node: '>=18'}
++
++  streamsearch@1.1.0:
++    resolution: {integrity: sha512-Mcc5wHehp9aXz1ax6bZUyY5afg9u2rv5cqQI3mRrYkGC8rW2hM02jWuwjtL++LS5qinSyhj2QfLyNsuc+VsExg==}
++    engines: {node: '>=10.0.0'}
++
++  string-width@7.2.0:
++    resolution: {integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==}
++    engines: {node: '>=18'}
++
++  strip-ansi@7.2.0:
++    resolution: {integrity: sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==}
++    engines: {node: '>=12'}
++
++  tinyglobby@0.2.17:
++    resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
++    engines: {node: '>=12.0.0'}
++
++  toidentifier@1.0.1:
++    resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
++    engines: {node: '>=0.6'}
++
++  tslib@2.8.1:
++    resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
++
++  type-is@1.6.18:
++    resolution: {integrity: sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==}
++    engines: {node: '>= 0.6'}
++
++  type-is@2.1.0:
++    resolution: {integrity: sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA==}
++    engines: {node: '>= 18'}
++
++  unpipe@1.0.0:
++    resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
++    engines: {node: '>= 0.8'}
++
++  vary@1.1.2:
++    resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
++    engines: {node: '>= 0.8'}
++
++  vite@8.3.4:
++    resolution: {integrity: sha512-IftLE8phJhdNRIGNEV4JCCvfNScoZQVfcXaN8TQropWGJtOHcu+iAB9pHcuGvmEb/kddw0LBe/jS8ztdC6xdiQ==}
++    engines: {node: ^20.19.0 || >=22.12.0}
++    hasBin: true
++    peerDependencies:
++      '@types/node': ^20.19.0 || >=22.12.0
++      '@vitejs/devtools': ^0.7.1
++      esbuild: ^0.27.0 || ^0.28.0
++      jiti: '>=1.21.0'
++      less: ^4.0.0
++      sass: ^1.70.0
++      sass-embedded: ^1.70.0
++      stylus: '>=0.54.8'
++      sugarss: ^5.0.0
++      terser: ^5.16.0
++      tsx: ^4.8.1
++      yaml: ^2.4.2
++    peerDependenciesMeta:
++      '@types/node':
++        optional: true
++      '@vitejs/devtools':
++        optional: true
++      esbuild:
++        optional: true
++      jiti:
++        optional: true
++      less:
++        optional: true
++      sass:
++        optional: true
++      sass-embedded:
++        optional: true
++      stylus:
++        optional: true
++      sugarss:
++        optional: true
++      terser:
++        optional: true
++      tsx:
++        optional: true
++      yaml:
++        optional: true
++
++  wrappy@1.0.2:
++    resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
++
++  xtend@4.0.2:
++    resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
++    engines: {node: '>=0.4'}
++
++snapshots:
++
++  '@emnapi/runtime@1.11.3':
++    dependencies:
++      tslib: 2.8.1
++    optional: true
++
++  '@img/colour@1.1.0': {}
++
++  '@img/sharp-darwin-arm64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-darwin-arm64': 1.3.4
++    optional: true
++
++  '@img/sharp-darwin-x64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-darwin-x64': 1.3.4
++    optional: true
++
++  '@img/sharp-freebsd-wasm32@0.35.5':
++    dependencies:
++      '@img/sharp-wasm32': 0.35.5
++    optional: true
++
++  '@img/sharp-libvips-darwin-arm64@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-darwin-x64@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linux-arm64@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linux-arm@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linux-ppc64@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linux-riscv64@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linux-s390x@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linux-x64@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linuxmusl-arm64@1.3.4':
++    optional: true
++
++  '@img/sharp-libvips-linuxmusl-x64@1.3.4':
++    optional: true
++
++  '@img/sharp-linux-arm64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linux-arm64': 1.3.4
++    optional: true
++
++  '@img/sharp-linux-arm@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linux-arm': 1.3.4
++    optional: true
++
++  '@img/sharp-linux-ppc64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linux-ppc64': 1.3.4
++    optional: true
++
++  '@img/sharp-linux-riscv64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linux-riscv64': 1.3.4
++    optional: true
++
++  '@img/sharp-linux-s390x@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linux-s390x': 1.3.4
++    optional: true
++
++  '@img/sharp-linux-x64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linux-x64': 1.3.4
++    optional: true
++
++  '@img/sharp-linuxmusl-arm64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linuxmusl-arm64': 1.3.4
++    optional: true
++
++  '@img/sharp-linuxmusl-x64@0.35.5':
++    optionalDependencies:
++      '@img/sharp-libvips-linuxmusl-x64': 1.3.4
++    optional: true
++
++  '@img/sharp-wasm32@0.35.5':
++    dependencies:
++      '@emnapi/runtime': 1.11.3
++    optional: true
++
++  '@img/sharp-webcontainers-wasm32@0.35.5':
++    dependencies:
++      '@img/sharp-wasm32': 0.35.5
++    optional: true
++
++  '@img/sharp-win32-arm64@0.35.5':
++    optional: true
++
++  '@img/sharp-win32-ia32@0.35.5':
++    optional: true
++
++  '@img/sharp-win32-x64@0.35.5':
++    optional: true
++
++  '@oxc-project/types@0.153.0': {}
++
++  '@rolldown/binding-android-arm-eabi@1.2.13':
++    optional: true
++
++  '@rolldown/binding-android-arm64@1.2.13':
++    optional: true
++
++  '@rolldown/binding-darwin-arm64@1.2.13':
++    optional: true
++
++  '@rolldown/binding-darwin-x64@1.2.13':
++    optional: true
++
++  '@rolldown/binding-freebsd-x64@1.2.13':
++    optional: true
++
++  '@rolldown/binding-linux-arm-gnueabihf@1.2.13':
++    optional: true
++
++  '@rolldown/binding-linux-arm64-gnu@1.2.13':
++    optional: true
++
++  '@rolldown/binding-linux-arm64-musl@1.2.13':
++    optional: true
++
++  '@rolldown/binding-linux-ppc64-gnu@1.2.13':
++    optional: true
++
++  '@rolldown/binding-linux-s390x-gnu@1.2.13':
++    optional: true
++
++  '@rolldown/binding-linux-x64-gnu@1.2.13':
++    optional: true
++
++  '@rolldown/binding-linux-x64-musl@1.2.13':
++    optional: true
++
++  '@rolldown/binding-openharmony-arm64@1.2.13':
++    optional: true
++
++  '@rolldown/binding-win32-arm64-msvc@1.2.13':
++    optional: true
++
++  '@rolldown/binding-win32-x64-msvc@1.2.13':
++    optional: true
++
++  '@rolldown/pluginutils@1.0.1': {}
++
++  '@tauri-apps/api@2.12.2': {}
++
++  '@tauri-apps/cli-darwin-arm64@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-darwin-x64@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-linux-arm-gnueabihf@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-linux-arm64-gnu@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-linux-arm64-musl@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-linux-riscv64-gnu@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-linux-x64-gnu@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-linux-x64-musl@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-win32-arm64-msvc@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-win32-ia32-msvc@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli-win32-x64-msvc@2.12.1':
++    optional: true
++
++  '@tauri-apps/cli@2.12.1':
++    optionalDependencies:
++      '@tauri-apps/cli-darwin-arm64': 2.12.1
++      '@tauri-apps/cli-darwin-x64': 2.12.1
++      '@tauri-apps/cli-linux-arm-gnueabihf': 2.12.1
++      '@tauri-apps/cli-linux-arm64-gnu': 2.12.1
++      '@tauri-apps/cli-linux-arm64-musl': 2.12.1
++      '@tauri-apps/cli-linux-riscv64-gnu': 2.12.1
++      '@tauri-apps/cli-linux-x64-gnu': 2.12.1
++      '@tauri-apps/cli-linux-x64-musl': 2.12.1
++      '@tauri-apps/cli-win32-arm64-msvc': 2.12.1
++      '@tauri-apps/cli-win32-ia32-msvc': 2.12.1
++      '@tauri-apps/cli-win32-x64-msvc': 2.12.1
++
++  '@tgcloud/cli@0.2.0':
++    dependencies:
++      chalk: 5.6.2
++      commander: 12.1.0
++      diff: 9.0.0
++      json5: 2.2.3
++      ora: 8.2.0
++
++  accepts@2.0.0:
++    dependencies:
++      mime-types: 3.0.2
++      negotiator: 1.1.0
++
++  ansi-regex@6.4.0: {}
++
++  append-field@1.0.0: {}
++
++  body-parser@2.3.0:
++    dependencies:
++      bytes: 3.1.2
++      content-type: 2.1.0
++      debug: 4.4.3
++      http-errors: 2.0.1
++      iconv-lite: 0.7.3
++      on-finished: 2.4.1
++      qs: 6.16.0
++      raw-body: 3.0.2
++      type-is: 2.1.0
++    transitivePeerDependencies:
++      - supports-color
++
++  busboy@1.6.0:
++    dependencies:
++      streamsearch: 1.1.0
++
++  bytes@3.1.2: {}
++
++  call-bind-apply-helpers@1.0.2:
++    dependencies:
++      es-errors: 1.3.0
++      function-bind: 1.1.2
++
++  call-bound@1.0.4:
++    dependencies:
++      call-bind-apply-helpers: 1.0.2
++      get-intrinsic: 1.3.0
++
++  chalk@5.6.2: {}
++
++  cli-cursor@5.0.0:
++    dependencies:
++      restore-cursor: 5.1.0
++
++  cli-spinners@2.9.2: {}
++
++  commander@12.1.0: {}
++
++  content-disposition@1.1.0: {}
++
++  content-type@1.0.5: {}
++
++  content-type@2.1.0: {}
++
++  cookie-signature@1.2.2: {}
++
++  cookie@0.7.2: {}
++
++  debug@4.4.3:
++    dependencies:
++      ms: 2.1.3
++
++  depd@2.0.0: {}
++
++  detect-libc@2.1.2: {}
++
++  diff@9.0.0: {}
++
++  dunder-proto@1.0.1:
++    dependencies:
++      call-bind-apply-helpers: 1.0.2
++      es-errors: 1.3.0
++      gopd: 1.2.0
++
++  ee-first@1.1.1: {}
++
++  emoji-regex@10.6.0: {}
++
++  encodeurl@2.0.0: {}
++
++  es-define-property@1.0.1: {}
++
++  es-errors@1.3.0: {}
++
++  es-object-atoms@1.1.2:
++    dependencies:
++      es-errors: 1.3.0
++
++  escape-html@1.0.3: {}
++
++  etag@1.8.1: {}
++
++  eventemitter3@5.0.4: {}
++
++  express@5.2.1:
++    dependencies:
++      accepts: 2.0.0
++      body-parser: 2.3.0
++      content-disposition: 1.1.0
++      content-type: 1.0.5
++      cookie: 0.7.2
++      cookie-signature: 1.2.2
++      debug: 4.4.3
++      depd: 2.0.0
++      encodeurl: 2.0.0
++      escape-html: 1.0.3
++      etag: 1.8.1
++      finalhandler: 2.1.1
++      fresh: 2.0.0
++      http-errors: 2.0.1
++      merge-descriptors: 2.0.0
++      mime-types: 3.0.2
++      on-finished: 2.4.1
++      once: 1.4.0
++      parseurl: 1.3.3
++      proxy-addr: 2.0.8
++      qs: 6.16.0
++      range-parser: 1.3.0
++      router: 2.2.0
++      send: 1.2.1
++      serve-static: 2.2.1
++      statuses: 2.0.2
++      type-is: 2.1.0
++      vary: 1.1.2
++    transitivePeerDependencies:
++      - supports-color
++
++  fast-diff@1.3.0: {}
++
++  fdir@6.5.0(picomatch@4.0.7):
++    optionalDependencies:
++      picomatch: 4.0.7
++
++  finalhandler@2.1.1:
++    dependencies:
++      debug: 4.4.3
++      encodeurl: 2.0.0
++      escape-html: 1.0.3
++      on-finished: 2.4.1
++      parseurl: 1.3.3
++      statuses: 2.0.2
++    transitivePeerDependencies:
++      - supports-color
++
++  forwarded@0.2.0: {}
++
++  fresh@2.0.0: {}
++
++  fsevents@2.3.3:
++    optional: true
++
++  function-bind@1.1.2: {}
++
++  get-east-asian-width@1.7.0: {}
++
++  get-intrinsic@1.3.0:
++    dependencies:
++      call-bind-apply-helpers: 1.0.2
++      es-define-property: 1.0.1
++      es-errors: 1.3.0
++      es-object-atoms: 1.1.2
++      function-bind: 1.1.2
++      get-proto: 1.0.1
++      gopd: 1.2.0
++      has-symbols: 1.1.0
++      hasown: 2.0.4
++      math-intrinsics: 1.1.0
++
++  get-proto@1.0.1:
++    dependencies:
++      dunder-proto: 1.0.1
++      es-object-atoms: 1.1.2
++
++  gopd@1.2.0: {}
++
++  has-symbols@1.1.0: {}
++
++  hasown@2.0.4:
++    dependencies:
++      function-bind: 1.1.2
++
++  http-errors@2.0.1:
++    dependencies:
++      depd: 2.0.0
++      inherits: 2.0.4
++      setprototypeof: 1.2.0
++      statuses: 2.0.2
++      toidentifier: 1.0.1
++
++  iconv-lite@0.7.3:
++    dependencies:
++      safer-buffer: 2.1.2
++
++  inherits@2.0.4: {}
++
++  ipaddr.js@1.9.1: {}
++
++  is-interactive@2.0.0: {}
++
++  is-promise@4.0.0: {}
++
++  is-unicode-supported@1.3.0: {}
++
++  is-unicode-supported@2.1.0: {}
++
++  json5@2.2.3: {}
++
++  lightningcss-android-arm64@1.33.0:
++    optional: true
++
++  lightningcss-darwin-arm64@1.33.0:
++    optional: true
++
++  lightningcss-darwin-x64@1.33.0:
++    optional: true
++
++  lightningcss-freebsd-x64@1.33.0:
++    optional: true
++
++  lightningcss-linux-arm-gnueabihf@1.33.0:
++    optional: true
++
++  lightningcss-linux-arm64-gnu@1.33.0:
++    optional: true
++
++  lightningcss-linux-arm64-musl@1.33.0:
++    optional: true
++
++  lightningcss-linux-x64-gnu@1.33.0:
++    optional: true
++
++  lightningcss-linux-x64-musl@1.33.0:
++    optional: true
++
++  lightningcss-win32-arm64-msvc@1.33.0:
++    optional: true
++
++  lightningcss-win32-x64-msvc@1.33.0:
++    optional: true
++
++  lightningcss@1.33.0:
++    dependencies:
++      detect-libc: 2.1.2
++    optionalDependencies:
++      lightningcss-android-arm64: 1.33.0
++      lightningcss-darwin-arm64: 1.33.0
++      lightningcss-darwin-x64: 1.33.0
++      lightningcss-freebsd-x64: 1.33.0
++      lightningcss-linux-arm-gnueabihf: 1.33.0
++      lightningcss-linux-arm64-gnu: 1.33.0
++      lightningcss-linux-arm64-musl: 1.33.0
++      lightningcss-linux-x64-gnu: 1.33.0
++      lightningcss-linux-x64-musl: 1.33.0
++      lightningcss-win32-arm64-msvc: 1.33.0
++      lightningcss-win32-x64-msvc: 1.33.0
++
++  lodash-es@4.18.1: {}
++
++  lodash.clonedeep@4.5.0: {}
++
++  lodash.isequal@4.5.0: {}
++
++  log-symbols@6.0.0:
++    dependencies:
++      chalk: 5.6.2
++      is-unicode-supported: 1.3.0
++
++  math-intrinsics@1.1.0: {}
++
++  media-typer@0.3.0: {}
++
++  media-typer@1.1.1: {}
++
++  merge-descriptors@2.0.0: {}
++
++  mime-db@1.52.0: {}
++
++  mime-db@1.54.0: {}
++
++  mime-types@2.1.35:
++    dependencies:
++      mime-db: 1.52.0
++
++  mime-types@3.0.2:
++    dependencies:
++      mime-db: 1.54.0
++
++  mimic-function@5.0.1: {}
++
++  ms@2.1.3: {}
++
++  multer@2.4.0:
++    dependencies:
++      append-field: 1.0.0
++      busboy: 1.6.0
++      type-is: 1.6.18
++
++  nanoid@3.3.20: {}
++
++  negotiator@1.1.0:
++    dependencies:
++      content-type: 2.1.0
++
++  object-inspect@1.13.4: {}
++
++  on-finished@2.4.1:
++    dependencies:
++      ee-first: 1.1.1
++
++  once@1.4.0:
++    dependencies:
++      wrappy: 1.0.2
++
++  onetime@7.0.0:
++    dependencies:
++      mimic-function: 5.0.1
++
++  ora@8.2.0:
++    dependencies:
++      chalk: 5.6.2
++      cli-cursor: 5.0.0
++      cli-spinners: 2.9.2
++      is-interactive: 2.0.0
++      is-unicode-supported: 2.1.0
++      log-symbols: 6.0.0
++      stdin-discarder: 0.2.2
++      string-width: 7.2.0
++      strip-ansi: 7.2.0
++
++  parchment@3.0.0: {}
++
++  parseurl@1.3.3: {}
++
++  path-to-regexp@8.4.2: {}
++
++  pg-cloudflare@1.4.1:
++    optional: true
++
++  pg-connection-string@2.14.1: {}
++
++  pg-int8@1.0.1: {}
++
++  pg-pool@3.14.0(pg@8.23.1):
++    dependencies:
++      pg: 8.23.1
++
++  pg-protocol@1.16.1: {}
++
++  pg-types@2.2.0:
++    dependencies:
++      pg-int8: 1.0.1
++      postgres-array: 2.0.0
++      postgres-bytea: 1.0.1
++      postgres-date: 1.0.7
++      postgres-interval: 1.2.0
++
++  pg@8.23.1:
++    dependencies:
++      pg-connection-string: 2.14.1
++      pg-pool: 3.14.0(pg@8.23.1)
++      pg-protocol: 1.16.1
++      pg-types: 2.2.0
++      pgpass: 1.0.5
++    optionalDependencies:
++      pg-cloudflare: 1.4.1
++
++  pgpass@1.0.5:
++    dependencies:
++      split2: 4.2.0
++
++  picocolors@1.1.1: {}
++
++  picomatch@4.0.7: {}
++
++  postcss@8.5.29:
++    dependencies:
++      nanoid: 3.3.20
++      picocolors: 1.1.1
++      source-map-js: 1.2.2
++
++  postgres-array@2.0.0: {}
++
++  postgres-bytea@1.0.1: {}
++
++  postgres-date@1.0.7: {}
++
++  postgres-interval@1.2.0:
++    dependencies:
++      xtend: 4.0.2
++
++  proxy-addr@2.0.8:
++    dependencies:
++      forwarded: 0.2.0
++      ipaddr.js: 1.9.1
++
++  qs@6.16.0:
++    dependencies:
++      es-define-property: 1.0.1
++      side-channel: 1.1.1
++
++  quill-delta@5.1.0:
++    dependencies:
++      fast-diff: 1.3.0
++      lodash.clonedeep: 4.5.0
++      lodash.isequal: 4.5.0
++
++  quill@2.0.2:
++    dependencies:
++      eventemitter3: 5.0.4
++      lodash-es: 4.18.1
++      parchment: 3.0.0
++      quill-delta: 5.1.0
++
++  range-parser@1.3.0: {}
++
++  raw-body@3.0.2:
++    dependencies:
++      bytes: 3.1.2
++      http-errors: 2.0.1
++      iconv-lite: 0.7.3
++      unpipe: 1.0.0
++
++  restore-cursor@5.1.0:
++    dependencies:
++      onetime: 7.0.0
++      signal-exit: 4.1.0
++
++  rolldown@1.2.13:
++    dependencies:
++      '@oxc-project/types': 0.153.0
++      '@rolldown/pluginutils': 1.0.1
++    optionalDependencies:
++      '@rolldown/binding-android-arm-eabi': 1.2.13
++      '@rolldown/binding-android-arm64': 1.2.13
++      '@rolldown/binding-darwin-arm64': 1.2.13
++      '@rolldown/binding-darwin-x64': 1.2.13
++      '@rolldown/binding-freebsd-x64': 1.2.13
++      '@rolldown/binding-linux-arm-gnueabihf': 1.2.13
++      '@rolldown/binding-linux-arm64-gnu': 1.2.13
++      '@rolldown/binding-linux-arm64-musl': 1.2.13
++      '@rolldown/binding-linux-ppc64-gnu': 1.2.13
++      '@rolldown/binding-linux-s390x-gnu': 1.2.13
++      '@rolldown/binding-linux-x64-gnu': 1.2.13
++      '@rolldown/binding-linux-x64-musl': 1.2.13
++      '@rolldown/binding-openharmony-arm64': 1.2.13
++      '@rolldown/binding-win32-arm64-msvc': 1.2.13
++      '@rolldown/binding-win32-x64-msvc': 1.2.13
++
++  router@2.2.0:
++    dependencies:
++      debug: 4.4.3
++      depd: 2.0.0
++      is-promise: 4.0.0
++      parseurl: 1.3.3
++      path-to-regexp: 8.4.2
++    transitivePeerDependencies:
++      - supports-color
++
++  safer-buffer@2.1.2: {}
++
++  semver@7.8.5: {}
++
++  send@1.2.1:
++    dependencies:
++      debug: 4.4.3
++      encodeurl: 2.0.0
++      escape-html: 1.0.3
++      etag: 1.8.1
++      fresh: 2.0.0
++      http-errors: 2.0.1
++      mime-types: 3.0.2
++      ms: 2.1.3
++      on-finished: 2.4.1
++      range-parser: 1.3.0
++      statuses: 2.0.2
++    transitivePeerDependencies:
++      - supports-color
++
++  serve-static@2.2.1:
++    dependencies:
++      encodeurl: 2.0.0
++      escape-html: 1.0.3
++      parseurl: 1.3.3
++      send: 1.2.1
++    transitivePeerDependencies:
++      - supports-color
++
++  setprototypeof@1.2.0: {}
++
++  sharp@0.35.5:
++    dependencies:
++      '@img/colour': 1.1.0
++      detect-libc: 2.1.2
++      semver: 7.8.5
++    optionalDependencies:
++      '@img/sharp-darwin-arm64': 0.35.5
++      '@img/sharp-darwin-x64': 0.35.5
++      '@img/sharp-freebsd-wasm32': 0.35.5
++      '@img/sharp-libvips-darwin-arm64': 1.3.4
++      '@img/sharp-libvips-darwin-x64': 1.3.4
++      '@img/sharp-libvips-linux-arm': 1.3.4
++      '@img/sharp-libvips-linux-arm64': 1.3.4
++      '@img/sharp-libvips-linux-ppc64': 1.3.4
++      '@img/sharp-libvips-linux-riscv64': 1.3.4
++      '@img/sharp-libvips-linux-s390x': 1.3.4
++      '@img/sharp-libvips-linux-x64': 1.3.4
++      '@img/sharp-libvips-linuxmusl-arm64': 1.3.4
++      '@img/sharp-libvips-linuxmusl-x64': 1.3.4
++      '@img/sharp-linux-arm': 0.35.5
++      '@img/sharp-linux-arm64': 0.35.5
++      '@img/sharp-linux-ppc64': 0.35.5
++      '@img/sharp-linux-riscv64': 0.35.5
++      '@img/sharp-linux-s390x': 0.35.5
++      '@img/sharp-linux-x64': 0.35.5
++      '@img/sharp-linuxmusl-arm64': 0.35.5
++      '@img/sharp-linuxmusl-x64': 0.35.5
++      '@img/sharp-webcontainers-wasm32': 0.35.5
++      '@img/sharp-win32-arm64': 0.35.5
++      '@img/sharp-win32-ia32': 0.35.5
++      '@img/sharp-win32-x64': 0.35.5
++
++  side-channel-list@1.0.1:
++    dependencies:
++      es-errors: 1.3.0
++      object-inspect: 1.13.4
++
++  side-channel-map@1.0.1:
++    dependencies:
++      call-bound: 1.0.4
++      es-errors: 1.3.0
++      get-intrinsic: 1.3.0
++      object-inspect: 1.13.4
++
++  side-channel-weakmap@1.0.2:
++    dependencies:
++      call-bound: 1.0.4
++      es-errors: 1.3.0
++      get-intrinsic: 1.3.0
++      object-inspect: 1.13.4
++      side-channel-map: 1.0.1
++
++  side-channel@1.1.1:
++    dependencies:
++      es-errors: 1.3.0
++      object-inspect: 1.13.4
++      side-channel-list: 1.0.1
++      side-channel-map: 1.0.1
++      side-channel-weakmap: 1.0.2
++
++  signal-exit@4.1.0: {}
++
++  source-map-js@1.2.2: {}
++
++  split2@4.2.0: {}
++
++  statuses@2.0.2: {}
++
++  stdin-discarder@0.2.2: {}
++
++  streamsearch@1.1.0: {}
++
++  string-width@7.2.0:
++    dependencies:
++      emoji-regex: 10.6.0
++      get-east-asian-width: 1.7.0
++      strip-ansi: 7.2.0
++
++  strip-ansi@7.2.0:
++    dependencies:
++      ansi-regex: 6.4.0
++
++  tinyglobby@0.2.17:
++    dependencies:
++      fdir: 6.5.0(picomatch@4.0.7)
++      picomatch: 4.0.7
++
++  toidentifier@1.0.1: {}
++
++  tslib@2.8.1:
++    optional: true
++
++  type-is@1.6.18:
++    dependencies:
++      media-typer: 0.3.0
++      mime-types: 2.1.35
++
++  type-is@2.1.0:
++    dependencies:
++      content-type: 2.1.0
++      media-typer: 1.1.1
++      mime-types: 3.0.2
++
++  unpipe@1.0.0: {}
++
++  vary@1.1.2: {}
++
++  vite@8.3.4:
++    dependencies:
++      lightningcss: 1.33.0
++      picomatch: 4.0.7
++      postcss: 8.5.29
++      rolldown: 1.2.13
++      tinyglobby: 0.2.17
++    optionalDependencies:
++      fsevents: 2.3.3
++
++  wrappy@1.0.2: {}
++
++  xtend@4.0.2: {}
+diff --git a/scripts/serverless-init-schema.sh b/scripts/serverless-init-schema.sh
+new file mode 100644
+index 0000000..ea7580e
+--- /dev/null
++++ b/scripts/serverless-init-schema.sh
+@@ -0,0 +1,7 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++# Run interactively after `pnpm exec tgcloud login`.
++# This applies the new schema only; it never imports or deletes PostgreSQL data.
++pnpm exec tgcloud push tgcloud/schema.js
++pnpm exec tgcloud migrate
+diff --git a/scripts/serverless-schema-check.mjs b/scripts/serverless-schema-check.mjs
+new file mode 100644
+index 0000000..a9535f7
+--- /dev/null
++++ b/scripts/serverless-schema-check.mjs
+@@ -0,0 +1,19 @@
++import { readFile } from 'node:fs/promises';
++
++const schema = await readFile(new URL('../tgcloud/schema.js', import.meta.url), 'utf8');
++const requiredTables = [
++  'settings', 'users', 'administrators', 'publishers', 'publisherPermissions',
++  'targets', 'media', 'tasks', 'runs', 'deliveries', 'botPlayers',
++  'broadcasts', 'broadcastDeliveries', 'conversations', 'chatMessages',
++  'chatEvents', 'publisherInbox', 'sentActions'
++];
++const missing = requiredTables.filter(name => !new RegExp(`export const ${name}\\s*=\\s*table\\(`).test(schema));
++if (missing.length) {
++  console.error(`Missing Serverless tables: ${missing.join(', ')}`);
++  process.exit(1);
++}
++if (!schema.includes("from 'sdk/db'")) {
++  console.error('Serverless schema must import sdk/db');
++  process.exit(1);
++}
++console.log(`Serverless schema check passed: ${requiredTables.length} tables`);
+diff --git a/scripts/serverless-structure-check.mjs b/scripts/serverless-structure-check.mjs
+new file mode 100644
+index 0000000..c7c45b2
+--- /dev/null
++++ b/scripts/serverless-structure-check.mjs
+@@ -0,0 +1,11 @@
++import { access, readFile } from 'node:fs/promises';
++
++const required = [
++  'tgcloud/handlers', 'tgcloud/endpoints', 'tgcloud/lib',
++  'tgcloud/schema.js', 'tgcloud.jsonc'
++];
++for (const path of required) await access(path);
++const config = await readFile('tgcloud.jsonc', 'utf8');
++if (!config.includes('"source": "dist"')) throw new Error('tgcloud.jsonc must publish dist');
++if (!config.includes('"spa": true')) throw new Error('tgcloud.jsonc must enable SPA fallback');
++console.log(`Serverless structure check passed: ${required.length} required paths`);
 diff --git a/src/api-client.js b/src/api-client.js
 index 6ad369e..52632f4 100644
 --- a/src/api-client.js
@@ -134,3 +2328,321 @@ index 6ad369e..52632f4 100644
 +
 +  return { api, image, headers, bases };
 +}
+diff --git a/tests/api-client.test.js b/tests/api-client.test.js
+new file mode 100644
+index 0000000..40fdeb3
+--- /dev/null
++++ b/tests/api-client.test.js
+@@ -0,0 +1,36 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createApiClient } from '../src/api-client.js';
++
++test('API client uses the configured Serverless base', async () => {
++  const originalFetch = globalThis.fetch;
++  const requests = [];
++  globalThis.fetch = async (url) => {
++    requests.push(url);
++    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
++  };
++  try {
++    const client = createApiClient({ baseUrl: 'https://app.example', initData: 'signed' });
++    await client.api('/bootstrap');
++    assert.equal(requests[0], 'https://app.example/bootstrap');
++  } finally {
++    globalThis.fetch = originalFetch;
++  }
++});
++
++test('API client falls back to Railway when Serverless is unavailable', async () => {
++  const originalFetch = globalThis.fetch;
++  const requests = [];
++  globalThis.fetch = async (url) => {
++    requests.push(url);
++    if (requests.length === 1) return new Response('{}', { status: 503 });
++    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
++  };
++  try {
++    const client = createApiClient({ baseUrl: 'https://serverless.example', fallbackBaseUrl: 'https://railway.example' });
++    await client.api('/bootstrap');
++    assert.deepEqual(requests, ['https://serverless.example/bootstrap', 'https://railway.example/bootstrap']);
++  } finally {
++    globalThis.fetch = originalFetch;
++  }
++});
+diff --git a/tgcloud.jsonc b/tgcloud.jsonc
+new file mode 100644
+index 0000000..fa5a81e
+--- /dev/null
++++ b/tgcloud.jsonc
+@@ -0,0 +1,11 @@
++{
++  "$schema": "./node_modules/@tgcloud/cli/schema/tgcloud.json",
++  "static": {
++    "source": "dist",
++    "spa": true,
++    "immutable": ["/assets/*"],
++    "headers": [
++      { "path": "/*", "set": { "Referrer-Policy": "no-referrer" } }
++    ]
++  }
++}
+diff --git a/tgcloud/README.md b/tgcloud/README.md
+new file mode 100644
+index 0000000..30ba9ab
+--- /dev/null
++++ b/tgcloud/README.md
+@@ -0,0 +1,8 @@
++# Serverless migration surface
++
++`tgcloud/` is the new Telegram Serverless boundary. The old `server/` Express/PostgreSQL implementation remains the rollback baseline during migration.
++
++- `handlers/`: Telegram update handlers
++- `endpoints/`: Mini App API endpoints
++- `lib/`: shared Serverless modules
++- `schema.js`: new per-bot SQLite schema; no old data is imported
+diff --git a/tgcloud/endpoints/health.js b/tgcloud/endpoints/health.js
+new file mode 100644
+index 0000000..6361f61
+--- /dev/null
++++ b/tgcloud/endpoints/health.js
+@@ -0,0 +1,7 @@
++/**
++ * Minimal migration smoke endpoint. Database-backed endpoints are migrated
++ * incrementally after the schema is deployed; this endpoint stays read-only.
++ */
++export default async function healthEndpoint() {
++  return { ok: true, service: 'tgzhushou-serverless' };
++}
+diff --git a/tgcloud/handlers/message.js b/tgcloud/handlers/message.js
+new file mode 100644
+index 0000000..2935c25
+--- /dev/null
++++ b/tgcloud/handlers/message.js
+@@ -0,0 +1,15 @@
++import { api } from 'sdk';
++
++/**
++ * Minimal migration smoke handler. Business handlers are added incrementally;
++ * the existing Express webhook remains the production rollback path.
++ */
++export default async function messageHandler(message) {
++  if (!message?.chat?.id || !message?.text) return;
++  if (message.text === '/serverless') {
++    await api.sendMessage({
++      chat_id: message.chat.id,
++      text: 'Telegram Serverless migration endpoint is available for testing.',
++    });
++  }
++}
+diff --git a/tgcloud/schema.js b/tgcloud/schema.js
+new file mode 100644
+index 0000000..818eb20
+--- /dev/null
++++ b/tgcloud/schema.js
+@@ -0,0 +1,205 @@
++import { table, integer, text, boolean } from 'sdk/db';
++
++// Rebuilt schema for Serverless. Existing PostgreSQL data is intentionally not copied.
++export const settings = table('settings', {
++  key: text('key').primaryKey(),
++  value: text('value').notNull(),
++});
++
++export const users = table('users', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  telegramId: text('telegram_id').notNull().unique(),
++  username: text('username').notNull().default(''),
++  displayName: text('display_name').notNull().default(''),
++  createdAt: integer('created_at').notNull(),
++  updatedAt: integer('updated_at').notNull(),
++});
++
++export const administrators = table('administrators', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  userId: integer('user_id').notNull(),
++  loginUsername: text('login_username').notNull().default(''),
++  canManageBots: boolean('can_manage_bots').notNull().default(false),
++  createdAt: integer('created_at').notNull(),
++});
++
++export const publishers = table('publishers', {
++  id: text('id').primaryKey(),
++  username: text('username').notNull(),
++  token: text('token').notNull(),
++  createdAt: integer('created_at').notNull(),
++  updatedAt: integer('updated_at').notNull(),
++});
++
++export const publisherPermissions = table('publisher_permissions', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  publisherId: text('publisher_id').notNull(),
++  userId: integer('user_id').notNull(),
++  role: text('role').notNull().default('operator'),
++  createdAt: integer('created_at').notNull(),
++});
++
++export const targets = table('targets', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  botId: text('bot_id').notNull(),
++  chatId: text('chat_id').notNull(),
++  title: text('title').notNull(),
++  chatType: text('chat_type').notNull(),
++  username: text('username'),
++  canPublish: boolean('can_publish').notNull().default(false),
++  lastError: text('last_error'),
++});
++
++export const media = table('media', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  sha256: text('sha256').notNull().unique(),
++  mime: text('mime').notNull(),
++  size: integer('size').notNull(),
++  filePath: text('file_path').notNull(),
++  telegramFileId: text('telegram_file_id'),
++  createdAt: integer('created_at').notNull(),
++});
++
++export const tasks = table('tasks', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  name: text('name').notNull(),
++  deltaJson: text('delta_json').notNull(),
++  buttonsJson: text('buttons_json').notNull(),
++  targetIdsJson: text('target_ids_json').notNull(),
++  scheduleJson: text('schedule_json').notNull(),
++  mediaId: integer('media_id'),
++  botId: text('bot_id').notNull(),
++  status: text('status').notNull(),
++  nextAt: integer('next_at'),
++  createdAt: integer('created_at').notNull(),
++  updatedAt: integer('updated_at').notNull(),
++});
++
++export const runs = table('runs', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  taskId: integer('task_id').notNull(),
++  runKey: text('run_key').notNull().unique(),
++  source: text('source').notNull(),
++  slotAt: integer('slot_at').notNull(),
++  status: text('status').notNull(),
++  botId: text('bot_id').notNull(),
++  deltaJson: text('delta_json').notNull(),
++  buttonsJson: text('buttons_json').notNull().default('[]'),
++  mediaId: integer('media_id'),
++  createdAt: integer('created_at').notNull(),
++});
++
++export const deliveries = table('deliveries', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  runId: integer('run_id').notNull(),
++  targetId: integer('target_id').notNull(),
++  chatId: text('chat_id').notNull(),
++  title: text('title').notNull(),
++  status: text('status').notNull(),
++  telegramMessageId: text('telegram_message_id'),
++  errorText: text('error_text'),
++  startedAt: integer('started_at'),
++  completedAt: integer('completed_at'),
++  claimToken: text('claim_token'),
++  claimedAt: integer('claimed_at'),
++});
++
++export const botPlayers = table('bot_players', {
++  botId: text('bot_id').notNull(),
++  telegramId: text('telegram_id').notNull(),
++  displayName: text('display_name').notNull().default(''),
++  username: text('username').notNull().default(''),
++  platformId: text('platform_id').notNull().default(''),
++  active: boolean('active').notNull().default(true),
++  firstSeen: integer('first_seen').notNull(),
++  lastSeen: integer('last_seen').notNull(),
++  source: text('source').notNull().default('ffa'),
++});
++
++export const broadcasts = table('broadcasts', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  name: text('name').notNull(),
++  deltaJson: text('delta_json').notNull(),
++  buttonsJson: text('buttons_json').notNull(),
++  mediaId: integer('media_id'),
++  botId: text('bot_id').notNull(),
++  status: text('status').notNull(),
++  totalCount: integer('total_count').notNull().default(0),
++  createdAt: integer('created_at').notNull(),
++  startedAt: integer('started_at'),
++  completedAt: integer('completed_at'),
++});
++
++export const broadcastDeliveries = table('broadcast_deliveries', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  broadcastId: integer('broadcast_id').notNull(),
++  telegramId: text('telegram_id').notNull(),
++  displayName: text('display_name').notNull().default(''),
++  status: text('status').notNull(),
++  telegramMessageId: text('telegram_message_id'),
++  errorText: text('error_text'),
++  startedAt: integer('started_at'),
++  completedAt: integer('completed_at'),
++  claimToken: text('claim_token'),
++  claimedAt: integer('claimed_at'),
++});
++
++export const conversations = table('conversations', {
++  botId: text('bot_id').notNull(),
++  chatId: text('chat_id').notNull(),
++  chatType: text('chat_type').notNull(),
++  title: text('title').notNull().default(''),
++  username: text('username').notNull().default(''),
++  avatarFileId: text('avatar_file_id'),
++  lastMessageId: text('last_message_id'),
++  lastMessageText: text('last_message_text').notNull().default(''),
++  lastMessageAt: integer('last_message_at').notNull().default(0),
++  unreadCount: integer('unread_count').notNull().default(0),
++  lastReadMessageId: text('last_read_message_id'),
++  updatedAt: integer('updated_at').notNull(),
++});
++
++export const chatMessages = table('chat_messages', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  botId: text('bot_id').notNull(),
++  chatId: text('chat_id').notNull(),
++  telegramMessageId: text('telegram_message_id').notNull(),
++  direction: text('direction').notNull(),
++  fromId: text('from_id'),
++  text: text('text').notNull().default(''),
++  entitiesJson: text('entities_json').notNull().default('[]'),
++  mediaKind: text('media_kind'),
++  fileId: text('file_id'),
++  mediaId: integer('media_id'),
++  replyToMessageId: text('reply_to_message_id'),
++  sentAt: integer('sent_at').notNull(),
++  editedAt: integer('edited_at'),
++  status: text('status').notNull().default('SUCCESS'),
++  buttonsJson: text('buttons_json').notNull().default('[]'),
++});
++
++export const chatEvents = table('chat_events', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  botId: text('bot_id').notNull(),
++  chatId: text('chat_id').notNull(),
++  createdAt: integer('created_at').notNull(),
++});
++
++export const publisherInbox = table('publisher_inbox', {
++  botId: text('bot_id').primaryKey(),
++  enabled: boolean('enabled').notNull().default(false),
++  webhookStatus: text('webhook_status').notNull().default('NOT_CHECKED'),
++  secret: text('secret'),
++  lastError: text('last_error'),
++  checkedAt: integer('checked_at'),
++});
++
++export const sentActions = table('sent_actions', {
++  id: integer('id').primaryKey({ autoIncrement: true }),
++  botId: text('bot_id').notNull(),
++  kind: text('kind').notNull(),
++  remoteId: text('remote_id').notNull(),
++  action: text('action').notNull(),
++  payloadJson: text('payload_json').notNull().default('{}'),
++  createdAt: integer('created_at').notNull(),
++});
