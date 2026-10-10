@@ -1,0 +1,136 @@
+diff --git a/docs/SERVERLESS_MIGRATION.md b/docs/SERVERLESS_MIGRATION.md
+index 149e6e8..4b656d6 100644
+--- a/docs/SERVERLESS_MIGRATION.md
++++ b/docs/SERVERLESS_MIGRATION.md
+@@ -47,3 +47,19 @@
+ - 不迁移正式 PostgreSQL 数据。
+ - 不更改正式机器人 webhook。
+ - 不在仓库保存 Serverless CLI Token。
++
++## 前端切换开关
++
++`src/api-client.js` 支持在部署前注入运行时配置，不需要把 Token 写入构建产物：
++
++```html
++<script>
++  window.__TGZ_API_CONFIG__ = {
++    serverlessBase: 'https://app<app_id>.tgcloud.ai/api',
++    railwayBase: 'https://<railway-domain>/api',
++    fallbackBaseUrl: 'https://<railway-domain>/api'
++  };
++</script>
++```
++
++未注入配置时，前端保持原来的相对 `/api` 行为。配置 Serverless 主地址后，网络错误、5xx 或 404 会回退到 Railway；401/403 等鉴权错误不会静默切换。
+diff --git a/package.json b/package.json
+index a11bb6c..c3ea6ec 100644
+--- a/package.json
++++ b/package.json
+@@ -8,7 +8,8 @@
+     "start": "node server/index.js",
+     "build": "vite build",
+     "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/auth.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/browser-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
+-    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js",
++    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js",
++    "serverless:check": "node scripts/serverless-structure-check.mjs && node scripts/serverless-schema-check.mjs",
+     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
+     "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
+     "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
+@@ -26,6 +27,7 @@
+   },
+   "devDependencies": {
+     "@tauri-apps/cli": "^2.12.1",
++    "@tgcloud/cli": "0.2.0",
+     "vite": "^8.3.1"
+   },
+   "overrides": {
+diff --git a/src/api-client.js b/src/api-client.js
+index 6ad369e..52632f4 100644
+--- a/src/api-client.js
++++ b/src/api-client.js
+@@ -1,23 +1,62 @@
+-export function createApiClient({ initData = '', getPublisherId = () => '' } = {}) {
+-  const headers = () => {
+-    const result = { 'x-telegram-init-data': initData };
+-    const publisherId = getPublisherId();
+-    if (publisherId) result['x-publisher-id'] = publisherId;
+-    return result;
+-  };
+-  async function api(url, method = 'GET', body) {
+-    const requestHeaders = headers();
+-    if (body && !(body instanceof FormData)) requestHeaders['content-type'] = 'application/json';
+-    const response = await fetch(`/api${url}`, { method, headers: requestHeaders,
+-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
+-    const result = await response.json().catch(() => ({}));
+-    if (!response.ok) throw Object.assign(new Error(result.error || `请求失败 (${response.status})`), { status: response.status });
+-    return result;
+-  }
+-  async function image(url) {
+-    const response = await fetch('/api' + url, { headers: headers() });
+-    if (!response.ok) throw Object.assign(new Error('图片加载失败'), { status: response.status });
+-    return response.blob();
+-  }
+-  return { api, image, headers };
+-}
++function runtimeConfig() {
++  const config = globalThis.__TGZ_API_CONFIG__;
++  return config && typeof config === 'object' ? config : {};
++}
++
++function joinBase(base, path) {
++  const normalizedBase = String(base || '').replace(/\/$/, '');
++  const normalizedPath = String(path || '').startsWith('/') ? path : `/${path}`;
++  return normalizedBase ? `${normalizedBase}${normalizedPath}` : normalizedPath;
++}
++
++export function createApiClient({ initData = '', getPublisherId = () => '', baseUrl, fallbackBaseUrl, mode } = {}) {
++  const config = runtimeConfig();
++  const primaryBase = baseUrl ?? (mode === 'serverless' ? config.serverlessBase : config.railwayBase) ?? config.baseUrl ?? '';
++  const fallbackBase = fallbackBaseUrl ?? config.fallbackBaseUrl ?? '';
++  const bases = [primaryBase, fallbackBase].filter((base, index, all) => all.indexOf(base) === index);
++
++  const headers = () => {
++    const result = { 'x-telegram-init-data': initData };
++    const publisherId = getPublisherId();
++    if (publisherId) result['x-publisher-id'] = publisherId;
++    return result;
++  };
++
++  async function request(path, options = {}) {
++    let lastError;
++    for (const base of bases) {
++      try {
++        const response = await fetch(joinBase(base, path), options);
++        // Auth and validation errors belong to the selected backend. Only a
++        // missing/unavailable route is eligible for the configured fallback.
++        if (response.status < 500 && response.status !== 404) return response;
++        if (base === bases.at(-1)) return response;
++      } catch (error) {
++        lastError = error;
++        if (base === bases.at(-1)) throw error;
++      }
++    }
++    throw lastError || new Error('API unavailable');
++  }
++
++  async function api(url, method = 'GET', body) {
++    const requestHeaders = headers();
++    if (body && !(body instanceof FormData)) requestHeaders['content-type'] = 'application/json';
++    const response = await request(url, {
++      method,
++      headers: requestHeaders,
++      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
++    });
++    const result = await response.json().catch(() => ({}));
++    if (!response.ok) throw Object.assign(new Error(result.error || `请求失败 (${response.status})`), { status: response.status });
++    return result;
++  }
++
++  async function image(url) {
++    const response = await request(url, { headers: headers() });
++    if (!response.ok) throw Object.assign(new Error('图片加载失败'), { status: response.status });
++    return response.blob();
++  }
++
++  return { api, image, headers, bases };
++}

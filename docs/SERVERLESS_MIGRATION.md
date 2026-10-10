@@ -47,3 +47,19 @@
 - 不迁移正式 PostgreSQL 数据。
 - 不更改正式机器人 webhook。
 - 不在仓库保存 Serverless CLI Token。
+
+## 前端切换开关
+
+`src/api-client.js` 支持在部署前注入运行时配置，不需要把 Token 写入构建产物：
+
+```html
+<script>
+  window.__TGZ_API_CONFIG__ = {
+    serverlessBase: 'https://app<app_id>.tgcloud.ai/api',
+    railwayBase: 'https://<railway-domain>/api',
+    fallbackBaseUrl: 'https://<railway-domain>/api'
+  };
+</script>
+```
+
+未注入配置时，前端保持原来的相对 `/api` 行为。配置 Serverless 主地址后，网络错误、5xx 或 404 会回退到 Railway；401/403 等鉴权错误不会静默切换。
