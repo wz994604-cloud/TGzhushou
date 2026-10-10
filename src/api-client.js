@@ -15,6 +15,7 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
   const fallbackBase = fallbackBaseUrl ?? config.fallbackBaseUrl ?? '';
   const bases = [primaryBase, fallbackBase].filter((base, index, all) => all.indexOf(base) === index);
   const serverlessMode = mode === 'serverless';
+  const serverlessCall = globalThis.Telegram?.WebApp?.Serverless?.call;
 
   const headers = () => {
     const result = { 'x-telegram-init-data': initData };
@@ -42,7 +43,20 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
     for (const base of bases) {
       try {
         const useServerless = serverlessMode && base === primaryBase;
+        if (useServerless && typeof serverlessCall === 'function') {
+          const payloadBody = await serializeBody(options.body);
+          const payload = await new Promise((resolve, reject) => {
+            serverlessCall('api', {
+              route: path,
+              method: options.method || 'GET',
+              body: payloadBody,
+              publisherId: getPublisherId(),
+            }, (error, result) => error ? reject(error) : resolve(result));
+          });
+          return { ok: true, status: 200, serverlessPayload: payload, headers: new Headers({ 'content-type': 'application/json' }), json: async () => payload };
+        }
         const endpointPath = String(base || '').replace(/\/$/, '').endsWith('/api') ? '/api' : '/api/api';
+        const legacyOptions = { ...options, body: options.body instanceof FormData || options.body == null || typeof options.body === 'string' ? options.body : JSON.stringify(options.body) };
         const response = useServerless
           ? await fetch(joinBase(base, endpointPath), {
             method: 'POST',
@@ -54,7 +68,7 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
               publisherId: getPublisherId(),
             }),
           })
-          : await fetch(joinBase(base, path), options);
+          : await fetch(joinBase(base, path), legacyOptions);
         // Auth and validation errors belong to the selected backend. Only a
         // missing/unavailable route is eligible for the configured fallback.
         if (response.status < 500 && response.status !== 404) return response;
@@ -73,9 +87,9 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
     const response = await request(url, {
       method,
       headers: requestHeaders,
-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+      body,
     });
-    const result = await response.json().catch(() => ({}));
+    const result = response.serverlessPayload ?? await response.json().catch(() => ({}));
     if (!response.ok) throw Object.assign(new Error(result.error || result.description || `请求失败 (${response.status})`), { status: response.status, code: result.parameters?.code });
     return result;
   }

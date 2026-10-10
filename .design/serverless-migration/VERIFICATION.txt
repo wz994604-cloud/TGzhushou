@@ -47,3 +47,30 @@ Literal output/result: ROLLBACK_OK with baseline hash restored
 Exit status: 0
 
 Unverified: real two-bot token registration, Telegram Mini App initData end-to-end, target chat permissions, real media upload/send, and Tauri desktop run. Railway and PostgreSQL remain intact and are not stopped by this branch.
+
+LATEST_INCREMENT
+Changed branch/field: feature/serverless-migration; Serverless API client envelope/body handling, admin bot-role inspection, SQL named-parameter binding, and requested-publisher authorization.
+
+LATEST MODIFIED
+Command: pnpm test && pnpm run build && pnpm run serverless:check
+Input: current source and Serverless structure
+Literal output/result: 17 tests passed; Vite build passed (737 modules); structure check passed; schema check passed (23 tables)
+Exit status: 0
+
+Command: pnpm run serverless:push && pnpm run serverless:migrate
+Input: current dist and tgcloud modules
+Literal output/result: deployment completed; static URL https://app8899848334.tgcloud.ai/; database in sync, no schema changes
+Exit status: 0
+
+Command: pnpm exec tgcloud run endpoints/api '{route:"/bots",method:"GET"}' --ctx '{initData:{user:{id:8707981004,first_name:"管理员"}}}'
+Input: admin context, no token output
+Literal output/result: [{id:'8755723722',username:'hdzs8bot',role:'entry'},{id:'8899848334',username:'ffylqgBot',role:'publisher'}]
+Exit status: 0
+
+ROLLBACK
+Command: .design/serverless-migration/ROLLBACK.sh .design/serverless-migration/rollback-test/latest-package.json .design/serverless-migration/MODIFIED_FILE.baseline
+Input: baseline package copy target
+Literal output/result: ROLLBACK_OK and baseline hash restored
+Exit status: 0
+
+Unverified blockers: Telegram Mini App live initData call, target chat permissions, real media upload/send, scheduler execution, and Tauri desktop runtime against Serverless. Railway/PostgreSQL remain available for rollback.

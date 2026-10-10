@@ -51,7 +51,10 @@ async function ensureTaskPayload(input, publisher) {
   const targetIds = [...new Set((Array.isArray(input?.targetIds) ? input.targetIds : []).map(safeId).filter(Boolean))];
   if (!targetIds.length) fail('请选择发布目标', 'TARGET_REQUIRED');
   const placeholders = targetIds.map(() => '?').join(',');
-  const targets = await db.all(`SELECT id FROM targets WHERE bot_id=? AND can_publish=1 AND id IN (${placeholders})`, publisher.id, ...targetIds);
+  const targets = await db.all(`SELECT id FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${targetIds.map((_, index) => `:target${index}`).join(',')})`, {
+    ':botId': publisher.id,
+    ...Object.fromEntries(targetIds.map((id, index) => [`:target${index}`, id])),
+  });
   if (targets.length !== targetIds.length) fail('有目标不存在或缺少发布权限', 'TARGET_INVALID');
   const mediaId = input?.mediaId ? safeId(input.mediaId) : null;
   if (mediaId && !await db.get('SELECT id FROM media WHERE id=:id', { ':id': mediaId })) fail('媒体不存在', 'MEDIA_NOT_FOUND');
@@ -68,7 +71,11 @@ async function taskRun(task, publisher, source = 'MANUAL') {
     ':delta': task.delta_json, ':buttons': task.buttons_json, ':mediaId': task.media_id, ':createdAt': now(),
   });
   const runId = Number(run.lastInsertRowid);
-  const targets = await db.all(`SELECT id,chat_id,title FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${JSON.parse(task.target_ids_json).map(() => '?').join(',')})`, publisher.id, ...JSON.parse(task.target_ids_json));
+  const targetIds = JSON.parse(task.target_ids_json);
+  const targets = await db.all(`SELECT id,chat_id,title FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${targetIds.map((_, index) => `:target${index}`).join(',')})`, {
+    ':botId': publisher.id,
+    ...Object.fromEntries(targetIds.map((id, index) => [`:target${index}`, id])),
+  });
   for (const target of targets) {
     await db.run(`INSERT INTO deliveries(run_id,target_id,chat_id,title,status,started_at) VALUES(:runId,:targetId,:chatId,:title,'SENDING',:startedAt)`, {
       ':runId': runId, ':targetId': target.id, ':chatId': target.chat_id, ':title': target.title, ':startedAt': now(),
@@ -110,6 +117,11 @@ async function handle(input, account) {
     const targets = publisher ? await db.all('SELECT * FROM targets WHERE bot_id=:botId ORDER BY id DESC', { ':botId': publisher.id }) : [];
     const tasks = publisher ? await db.all('SELECT id,name,status,schedule_json,next_at,updated_at,bot_id FROM tasks WHERE bot_id=:botId ORDER BY id DESC LIMIT 100', { ':botId': publisher.id }) : [];
     return { admin: { id: account.telegram_id, name: account.display_name, username: account.login_username || account.username, canManageBots: Boolean(account.can_manage_bots), canManageAccounts: Boolean(account.can_manage_bots) }, timezone: 'Asia/Shanghai', publishers, publisher: publicPublisher(publisher), targets, tasks };
+  }
+
+  if (path === 'bots' && method === 'GET') {
+    if (!account.can_manage_bots) fail('仅管理员可查看机器人配置', 'FORBIDDEN');
+    return db.all("SELECT id,username,role,updated_at FROM publishers ORDER BY role,username");
   }
 
   if (path === 'publisher' && method === 'POST') {

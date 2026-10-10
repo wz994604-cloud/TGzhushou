@@ -51,7 +51,8 @@ export async function publisherFor(input, account, { required = true } = {}) {
     ? await db.all("SELECT id, username, token, role FROM publishers WHERE role='publisher' ORDER BY username")
     : await db.all(`SELECT p.id, p.username, p.token, p.role FROM publishers p
       JOIN publisher_permissions pp ON pp.publisher_id=p.id WHERE pp.user_id=:userId ORDER BY p.username`, { ':userId': account.id });
-  const publisher = (requested && allowed.find((item) => String(item.id) === requested)) || allowed[0] || null;
+  const publisher = requested ? allowed.find((item) => String(item.id) === requested) || null : allowed[0] || null;
+  if (requested && !publisher) fail('当前账号未授权该发布机器人', 'PUBLISHER_FORBIDDEN');
   if (!publisher && required) fail('请先配置发布机器人', 'PUBLISHER_REQUIRED');
   return publisher;
 }

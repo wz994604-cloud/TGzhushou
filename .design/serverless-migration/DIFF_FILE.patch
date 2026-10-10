@@ -1,284 +1,109 @@
-diff --git a/docs/SERVERLESS_MIGRATION.md b/docs/SERVERLESS_MIGRATION.md
-index ef908eb..67fdab3 100644
---- a/docs/SERVERLESS_MIGRATION.md
-+++ b/docs/SERVERLESS_MIGRATION.md
-@@ -67,6 +67,8 @@
- ## 当前部署状态
-
- - 已通过 CLI 绑定 `app8899848334`。
--- 已部署静态前端、最小 message handler、health endpoint 和 18 张新表 schema。
-+- 已部署静态前端、统一 `api` endpoint、message handler、health endpoint 和 23 张新表 schema。
-+- 玩家名单、FFA 配置和玩家同步按确认范围停用，不进入 Serverless 业务迁移。
-+- 主机器人与入口机器人通过 `scripts/serverless-seed-publishers.sh` 写入 Serverless；Token 只在本地隐藏输入。
- - Serverless 静态地址：`https://app8899848334.tgcloud.ai/`
- - 旧 Railway/Express/PostgreSQL 仍未停用；当前未迁移旧数据。
-diff --git a/package.json b/package.json
-index c3ea6ec..295b850 100644
---- a/package.json
-+++ b/package.json
-@@ -12,7 +12,11 @@
-     "serverless:check": "node scripts/serverless-structure-check.mjs && node scripts/serverless-schema-check.mjs",
-     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
-     "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
--    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
-+    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json",
-+    "serverless:push": "pnpm run build && tgcloud push",
-+    "serverless:migrate": "tgcloud migrate --yes",
-+    "serverless:deploy": "pnpm run serverless:push && pnpm run serverless:migrate",
-+    "serverless:seed-publishers": "./scripts/serverless-seed-publishers.sh"
-   },
-   "engines": {
-     "node": ">=22"
 diff --git a/src/api-client.js b/src/api-client.js
-index 52632f4..6671964 100644
+index 6671964..05c9566 100644
 --- a/src/api-client.js
 +++ b/src/api-client.js
-@@ -14,6 +14,7 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
-   const primaryBase = baseUrl ?? (mode === 'serverless' ? config.serverlessBase : config.railwayBase) ?? config.baseUrl ?? '';
+@@ -15,6 +15,7 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
    const fallbackBase = fallbackBaseUrl ?? config.fallbackBaseUrl ?? '';
    const bases = [primaryBase, fallbackBase].filter((base, index, all) => all.indexOf(base) === index);
-+  const serverlessMode = mode === 'serverless';
-
+   const serverlessMode = mode === 'serverless';
++  const serverlessCall = globalThis.Telegram?.WebApp?.Serverless?.call;
+ 
    const headers = () => {
      const result = { 'x-telegram-init-data': initData };
-@@ -22,11 +23,38 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
-     return result;
-   };
-
-+  async function serializeBody(body) {
-+    if (!(body instanceof FormData)) return body;
-+    const result = {};
-+    for (const [key, value] of body.entries()) {
-+      if (typeof value === 'string') { result[key] = value; continue; }
-+      const bytes = new Uint8Array(await value.arrayBuffer());
-+      let binary = '';
-+      const chunk = 0x8000;
-+      for (let index = 0; index < bytes.length; index += chunk) binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
-+      result[key] = { name: value.name || key, mime: value.type || 'application/octet-stream', base64: btoa(binary) };
-+    }
-+    return result;
-+  }
-+
-   async function request(path, options = {}) {
-     let lastError;
+@@ -42,7 +43,20 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
      for (const base of bases) {
        try {
--        const response = await fetch(joinBase(base, path), options);
-+        const useServerless = serverlessMode && base === primaryBase;
-+        const endpointPath = String(base || '').replace(/\/$/, '').endsWith('/api') ? '/api' : '/api/api';
-+        const response = useServerless
-+          ? await fetch(joinBase(base, endpointPath), {
-+            method: 'POST',
-+            headers: { ...(options.headers || {}), 'content-type': 'application/json' },
-+            body: JSON.stringify({
+         const useServerless = serverlessMode && base === primaryBase;
++        if (useServerless && typeof serverlessCall === 'function') {
++          const payloadBody = await serializeBody(options.body);
++          const payload = await new Promise((resolve, reject) => {
++            serverlessCall('api', {
 +              route: path,
 +              method: options.method || 'GET',
-+              body: await serializeBody(options.body),
++              body: payloadBody,
 +              publisherId: getPublisherId(),
-+            }),
-+          })
-+          : await fetch(joinBase(base, path), options);
++            }, (error, result) => error ? reject(error) : resolve(result));
++          });
++          return { ok: true, status: 200, serverlessPayload: payload, headers: new Headers({ 'content-type': 'application/json' }), json: async () => payload };
++        }
+         const endpointPath = String(base || '').replace(/\/$/, '').endsWith('/api') ? '/api' : '/api/api';
++        const legacyOptions = { ...options, body: options.body instanceof FormData || options.body == null || typeof options.body === 'string' ? options.body : JSON.stringify(options.body) };
+         const response = useServerless
+           ? await fetch(joinBase(base, endpointPath), {
+             method: 'POST',
+@@ -54,7 +68,7 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
+               publisherId: getPublisherId(),
+             }),
+           })
+-          : await fetch(joinBase(base, path), options);
++          : await fetch(joinBase(base, path), legacyOptions);
          // Auth and validation errors belong to the selected backend. Only a
          // missing/unavailable route is eligible for the configured fallback.
          if (response.status < 500 && response.status !== 404) return response;
-@@ -48,13 +76,19 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
-       body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+@@ -73,9 +87,9 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
+     const response = await request(url, {
+       method,
+       headers: requestHeaders,
+-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
++      body,
      });
-     const result = await response.json().catch(() => ({}));
--    if (!response.ok) throw Object.assign(new Error(result.error || `请求失败 (${response.status})`), { status: response.status });
-+    if (!response.ok) throw Object.assign(new Error(result.error || result.description || `请求失败 (${response.status})`), { status: response.status, code: result.parameters?.code });
+-    const result = await response.json().catch(() => ({}));
++    const result = response.serverlessPayload ?? await response.json().catch(() => ({}));
+     if (!response.ok) throw Object.assign(new Error(result.error || result.description || `请求失败 (${response.status})`), { status: response.status, code: result.parameters?.code });
      return result;
    }
-
-   async function image(url) {
-     const response = await request(url, { headers: headers() });
-     if (!response.ok) throw Object.assign(new Error('图片加载失败'), { status: response.status });
-+    if (serverlessMode && response.headers.get('content-type')?.includes('application/json')) {
-+      const result = await response.json();
-+      if (!result?.__binary || !result.base64) throw new Error('图片响应无效');
-+      const bytes = Uint8Array.from(atob(result.base64), (char) => char.charCodeAt(0));
-+      return new Blob([bytes], { type: result.mime || 'application/octet-stream' });
-+    }
-     return response.blob();
+diff --git a/tgcloud/endpoints/api.js b/tgcloud/endpoints/api.js
+index 2b761d0..e2a0d9c 100644
+--- a/tgcloud/endpoints/api.js
++++ b/tgcloud/endpoints/api.js
+@@ -51,7 +51,10 @@ async function ensureTaskPayload(input, publisher) {
+   const targetIds = [...new Set((Array.isArray(input?.targetIds) ? input.targetIds : []).map(safeId).filter(Boolean))];
+   if (!targetIds.length) fail('请选择发布目标', 'TARGET_REQUIRED');
+   const placeholders = targetIds.map(() => '?').join(',');
+-  const targets = await db.all(`SELECT id FROM targets WHERE bot_id=? AND can_publish=1 AND id IN (${placeholders})`, publisher.id, ...targetIds);
++  const targets = await db.all(`SELECT id FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${targetIds.map((_, index) => `:target${index}`).join(',')})`, {
++    ':botId': publisher.id,
++    ...Object.fromEntries(targetIds.map((id, index) => [`:target${index}`, id])),
++  });
+   if (targets.length !== targetIds.length) fail('有目标不存在或缺少发布权限', 'TARGET_INVALID');
+   const mediaId = input?.mediaId ? safeId(input.mediaId) : null;
+   if (mediaId && !await db.get('SELECT id FROM media WHERE id=:id', { ':id': mediaId })) fail('媒体不存在', 'MEDIA_NOT_FOUND');
+@@ -68,7 +71,11 @@ async function taskRun(task, publisher, source = 'MANUAL') {
+     ':delta': task.delta_json, ':buttons': task.buttons_json, ':mediaId': task.media_id, ':createdAt': now(),
+   });
+   const runId = Number(run.lastInsertRowid);
+-  const targets = await db.all(`SELECT id,chat_id,title FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${JSON.parse(task.target_ids_json).map(() => '?').join(',')})`, publisher.id, ...JSON.parse(task.target_ids_json));
++  const targetIds = JSON.parse(task.target_ids_json);
++  const targets = await db.all(`SELECT id,chat_id,title FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${targetIds.map((_, index) => `:target${index}`).join(',')})`, {
++    ':botId': publisher.id,
++    ...Object.fromEntries(targetIds.map((id, index) => [`:target${index}`, id])),
++  });
+   for (const target of targets) {
+     await db.run(`INSERT INTO deliveries(run_id,target_id,chat_id,title,status,started_at) VALUES(:runId,:targetId,:chatId,:title,'SENDING',:startedAt)`, {
+       ':runId': runId, ':targetId': target.id, ':chatId': target.chat_id, ':title': target.title, ':startedAt': now(),
+@@ -112,6 +119,11 @@ async function handle(input, account) {
+     return { admin: { id: account.telegram_id, name: account.display_name, username: account.login_username || account.username, canManageBots: Boolean(account.can_manage_bots), canManageAccounts: Boolean(account.can_manage_bots) }, timezone: 'Asia/Shanghai', publishers, publisher: publicPublisher(publisher), targets, tasks };
    }
-
-diff --git a/src/main.js b/src/main.js
-index 7391239..8c1e196 100644
---- a/src/main.js
-+++ b/src/main.js
-@@ -37,7 +37,14 @@ const playerCache = new Map();
- let playerPage = 1;
- let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
- const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
--const client = createApiClient({ initData, getPublisherId: () => selectedPublisherId });
-+const apiRuntime = globalThis.__TGZ_API_CONFIG__ && typeof globalThis.__TGZ_API_CONFIG__ === 'object' ? globalThis.__TGZ_API_CONFIG__ : {};
-+const client = createApiClient({
-+  initData,
-+  getPublisherId: () => selectedPublisherId,
-+  mode: tg?.initData ? 'serverless' : 'railway',
-+  baseUrl: tg?.initData ? (apiRuntime.serverlessBase || '') : (apiRuntime.railwayBase || ''),
-+  fallbackBaseUrl: apiRuntime.fallbackBaseUrl || '',
-+});
- const { api } = client;
- const loadImage = createImageLoader(client.image);
- const draftKey = () => `tgzhushou:draft:${selectedPublisherId || 'none'}:v2`;
-@@ -78,9 +85,7 @@ async function loadRailBotAvatars() {
-   for (const button of document.querySelectorAll('#railBots .rail-bot')) {
-     try {
-       const botId = button.dataset.botId;
--      const response = await fetch(`/api/chat/bot-avatars/${encodeURIComponent(botId)}`, { headers:{ 'x-telegram-init-data':initData, 'x-publisher-id':botId } });
--      if (!response.ok) throw new Error('Bot avatar unavailable');
--      const url = URL.createObjectURL(await response.blob());
-+      const url = URL.createObjectURL(await client.image(`/chat/bot-avatars/${encodeURIComponent(botId)}`));
-       if (!button.isConnected) { URL.revokeObjectURL(url); continue; }
-       const img = document.createElement('img'); img.alt = ''; img.onload = img.onerror = () => { if (!img.naturalWidth) img.remove(); URL.revokeObjectURL(url); };
-       img.src = url; button.append(img);
-@@ -123,7 +128,7 @@ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hi
- <div class="card"><div class="section-title"><h3>私信用户</h3><button id="openPlayers" class="quiet">选择用户</button></div><p id="selectedPlayersHint" class="muted">尚未选择用户</p><p class="hint">使用当前文案和自定义表情，发送给用户页中选中的用户。</p></div>
- <details id="previewPanel" class="card"><summary>消息预览</summary><div id="preview" class="message-preview"></div><p class="hint">此处是本地排版预览；专属表情最终以 Telegram 客户端实际渲染为准。</p></details>
- <div class="actions"><button id="save" class="secondary">保存</button><button id="send" class="primary">保存并立即发布</button><button id="sendBroadcast" class="primary">群发给用户</button><button id="activate" class="primary" hidden>保存并启用定时</button></div><p class="hint center">编辑内容自动暂存于当前设备；Token 不存入浏览器。</p></section>
--<section id="players" class="page" hidden><div class="section-title"><div><h2>用户</h2><p>选择用户后，从编写页发送私信。</p></div></div><div class="wrap-actions user-actions"><button id="syncPlayers" class="quiet">同步用户</button><button id="importPlayers" class="quiet">导入 WPS CSV</button><input id="playerCsv" type="file" accept=".csv,text/csv" hidden></div>
-+<section id="players" class="page" hidden><div class="section-title"><div><h2>用户</h2><p>当前迁移不包含玩家名单和同步功能。</p></div></div><div class="wrap-actions user-actions"><button id="syncPlayers" class="quiet" hidden>同步用户</button><button id="importPlayers" class="quiet" hidden>导入 WPS CSV</button><input id="playerCsv" type="file" accept=".csv,text/csv" hidden></div>
- <details id="selectedPanel" class="card"><summary id="playerSelectionCount">已选用户 · 0 人</summary><button id="clearPlayers" class="quiet">清空选择</button><div id="selectedPlayerList" class="user-scroll"></div></details>
- <details id="usersPanel" class="card"><summary>用户名单 <span id="userTotal" class="muted"></span></summary><div class="inline"><input id="playerSearch" aria-label="搜索用户" placeholder="搜索 ID、昵称或用户名"><button id="refreshPlayers" class="quiet">搜索</button></div><button id="selectAllPlayers" class="quiet">全选全部有效用户</button><p class="hint">最近互动取自已有会话记录；名单更新时间不视为聊天时间。用户删除接口尚未接入，取消选择不会删除用户。</p><div id="playerList" class="check-list user-scroll"></div><div class="wrap-actions"><button id="prevPlayers" class="quiet">上一页</button><button id="nextPlayers" class="quiet">下一页</button></div><p id="playerStats" class="hint"></p></details>
- <details id="broadcastPanel" class="card"><summary>私信记录</summary><button id="refreshBroadcasts" class="quiet">刷新</button><div id="broadcastList"></div></details></section>
-@@ -262,7 +267,7 @@ async function loadConversations(more=false) {
- $('chatMore').onclick=event=>action(()=>loadConversations(true),event.currentTarget);
- $('chatConversations').onclick=event=>action(async()=>{const id=event.target.closest('[data-chat-id]')?.dataset.chatId;if(!id)return;if($('chatSend').disabled)throw new Error('消息正在发送，请稍后切换会话');chatRows=[];$('chatMessages').innerHTML='<p class="chat-empty">正在加载消息…</p>';activeChat=conversationRows.find(c=>c.chat_id===id);if(!activeChat)return;$('chatTitle').textContent=activeChat.title;$('chatComposer').hidden=false;await ui.load('chat',loadChat);});
- $('chatBack').onclick=()=>{activeChat=null;ui.chat(null);$('chatConversations').querySelector('.chat-conversation.selected')?.classList.remove('selected');$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';action(loadConversations);};
--$('chatMessages').onclick=event=>action(async()=>{const reply=event.target.dataset.reply, file=event.target.dataset.file, manage=event.target.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReplyText').textContent=`回复 #${reply}`;chatQuill.root.focus();}if(manage){await openSent('chat',manage,'manage');$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file){const response=await fetch(`/api/chat/files/${file}`,{headers:{'x-telegram-init-data':initData,...(selectedPublisherId?{'x-publisher-id':selectedPublisherId}:{})}});if(!response.ok)throw new Error('附件读取失败');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);}},event.target);
-+$('chatMessages').onclick=event=>action(async()=>{const reply=event.target.dataset.reply, file=event.target.dataset.file, manage=event.target.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReplyText').textContent=`回复 #${reply}`;chatQuill.root.focus();}if(manage){await openSent('chat',manage,'manage');$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file){const blob=await client.image(`/chat/files/${file}`),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);}},event.target);
- $('cancelChatReply').onclick=()=>{chatReply=null;$('chatReply').hidden=true;chatQuill.root.focus();};
- $('chatSend').onclick=event=>action(async()=>{if(!activeChat)throw new Error('请选择会话');$('chatSendStatus').textContent='发送中…';try{await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/send`,'POST',{delta:chatQuill.getContents(),buttons:chatButtons,mediaId:chatMedia?.id,replyTo:chatReply});chatQuill.setText('');chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatFile').value='';$('chatSendStatus').textContent='已发送';await loadChat();await loadConversations();}catch(error){$('chatSendStatus').textContent=`发送失败或结果待核实：${error.message}`;throw error;}},event.currentTarget);
- async function loadInboxStatus(){if(!data?.publisher)return;try{const s=await api('/inbox/status');const external=s.status==='EXTERNAL';$('inboxStatus').textContent=external?'已有外部 webhook；不会覆盖，当前无法接收新消息':s.status==='READY'?'可正常接收新消息':s.status==='AVAILABLE'?'尚未启用收消息':s.status==='NO_PUBLIC_URL'?'需要配置 PUBLIC_URL':'收消息状态：'+s.status;$('inboxStatus').hidden=false;$('inboxStatus').className='hint inbox-status '+(s.status==='READY'?'is-ready':s.status==='AVAILABLE'?'is-available':external?'is-warning':'is-error');$('enableInbox').hidden=data?.admin?.canManageBots!==true||(!external&&s.status!=='AVAILABLE'&&s.status!=='READY');$('enableInbox').dataset.takeover=external?'true':'false';$('enableInbox').dataset.disable=s.status==='READY'?'true':'false';$('enableInbox').textContent=s.status==='READY'?'关闭收消息':external?'接管到当前服务器':'启用收消息';}catch(error){$('inboxStatus').hidden=false;$('inboxStatus').textContent=`状态检查失败：${error.message}`;$('inboxStatus').className='hint inbox-status is-error';$('enableInbox').hidden=true;}}
-@@ -565,7 +570,7 @@ $('assetPacks').onclick=event=>{const i=event.target.dataset.assetPack;if(i===un
- function openAssetPicker(target){if(target==='chat'&&!activeChat)target='body';const context=assetIntent;changeTab(target==='chat'?'chat':'editor');openPicker(target,$(target==='chat'?'chatEmoji':'bodyEmoji'));if(context)finishAssetIntent(false);}
- $('openAssetEditor').onclick=()=>changeTab('editor');$('openAssetEmoji').onclick=()=>{if(assetIntent)openAssetPicker(assetIntent.source==='chat'?'chat':'body');else openPicker('asset-manage');$('packSettings').open=true;};
- function populateTargets(selected = []) { $('targetChecks').innerHTML=data.targets.map(t=>`<label class="check"><input type="checkbox" name="target" value="${t.id}" ${selected.includes(t.id)?'checked':''} ${t.can_publish?'':'disabled'}><span>${esc(t.title)}<small>${esc(t.last_error || t.chat_id)}</small></span></label>`).join('')||'<p class="muted">请先在「设置」中添加群或频道。</p>'; }
--async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=Object.assign({publishers:[],targets:[],admin:{}},result||{});selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=data.admin?`${data.admin.name||'管理账号'} · ID ${data.admin.id||'—'}`:'未登录';ui.account(data);action(loadAdminAccounts); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length||(!initData&&publisherChanging); renderRailPublisher(); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
-+async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=Object.assign({publishers:[],targets:[],admin:{}},result||{});selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=data.admin?`${data.admin.name||'管理账号'} · ID ${data.admin.id||'—'}`:'未登录';ui.account(data);if(!initData)action(loadAdminAccounts);else $('accountManagement').hidden=true; $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length||(!initData&&publisherChanging); renderRailPublisher(); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
- function renderRailPublisher() {
-   const rail=$('railBots');if(!rail)return;
-   rail.querySelector('.rail-bot')?.remove();
-@@ -593,7 +598,6 @@ async function switchPublisher(id) {
-   let draft; try { draft=JSON.parse(localStorage.getItem(draftKey())||'null'); } catch { draft=null; }
-   await fill(draft||{});
-   await loadPlayers(); await loadRuns();
--  if (data.publisher) await loadFfaStatus();
-   await loadConversations();await loadInboxStatus();
-   }finally{publisherChanging=false;if(!initData)$('publisherSelect').disabled=!data?.publishers?.length;}
- }
-@@ -671,7 +675,7 @@ $('taskList').onclick = event => action(async () => {
-   }
-   if (b.dataset.sendTask) await sendTask(Number(b.dataset.sendTask));
- }, event.target);
--$('saveFfaToken').onclick = event => action(async()=>{const context=requirePlayerContext();await api('/ffa/token','POST',{token:$('ffaToken').value});if(!currentPlayerContext(context))return;$('ffaToken').value='';await loadFfaStatus();toast('当前机器人的用户源已连接');},event.currentTarget);
-+$('saveFfaToken').onclick = event => action(async()=>{throw new Error('玩家同步功能已停用');},event.currentTarget);
- $('savePublisher').onclick = event => action(async()=>{const result=await api('/publisher','POST',{token:$('token').value});$('token').value='';await switchPublisher(result.id);toast('发布机器人已验证并保存');},event.currentTarget);
- $('browserLogout').hidden=false;
- $('browserLogout').onclick=async()=>{await fetch('/auth/logout',{method:'POST'});location.reload();};
-@@ -692,7 +696,8 @@ $('runList').onclick = event => action(async()=>{const id=event.target.dataset.r
- $('runList').addEventListener('toggle',event=>{const details=event.target.closest('details[data-run]');if(details)details.querySelector('[data-expand-label]').textContent=details.open?'收起详情':'展开详情';},true);
- $('refreshTasks').onclick=event=>action(()=>ui.load('tasks',refresh),event.currentTarget);$('refreshLogs').onclick=event=>action(()=>ui.load('logs',async()=>{await loadRuns();await loadBroadcasts();}),event.currentTarget); updatePlayerSelection(); async function loadFfaStatus(){const context=playerContext(),r=await api('/ffa');if(!currentPlayerContext(context))return;$('ffaStatus').textContent=r.configured?`已配置：${r.baseUrl}`:`未配置（接口：${r.baseUrl}）`;}
- $('editor').addEventListener('input', event => { if (!event.target.closest('#message, #buttons')) remember(); });$('kind').onchange=()=>{scheduleFields();remember();};
--async function boot() { try{const token=location.hash.match(/^#login=([A-Za-z0-9_-]+)$/)?.[1];if(token){const response=await fetch('/auth/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});history.replaceState(null,'',location.pathname);if(!response.ok)throw new Error('登录链接已过期或已使用');}await refresh();if(data.publisher)await loadFfaStatus();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){$('locked').hidden=false;const authMessage=error?.status===401||error?.status===403?'账号或密码错误，请重试。':(error?.message==='未授权'?'登录状态已失效，请重新登录。':'登录页暂时无法加载，请稍后重试。');$('authError').textContent=authMessage;} }
-+$('ffaCard').hidden = true;
-+async function boot() { try{const token=location.hash.match(/^#login=([A-Za-z0-9_-]+)$/)?.[1];if(token){const response=await fetch('/auth/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});history.replaceState(null,'',location.pathname);if(!response.ok)throw new Error('登录链接已过期或已使用');}await refresh();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){$('locked').hidden=false;const authMessage=error?.status===401||error?.status===403?'账号或密码错误，请重试。':(error?.message==='未授权'?'登录状态已失效，请重新登录。':'登录页暂时无法加载，请稍后重试。');$('authError').textContent=authMessage;} }
- boot();
-
- let viewportFrame;
-diff --git a/tgcloud/handlers/message.js b/tgcloud/handlers/message.js
-index 2935c25..11ad70e 100644
---- a/tgcloud/handlers/message.js
-+++ b/tgcloud/handlers/message.js
-@@ -1,15 +1,39 @@
--import { api } from 'sdk';
-+import { api, db } from 'sdk';
-+import { now } from '../lib/serverless.js';
+ 
++  if (path === 'bots' && method === 'GET') {
++    if (!account.can_manage_bots) fail('仅管理员可查看机器人配置', 'FORBIDDEN');
++    return db.all("SELECT id,username,role,updated_at FROM publishers ORDER BY role,username");
++  }
 +
-+function messageText(message) {
-+  return String(message?.text || message?.caption || '').slice(0, 4096);
-+}
-
--/**
-- * Minimal migration smoke handler. Business handlers are added incrementally;
-- * the existing Express webhook remains the production rollback path.
-- */
- export default async function messageHandler(message) {
--  if (!message?.chat?.id || !message?.text) return;
--  if (message.text === '/serverless') {
--    await api.sendMessage({
--      chat_id: message.chat.id,
--      text: 'Telegram Serverless migration endpoint is available for testing.',
--    });
-+  const chatId = message?.chat?.id;
-+  if (chatId == null) return;
-+  const bot = await api.getMe();
-+  const botId = String(bot.id);
-+  const text = messageText(message);
-+  const timestamp = Number(message.date || Math.floor(now() / 1000)) * 1000;
-+  await db.run(`INSERT INTO conversations(bot_id,chat_id,chat_type,title,username,last_message_id,last_message_text,last_message_at,unread_count,updated_at)
-+    VALUES(:botId,:chatId,:chatType,:title,:username,:messageId,:text,:at,1,:updatedAt)
-+    ON CONFLICT(bot_id,chat_id) DO UPDATE SET title=excluded.title,username=excluded.username,
-+      last_message_id=excluded.last_message_id,last_message_text=excluded.last_message_text,
-+      last_message_at=excluded.last_message_at,unread_count=conversations.unread_count+1,updated_at=excluded.updated_at`, {
-+    ':botId': botId,
-+    ':chatId': String(chatId),
-+    ':chatType': String(message.chat?.type || ''),
-+    ':title': String(message.chat?.title || [message.from?.first_name, message.from?.last_name].filter(Boolean).join(' ') || ''),
-+    ':username': String(message.chat?.username || message.from?.username || ''),
-+    ':messageId': String(message.message_id || ''),
-+    ':text': text,
-+    ':at': timestamp,
-+    ':updatedAt': now(),
-+  });
-+  await db.run(`INSERT OR IGNORE INTO chat_messages(bot_id,chat_id,telegram_message_id,direction,from_id,text,sent_at,status)
-+    VALUES(:botId,:chatId,:messageId,'IN',:fromId,:text,:sentAt,'SUCCESS')`, {
-+    ':botId': botId, ':chatId': String(chatId), ':messageId': String(message.message_id || ''),
-+    ':fromId': String(message.from?.id || ''), ':text': text, ':sentAt': timestamp,
-+  });
-+  await db.run('INSERT INTO chat_events(bot_id,chat_id,created_at) VALUES(:botId,:chatId,:createdAt)', { ':botId': botId, ':chatId': String(chatId), ':createdAt': now() });
-+  if (/^\/start(?:@\w+)?(?:\s|$)/.test(text)) {
-+    await api.sendMessage({ chat_id: chatId, text: '欢迎使用飞机助手。请打开下方 Mini App 进入工作台。' });
-   }
+   if (path === 'publisher' && method === 'POST') {
+     if (!account.can_manage_bots) fail('仅管理员可配置机器人', 'FORBIDDEN');
+     const token = String(body.token || '').trim();
+diff --git a/tgcloud/lib/serverless.js b/tgcloud/lib/serverless.js
+index 5f3ae8a..da33444 100644
+--- a/tgcloud/lib/serverless.js
++++ b/tgcloud/lib/serverless.js
+@@ -51,7 +51,8 @@ export async function publisherFor(input, account, { required = true } = {}) {
+     ? await db.all("SELECT id, username, token, role FROM publishers WHERE role='publisher' ORDER BY username")
+     : await db.all(`SELECT p.id, p.username, p.token, p.role FROM publishers p
+       JOIN publisher_permissions pp ON pp.publisher_id=p.id WHERE pp.user_id=:userId ORDER BY p.username`, { ':userId': account.id });
+-  const publisher = (requested && allowed.find((item) => String(item.id) === requested)) || allowed[0] || null;
++  const publisher = requested ? allowed.find((item) => String(item.id) === requested) || null : allowed[0] || null;
++  if (requested && !publisher) fail('当前账号未授权该发布机器人', 'PUBLISHER_FORBIDDEN');
+   if (!publisher && required) fail('请先配置发布机器人', 'PUBLISHER_REQUIRED');
+   return publisher;
  }
-diff --git a/tgcloud/schema.js b/tgcloud/schema.js
-index 4398a0f..84c8d60 100644
---- a/tgcloud/schema.js
-+++ b/tgcloud/schema.js
-@@ -1,4 +1,4 @@
--import { table, integer, text, boolean } from 'sdk/db';
-+import { table, integer, text, boolean, uniqueIndex } from 'sdk/db';
-
- // Rebuilt schema for Serverless. Existing PostgreSQL data is intentionally not copied.
- export const settings = table('settings', {
-@@ -27,6 +27,7 @@ export const publishers = table('publishers', {
-   id: text('id').primaryKey(),
-   username: text('username').notNull(),
-   token: text('token').notNull(),
-+  role: text('role').notNull().default('publisher'),
-   createdAt: integer('created_at').notNull(),
-   updatedAt: integer('updated_at').notNull(),
- });
-@@ -48,7 +49,9 @@ export const targets = table('targets', {
-   username: text('username'),
-   canPublish: boolean('can_publish').notNull().default(false),
-   lastError: text('last_error'),
--});
-+}, (t) => ({
-+  botChat: uniqueIndex('uq_targets_bot_chat').on(t.botId, t.chatId),
-+}));
-
- export const media = table('media', {
-   id: integer('id').primaryKey({ autoIncrement: true }),
-@@ -157,7 +160,9 @@ export const conversations = table('conversations', {
-   unreadCount: integer('unread_count').notNull().default(0),
-   lastReadMessageId: text('last_read_message_id'),
-   updatedAt: integer('updated_at').notNull(),
--});
-+}, (t) => ({
-+  botChat: uniqueIndex('uq_conversations_bot_chat').on(t.botId, t.chatId),
-+}));
-
- export const chatMessages = table('chat_messages', {
-   id: integer('id').primaryKey({ autoIncrement: true }),
