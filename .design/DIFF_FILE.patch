@@ -1,6 +1,6 @@
 --- .design/MODIFIED_FILE.baseline-mini-ios-glass.css
 +++ src/mini-ios-glass.css
-@@ -1,94 +1,402 @@
+@@ -1,94 +1,462 @@
 -/* Mini App iOS glass finish. The existing pink/blue canvas remains the source of truth. */
 +/* Apple iOS Mini App pass: flat system surfaces, grouped content, native hierarchy. */
  html[data-surface="mini"] {
@@ -487,3 +487,63 @@
 +  html[data-surface="mini"] .mini-topbar { padding-left:8px; padding-right:8px; }
 +  html[data-surface="mini"] .mini-topbar .publisher-switch { max-width:45%; }
 +}
++
++/* Login screen / iOS grouped surface. The login DOM is outside .mini-shell. */
++html[data-surface="mini"] body:has(#locked:not([hidden])) {
++  min-height:100dvh;
++  overflow-x:hidden;
++  background:var(--ios-bg) !important;
++  color:var(--ios-label);
++  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","PingFang SC","Helvetica Neue",sans-serif;
++}
++html[data-surface="mini"] body:has(#locked:not([hidden]))::before { display:none; }
++html[data-surface="mini"] #locked.login-shell {
++  box-sizing:border-box;
++  min-height:100dvh;
++  margin:0;
++  padding:calc(24px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
++  place-items:center;
++  align-content:center;
++}
++html[data-surface="mini"] #locked .login-card {
++  box-sizing:border-box;
++  width:min(100%,420px);
++  padding:24px 20px;
++  border:0;
++  border-radius:14px;
++  background:var(--ios-grouped);
++  box-shadow:0 0 0 1px rgba(60,60,67,.06);
++  backdrop-filter:none;
++  -webkit-backdrop-filter:none;
++}
++html[data-surface="mini"] #locked .login-brand { margin-bottom:24px; gap:12px; color:var(--ios-label); }
++html[data-surface="mini"] #locked .login-brand-mark {
++  width:44px; height:44px; border:0; border-radius:12px;
++  background:var(--ios-blue); color:#fff; box-shadow:none;
++}
++html[data-surface="mini"] #locked .login-brand-mark svg { width:24px; height:24px; }
++html[data-surface="mini"] #locked .login-brand strong { font-size:20px; line-height:24px; font-weight:700; }
++html[data-surface="mini"] #locked .login-brand small { color:var(--ios-tertiary-label); font-size:13px; }
++html[data-surface="mini"] #locked .login-card h2 { color:var(--ios-label); font-size:28px; line-height:34px; letter-spacing:-.03em; }
++html[data-surface="mini"] #locked .login-intro { margin:8px 0 24px; color:var(--ios-secondary-label); font-size:15px; line-height:21px; }
++html[data-surface="mini"] #locked .login-form { gap:16px; }
++html[data-surface="mini"] #locked .login-form label { gap:8px; color:var(--ios-secondary-label); font-size:15px; line-height:21px; }
++html[data-surface="mini"] #locked .login-field {
++  min-height:44px; padding:0 12px; gap:8px; border:1px solid transparent; border-radius:10px;
++  background:var(--ios-secondary); box-shadow:none;
++}
++html[data-surface="mini"] #locked .login-field > span { color:var(--ios-tertiary-label); font-size:17px; }
++html[data-surface="mini"] #locked .login-field:focus-within {
++  border-color:var(--ios-blue); background:var(--ios-grouped); box-shadow:0 0 0 3px rgba(0,122,255,.16);
++}
++html[data-surface="mini"] #locked .login-field input { height:42px; color:var(--ios-label); font-size:17px; }
++html[data-surface="mini"] #locked .login-field button { min-width:44px; min-height:44px; color:var(--ios-blue); }
++html[data-surface="mini"] #locked .login-submit {
++  min-height:44px; margin-top:4px; border:0; border-radius:10px;
++  background:var(--ios-blue); color:#fff; box-shadow:none; font-size:17px; font-weight:600;
++}
++html[data-surface="mini"] #locked .login-submit:active { background:var(--ios-blue-pressed); transform:none; filter:none; }
++html[data-surface="mini"] #locked .login-error { min-height:21px; margin:12px 0 0; color:var(--ios-red); font-size:15px; line-height:21px; }
++html[data-surface="mini"] #locked .login-hint { margin:16px 0 0; color:var(--ios-tertiary-label); font-size:13px; line-height:18px; }
++html[data-surface="mini"] #locked .login-hint code { background:var(--ios-secondary); color:var(--ios-secondary-label); }
++html[data-surface="mini"] #locked .login-footer { bottom:calc(12px + env(safe-area-inset-bottom)); color:var(--ios-tertiary-label); }

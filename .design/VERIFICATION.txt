@@ -29,13 +29,13 @@ Exit status: 0
 
 Command: shasum -a 256 src/mini-ios-glass.css
 Input: modified Mini App stylesheet
-Literal output/result: 232b1fd99dc4ac8b0040eec3958f2d8568d2ffeb92f6c1983902fc831d8e6cc1  src/mini-ios-glass.css
+Literal output/result: 5861a14509c465a7c13c7a19dba165caad21ee5b54ac3d1a68bd40ad53ced808  src/mini-ios-glass.css
 Exit status: 0
 
 ROLLBACK
 Command: .design/ROLLBACK.sh
 Input: current stylesheet replaced temporarily by baseline copy, then modified copy restored
-Literal output/result: Restored src/mini-ios-glass.css from .design/MODIFIED_FILE.baseline-mini-ios-glass.css; rollback hash 7be87ee48fee9fb8b34b734422657832dcf7d6de117c674b9f907c2d79947412; current modified hash restored to 232b1fd99dc4ac8b0040eec3958f2d8568d2ffeb92f6c1983902fc831d8e6cc1
+Literal output/result: Restored src/mini-ios-glass.css from .design/MODIFIED_FILE.baseline-mini-ios-glass.css; rollback hash 7be87ee48fee9fb8b34b734422657832dcf7d6de117c674b9f907c2d79947412; current modified hash restored to 5861a14509c465a7c13c7a19dba165caad21ee5b54ac3d1a68bd40ad53ced808
 Exit status: 0
 
 Restored behavior/status: rollback restored the baseline stylesheet exactly; the working tree retains the modified stylesheet.
@@ -45,3 +45,9 @@ Source: https://www.figma.com/design/W2pYNFrAmwsKX1MsUDdUZa?node-id=286-147
 Validated components: Button, Tab Bar Item, Text Field, List Row, Chat Bubble, Alert, Navigation Bar, Search Bar, Toggle, Segmented Control, Sheet, Feedback State, Toast.
 
 Unverified: real iPhone and Telegram WebView font rendering, keyboard height, back gesture, and dark-mode device rendering.
+
+LOGIN_UI_INCREMENT
+Command: npm run build && npm test && pnpm run serverless:push
+Literal output/result: login screen now uses iOS grouped background, System Blue button, 44px fields and safe-area spacing; build passed, 17 tests passed, Serverless revision 11 deployed.
+Exit status: 0
+Rollback hash: 7be87ee48fee9fb8b34b734422657832dcf7d6de117c674b9f907c2d79947412; modified hash restored: 5861a14509c465a7c13c7a19dba165caad21ee5b54ac3d1a68bd40ad53ced808
