@@ -44,3 +44,25 @@ Exit status: 0
 
 Modified artifact hash: f089fa0503c3725c53a958c77e68d64e6088c6b9510d57d5a848ba1afacfc952
 Restored behavior/status: rollback was tested on a copy only; current source remains modified on the migration branch. Old Express/PostgreSQL remains available as rollback baseline. No CLI Token was stored, no Serverless deployment was attempted, and no Railway production resource was changed.
+
+SERVERLESS DEPLOYMENT
+Command: pnpm exec tgcloud push
+Input: tgcloud schema, smoke handler, health endpoint, current dist/
+Literal output/result: deployed 4 changes; static 9 files uploaded; URL https://app8899848334.tgcloud.ai/
+Exit status: 0
+Command: pnpm exec tgcloud migrate
+Input: new empty Serverless database
+Literal output/result: Migration complete. Applied: 18, skipped: 0.
+Exit status: 0
+Command: pnpm exec tgcloud status
+Input: linked app8899848334
+Literal output/result: Local revision 1; Webhook in sync; working directory clean; static up to date
+Exit status: 0
+Command: pnpm exec tgcloud run endpoints/health '{}'
+Input: empty endpoint payload
+Literal output/result: {ok:true,service:'tgzhushou-serverless'}
+Exit status: 0
+Command: curl -fsSI https://app8899848334.tgcloud.ai/
+Input: deployed static root
+Literal output/result: HTTP/2 200
+Exit status: 0

@@ -63,3 +63,10 @@
 ```
 
 未注入配置时，前端保持原来的相对 `/api` 行为。配置 Serverless 主地址后，网络错误、5xx 或 404 会回退到 Railway；401/403 等鉴权错误不会静默切换。
+
+## 当前部署状态
+
+- 已通过 CLI 绑定 `app8899848334`。
+- 已部署静态前端、最小 message handler、health endpoint 和 18 张新表 schema。
+- Serverless 静态地址：`https://app8899848334.tgcloud.ai/`
+- 旧 Railway/Express/PostgreSQL 仍未停用；当前未迁移旧数据。
