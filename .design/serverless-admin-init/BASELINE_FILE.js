@@ -4,7 +4,7 @@ export async function requireTelegramUser(ctx) {
   const user = ctx?.initData?.user;
   if (!user?.id) throw new EndpointError('需要从 Telegram Mini App 打开', { code: 'TELEGRAM_INIT_DATA_REQUIRED' });
   const telegramId = String(user.id);
-  const now = Date.now();
+  const now = Math.floor(Date.now() / 1000);
   await db.run(`INSERT INTO users (telegram_id, username, display_name, created_at, updated_at)
     VALUES (:telegramId, :username, :displayName, :now, :now)
     ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username, display_name=excluded.display_name, updated_at=excluded.updated_at`, {

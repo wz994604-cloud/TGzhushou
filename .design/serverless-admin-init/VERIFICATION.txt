@@ -1,0 +1,41 @@
+VERIFICATION
+
+Changed branch/field: feature/serverless-migration; tgcloud/lib/auth.js user updated_at uses milliseconds, matching the existing schema and seed.
+
+Artifacts:
+- MODIFIED_FILE: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/serverless-admin-init/MODIFIED_FILE.js
+- DIFF_FILE: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/serverless-admin-init/DIFF_FILE.patch
+- VERIFICATION.txt: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/serverless-admin-init/VERIFICATION.txt
+- ROLLBACK.sh: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/serverless-admin-init/ROLLBACK.sh
+
+BASELINE
+Command: node --check .design/serverless-admin-init/BASELINE_FILE.js
+Input: original tgcloud/lib/auth.js from HEAD; SHA-256 76ffeb6341b2d24e80fc0fde3b4cc7b89ff3929305e1b5f22ee7f2b4db5301dc
+Literal output/result: no output (syntax valid)
+Exit status: 0
+
+MODIFIED
+Command: node --check tgcloud/lib/auth.js
+Input: modified auth.js; SHA-256 204346ddb816d40a36209965452ee1c568c6a03cf5b64f1eac3ce5c35ce47956
+Literal output/result: no output (syntax valid)
+Exit status: 0
+Command: pnpm exec tgcloud run endpoints/bootstrap '{}' --ctx '{ initData: { user: { id: 8707981004, first_name: "管理员" } } }'
+Input: local test context for newly seeded administrator
+Literal output/result: admin id 8707981004; username owner; canManageBots true; canManageAccounts true; publishers empty; publisher null; targets empty; tasks empty
+Exit status: 0
+Command: pnpm exec tgcloud push tgcloud/lib/auth.js
+Input: modified auth.js only
+Literal output/result: tgcloud/lib/auth.js deployed; local revision 4
+Exit status: 0
+Command: pnpm exec tgcloud status
+Input: linked app8899848334
+Literal output/result: Webhook in sync; working directory clean; static up to date (9 files)
+Exit status: 0
+
+ROLLBACK
+Command: .design/serverless-admin-init/ROLLBACK.sh .design/serverless-admin-init/rollback-test/auth.js .design/serverless-admin-init/BASELINE_FILE.js
+Input: separate copy of modified auth.js
+Literal output/result: 76ffeb6341b2d24e80fc0fde3b4cc7b89ff3929305e1b5f22ee7f2b4db5301dc .design/serverless-admin-init/rollback-test/auth.js
+Exit status: 0
+
+Restored behavior/status: rollback copy equals original hash; real tgcloud/lib/auth.js remains modified. One-time seedAdminOnce.js was executed locally via tgcloud run, removed immediately afterward, and was never pushed to the Serverless module space. Existing Express/PostgreSQL/Railway remained untouched.
