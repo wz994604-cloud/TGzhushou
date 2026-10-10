@@ -5,7 +5,7 @@ const requiredTables = [
   'settings', 'users', 'administrators', 'publishers', 'publisherPermissions',
   'targets', 'media', 'tasks', 'runs', 'deliveries', 'botPlayers',
   'broadcasts', 'broadcastDeliveries', 'conversations', 'chatMessages',
-  'chatEvents', 'publisherInbox', 'sentActions'
+  'chatEvents', 'publisherInbox', 'sentActions', 'stickerPacks', 'stickerPackItems', 'browserLinks', 'browserSessions', 'sentChanges'
 ];
 const missing = requiredTables.filter(name => !new RegExp(`export const ${name}\\s*=\\s*table\\(`).test(schema));
 if (missing.length) {

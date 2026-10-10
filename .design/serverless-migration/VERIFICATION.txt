@@ -66,3 +66,13 @@ Command: curl -fsSI https://app8899848334.tgcloud.ai/
 Input: deployed static root
 Literal output/result: HTTP/2 200
 Exit status: 0
+
+INCREMENTAL BUSINESS SURFACE
+Command: pnpm exec tgcloud push tgcloud/lib/auth.js tgcloud/endpoints/bootstrap.js
+Input: verified Telegram initData endpoint surface
+Literal output/result: deployed auth helper and bootstrap endpoint
+Exit status: 0
+Command: pnpm exec tgcloud run endpoints/bootstrap '{}' --ctx '{ initData: { user: { id: 1 } } }'
+Input: non-admin test identity
+Literal output/result: EndpointError ADMIN_NOT_CONFIGURED (expected until an administrator row is seeded)
+Exit status: 0

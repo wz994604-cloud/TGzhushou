@@ -203,3 +203,49 @@ export const sentActions = table('sent_actions', {
   payloadJson: text('payload_json').notNull().default('{}'),
   createdAt: integer('created_at').notNull(),
 });
+
+export const stickerPacks = table('sticker_packs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  botId: text('bot_id').notNull(),
+  name: text('name').notNull(),
+  title: text('title').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const stickerPackItems = table('sticker_pack_items', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  packId: integer('pack_id').notNull(),
+  emojiId: text('emoji_id').notNull(),
+  alt: text('alt').notNull(),
+  thumbnailId: text('thumbnail_id'),
+  position: integer('position').notNull(),
+});
+
+export const browserLinks = table('browser_links', {
+  tokenHash: text('token_hash').primaryKey(),
+  adminId: text('admin_id').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+});
+
+export const browserSessions = table('browser_sessions', {
+  sessionHash: text('session_hash').primaryKey(),
+  adminId: text('admin_id').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+  lastSeen: integer('last_seen').notNull(),
+  loginUsername: text('login_username').notNull().default(''),
+});
+
+export const sentChanges = table('sent_changes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind').notNull(),
+  deliveryId: integer('delivery_id').notNull(),
+  deleted: boolean('deleted').notNull().default(false),
+  deltaJson: text('delta_json'),
+  buttonsJson: text('buttons_json'),
+  mediaId: integer('media_id'),
+  state: text('state').notNull(),
+  error: text('error'),
+  updatedAt: integer('updated_at').notNull(),
+});
