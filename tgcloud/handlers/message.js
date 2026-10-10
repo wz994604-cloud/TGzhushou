@@ -34,6 +34,10 @@ export default async function messageHandler(message) {
   });
   await db.run('INSERT INTO chat_events(bot_id,chat_id,created_at) VALUES(:botId,:chatId,:createdAt)', { ':botId': botId, ':chatId': String(chatId), ':createdAt': now() });
   if (/^\/start(?:@\w+)?(?:\s|$)/.test(text)) {
-    await api.sendMessage({ chat_id: chatId, text: '欢迎使用飞机助手。请打开下方 Mini App 进入工作台。' });
+    await api.sendMessage({
+      chat_id: chatId,
+      text: '欢迎使用飞机助手。点击下方按钮打开工作台。',
+      reply_markup: { inline_keyboard: [[{ text: '打开飞机助手', web_app: { url: 'https://app8899848334.tgcloud.ai/' } }]] },
+    });
   }
 }
