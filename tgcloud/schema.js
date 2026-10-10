@@ -1,4 +1,4 @@
-import { table, integer, text, boolean } from 'sdk/db';
+import { table, integer, text, boolean, uniqueIndex } from 'sdk/db';
 
 // Rebuilt schema for Serverless. Existing PostgreSQL data is intentionally not copied.
 export const settings = table('settings', {
@@ -27,6 +27,7 @@ export const publishers = table('publishers', {
   id: text('id').primaryKey(),
   username: text('username').notNull(),
   token: text('token').notNull(),
+  role: text('role').notNull().default('publisher'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
@@ -48,7 +49,9 @@ export const targets = table('targets', {
   username: text('username'),
   canPublish: boolean('can_publish').notNull().default(false),
   lastError: text('last_error'),
-});
+}, (t) => ({
+  botChat: uniqueIndex('uq_targets_bot_chat').on(t.botId, t.chatId),
+}));
 
 export const media = table('media', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -157,7 +160,9 @@ export const conversations = table('conversations', {
   unreadCount: integer('unread_count').notNull().default(0),
   lastReadMessageId: text('last_read_message_id'),
   updatedAt: integer('updated_at').notNull(),
-});
+}, (t) => ({
+  botChat: uniqueIndex('uq_conversations_bot_chat').on(t.botId, t.chatId),
+}));
 
 export const chatMessages = table('chat_messages', {
   id: integer('id').primaryKey({ autoIncrement: true }),

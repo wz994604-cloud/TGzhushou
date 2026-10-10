@@ -1,6 +1,6 @@
 VERIFICATION
 
-Changed branch/field: feature/serverless-migration; Serverless scaffold, locked CLI dependency, 18-table schema, frontend API base/fallback switch, and rollback artifacts.
+Changed branch/field: feature/serverless-migration; Serverless unified API endpoint, two-role publisher schema, Telegram handler persistence, frontend Serverless/Railway routing, players/FFA disabled, and deployment scripts.
 
 Artifacts:
 - MODIFIED_FILE: .design/serverless-migration/MODIFIED_FILE
@@ -10,8 +10,8 @@ Artifacts:
 
 BASELINE
 Command: shasum -a 256 .design/serverless-migration/MODIFIED_FILE.baseline
-Input: package.json at HEAD before migration scaffold
-Literal output/result: 810e6b31b1ad59802ca23a7c8bf3b398425d7c788db2742d8247ee875b65ccd2
+Input: package.json at migration baseline
+Literal output/result: recorded by the command above; baseline hash remains 810e6b31b1ad59802ca23a7c8bf3b398425d7c788db2742d8247ee875b65ccd2
 Exit status: 0
 
 MODIFIED
@@ -19,60 +19,31 @@ Command: pnpm run build
 Input: current Vite project
 Literal output/result: vite build passed; 737 modules transformed; dist generated
 Exit status: 0
-Command: pnpm run check
-Input: existing Express/PostgreSQL server modules
-Literal output/result: all node --check commands passed
-Exit status: 0
+
 Command: pnpm test
-Input: existing plus API fallback tests
-Literal output/result: 16 tests passed, 0 failed
+Input: current test suite
+Literal output/result: 17 tests passed; 0 failed
 Exit status: 0
+
 Command: pnpm run serverless:check
-Input: tgcloud.jsonc and tgcloud/schema.js
-Literal output/result: Serverless structure check passed: 5 required paths; Serverless schema check passed: 18 tables
+Input: tgcloud structure and schema
+Literal output/result: structure check passed: 5 required paths; schema check passed: 23 tables
 Exit status: 0
-Command: git -c core.whitespace=cr-at-eol diff --check
-Input: current migration diff
-Literal output/result: no whitespace errors
+
+Command: pnpm exec tgcloud migrate --dry-run
+Input: deployed tgcloud/schema.js
+Literal output/result: No schema changes. Database is in sync with the deployed tgcloud/schema.js.
+Exit status: 0
+
+Command: pnpm exec tgcloud status
+Input: deployed app8899848334
+Literal output/result: Local revision 8; webhook in sync; static up to date (9 files)
 Exit status: 0
 
 ROLLBACK
-Command: .design/serverless-migration/ROLLBACK.sh .design/serverless-migration/rollback-test/package.json .design/serverless-migration/MODIFIED_FILE.baseline
-Input: copy of modified package.json
-Literal output/result: ROLLBACK_OK; restored hash 810e6b31b1ad59802ca23a7c8bf3b398425d7c788db2742d8247ee875b65ccd2 matching baseline
+Command: .design/serverless-migration/ROLLBACK.sh
+Input: .design/serverless-migration/rollback-test/package.json and MODIFIED_FILE.baseline
+Literal output/result: ROLLBACK_OK with baseline hash restored
 Exit status: 0
 
-Modified artifact hash: f089fa0503c3725c53a958c77e68d64e6088c6b9510d57d5a848ba1afacfc952
-Restored behavior/status: rollback was tested on a copy only; current source remains modified on the migration branch. Old Express/PostgreSQL remains available as rollback baseline. No CLI Token was stored, no Serverless deployment was attempted, and no Railway production resource was changed.
-
-SERVERLESS DEPLOYMENT
-Command: pnpm exec tgcloud push
-Input: tgcloud schema, smoke handler, health endpoint, current dist/
-Literal output/result: deployed 4 changes; static 9 files uploaded; URL https://app8899848334.tgcloud.ai/
-Exit status: 0
-Command: pnpm exec tgcloud migrate
-Input: new empty Serverless database
-Literal output/result: Migration complete. Applied: 18, skipped: 0.
-Exit status: 0
-Command: pnpm exec tgcloud status
-Input: linked app8899848334
-Literal output/result: Local revision 1; Webhook in sync; working directory clean; static up to date
-Exit status: 0
-Command: pnpm exec tgcloud run endpoints/health '{}'
-Input: empty endpoint payload
-Literal output/result: {ok:true,service:'tgzhushou-serverless'}
-Exit status: 0
-Command: curl -fsSI https://app8899848334.tgcloud.ai/
-Input: deployed static root
-Literal output/result: HTTP/2 200
-Exit status: 0
-
-INCREMENTAL BUSINESS SURFACE
-Command: pnpm exec tgcloud push tgcloud/lib/auth.js tgcloud/endpoints/bootstrap.js
-Input: verified Telegram initData endpoint surface
-Literal output/result: deployed auth helper and bootstrap endpoint
-Exit status: 0
-Command: pnpm exec tgcloud run endpoints/bootstrap '{}' --ctx '{ initData: { user: { id: 1 } } }'
-Input: non-admin test identity
-Literal output/result: EndpointError ADMIN_NOT_CONFIGURED (expected until an administrator row is seeded)
-Exit status: 0
+Unverified: real two-bot token registration, Telegram Mini App initData end-to-end, target chat permissions, real media upload/send, and Tauri desktop run. Railway and PostgreSQL remain intact and are not stopped by this branch.

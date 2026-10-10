@@ -12,7 +12,11 @@
     "serverless:check": "node scripts/serverless-structure-check.mjs && node scripts/serverless-schema-check.mjs",
     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
     "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
-    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
+    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json",
+    "serverless:push": "pnpm run build && tgcloud push",
+    "serverless:migrate": "tgcloud migrate --yes",
+    "serverless:deploy": "pnpm run serverless:push && pnpm run serverless:migrate",
+    "serverless:seed-publishers": "./scripts/serverless-seed-publishers.sh"
   },
   "engines": {
     "node": ">=22"

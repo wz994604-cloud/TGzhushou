@@ -34,3 +34,20 @@ test('API client falls back to Railway when Serverless is unavailable', async ()
     globalThis.fetch = originalFetch;
   }
 });
+
+test('Serverless endpoint base accepts a configured /api suffix', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const client = createApiClient({ mode: 'serverless', baseUrl: 'https://app.example/api', initData: 'signed' });
+    await client.api('/bootstrap');
+    assert.equal(requests[0].url, 'https://app.example/api/api');
+    assert.equal(JSON.parse(requests[0].options.body).route, '/bootstrap');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

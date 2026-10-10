@@ -67,6 +67,8 @@
 ## 当前部署状态
 
 - 已通过 CLI 绑定 `app8899848334`。
-- 已部署静态前端、最小 message handler、health endpoint 和 18 张新表 schema。
+- 已部署静态前端、统一 `api` endpoint、message handler、health endpoint 和 23 张新表 schema。
+- 玩家名单、FFA 配置和玩家同步按确认范围停用，不进入 Serverless 业务迁移。
+- 主机器人与入口机器人通过 `scripts/serverless-seed-publishers.sh` 写入 Serverless；Token 只在本地隐藏输入。
 - Serverless 静态地址：`https://app8899848334.tgcloud.ai/`
 - 旧 Railway/Express/PostgreSQL 仍未停用；当前未迁移旧数据。
