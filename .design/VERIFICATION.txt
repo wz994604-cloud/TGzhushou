@@ -1,37 +1,47 @@
-VERIFICATION
+# Telegram Mini App Apple iOS UI verification
 
-Changed branch/field: Telegram client three-stage shell, context, mobile back path, status surfaces, composer and module layout.
+Changed branch/field: feature/serverless-migration / Telegram Mini App visual layer only.
+Business logic, Telegram API, authentication, bot switching, tasks, publishing, database, and macOS desktop files were not changed by this implementation.
 
 Artifacts:
-- MODIFIED_FILE: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\MODIFIED_FILE.txt
-- DIFF_FILE: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\DIFF_FILE.patch
-- VERIFICATION.txt: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\VERIFICATION.txt
-- ROLLBACK.sh: C:\Users\win11\.codex\worktrees\74e5\TGzhushou\.design\ROLLBACK.sh
+- MODIFIED_FILE: src/mini-ios-glass.css
+- DIFF_FILE: .design/DIFF_FILE.patch
+- VERIFICATION.txt: .design/VERIFICATION.txt
+- ROLLBACK.sh: .design/ROLLBACK.sh
+- BASELINE_COPY: .design/MODIFIED_FILE.baseline-mini-ios-glass.css
 
 BASELINE
-Command: git hash-object .design/MODIFIED_FILE.baseline.css; git hash-object .design/MODIFIED_FILE.baseline.main.js
-Input: HEAD 495b9fe
-Literal output/result: e9da0949d28089aca2ba26e927094d10aa8d17f6; 2f621b91bf42370de90e0d93f83927f9873d3a22
+Command: shasum -a 256 .design/MODIFIED_FILE.baseline-mini-ios-glass.css
+Input: baseline Mini App stylesheet
+Literal output/result: 7be87ee48fee9fb8b34b734422657832dcf7d6de117c674b9f907c2d79947412  .design/MODIFIED_FILE.baseline-mini-ios-glass.css
 Exit status: 0
 
 MODIFIED
-Command: npm run build; npm run check; npm test
-Input: three-stage src/main.js + src/style.css changes
-Literal output/result: build passed; server syntax checks passed; 31 tests passed, 0 failed
+Command: npm run build
+Input: current Vite project
+Literal output/result: vite build succeeded; 737 modules transformed; CSS bundle 145.32 kB; exit 0
 Exit status: 0
-Command: git diff --check
-Input: current three-stage diff
-Literal output/result: no whitespace errors
+
+Command: npm test
+Input: requested test suite
+Literal output/result: 17 tests passed; 0 failed; exit 0
 Exit status: 0
-Command: node C:/Users/win11/.codex/skills/codex-ui-designer-kit/scripts/visual-audit.mjs --url http://127.0.0.1:5174 --name three-stage-shell-pass
-Input: local Vite page (unauthorized login state)
-Literal output/result: desktop/mobile blankRisk=false, horizontalScroll=false, textOverflow=0, smallButtons=0; screenshots and JSON written
+
+Command: shasum -a 256 src/mini-ios-glass.css
+Input: modified Mini App stylesheet
+Literal output/result: 232b1fd99dc4ac8b0040eec3958f2d8568d2ffeb92f6c1983902fc831d8e6cc1  src/mini-ios-glass.css
 Exit status: 0
 
 ROLLBACK
-Command: pwsh -NoProfile -File .design/rollback-test-three-stage/ROLLBACK.ps1 -Target .design/rollback-test-three-stage/style.css -Backup .design/MODIFIED_FILE.baseline.css
-Input: copy of modified src/style.css
-Literal output/result: ROLLBACK_OK; restored hash e9da0949d28089aca2ba26e927094d10aa8d17f6 matching baseline e9da0949d28089aca2ba26e927094d10aa8d17f6
+Command: .design/ROLLBACK.sh
+Input: current stylesheet replaced temporarily by baseline copy, then modified copy restored
+Literal output/result: Restored src/mini-ios-glass.css from .design/MODIFIED_FILE.baseline-mini-ios-glass.css; rollback hash 7be87ee48fee9fb8b34b734422657832dcf7d6de117c674b9f907c2d79947412; current modified hash restored to 232b1fd99dc4ac8b0040eec3958f2d8568d2ffeb92f6c1983902fc831d8e6cc1
 Exit status: 0
 
-Restored behavior/status: rollback copy matches baseline CSS; real src/main.js and src/style.css remain modified. Backend/API/database/auth/scheduler/Quill data model remain unchanged.
+Restored behavior/status: rollback restored the baseline stylesheet exactly; the working tree retains the modified stylesheet.
+
+FIGMA
+Source: https://www.figma.com/design/W2pYNFrAmwsKX1MsUDdUZa?node-id=286-147
+Validated components: Button, Tab Bar Item, Text Field, List Row, Chat Bubble, Alert, Navigation Bar, Search Bar, Toggle, Segmented Control, Sheet, Feedback State, Toast.
+
+Unverified: real iPhone and Telegram WebView font rendering, keyboard height, back gesture, and dark-mode device rendering.
