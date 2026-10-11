@@ -37,7 +37,7 @@ export default async function messageHandler(message) {
     await api.sendMessage({
       chat_id: chatId,
       text: '欢迎使用飞机助手。点击下方按钮打开工作台。',
-      reply_markup: { inline_keyboard: [[{ text: '打开飞机助手', web_app: { url: 'https://app8899848334.tgcloud.ai/' } }]] },
+      reply_markup: { inline_keyboard: [[{ text: '打开飞机助手', web_app: { url: 'https://app8755723722.tgcloud.ai/' } }]] },
     });
   }
 }
