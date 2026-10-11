@@ -41,8 +41,8 @@ const apiRuntime = globalThis.__TGZ_API_CONFIG__ && typeof globalThis.__TGZ_API_
 const client = createApiClient({
   initData,
   getPublisherId: () => selectedPublisherId,
-  mode: tg?.initData ? 'serverless' : 'railway',
-  baseUrl: tg?.initData ? (apiRuntime.serverlessBase || '') : (apiRuntime.railwayBase || ''),
+  mode: tg ? 'serverless' : 'railway',
+  baseUrl: tg ? (apiRuntime.serverlessBase || '') : (apiRuntime.railwayBase || ''),
   fallbackBaseUrl: apiRuntime.fallbackBaseUrl || '',
 });
 const { api } = client;
@@ -697,7 +697,7 @@ $('runList').addEventListener('toggle',event=>{const details=event.target.closes
 $('refreshTasks').onclick=event=>action(()=>ui.load('tasks',refresh),event.currentTarget);$('refreshLogs').onclick=event=>action(()=>ui.load('logs',async()=>{await loadRuns();await loadBroadcasts();}),event.currentTarget); updatePlayerSelection(); async function loadFfaStatus(){const context=playerContext(),r=await api('/ffa');if(!currentPlayerContext(context))return;$('ffaStatus').textContent=r.configured?`已配置：${r.baseUrl}`:`未配置（接口：${r.baseUrl}）`;}
 $('editor').addEventListener('input', event => { if (!event.target.closest('#message, #buttons')) remember(); });$('kind').onchange=()=>{scheduleFields();remember();};
 $('ffaCard').hidden = true;
-async function boot() { try{const token=location.hash.match(/^#login=([A-Za-z0-9_-]+)$/)?.[1];if(token){const response=await fetch('/auth/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});history.replaceState(null,'',location.pathname);if(!response.ok)throw new Error('登录链接已过期或已使用');}await refresh();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){$('locked').hidden=false;const authMessage=error?.status===401||error?.status===403?'账号或密码错误，请重试。':(error?.message==='未授权'?'登录状态已失效，请重新登录。':'登录页暂时无法加载，请稍后重试。');$('authError').textContent=authMessage;} }
+async function boot() { try{const token=location.hash.match(/^#login=([A-Za-z0-9_-]+)$/)?.[1];if(token){const response=await fetch('/auth/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});history.replaceState(null,'',location.pathname);if(!response.ok)throw new Error('登录链接已过期或已使用');}await refresh();$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){$('locked').hidden=false;const authMessage=error?.status===401||error?.status===403?'Telegram 身份验证失败，请从入口机器人重新打开。':(error?.message==='未授权'?'登录状态已失效，请重新登录。':`Mini App 加载失败：${error?.message||'未知错误'}`);$('authError').textContent=authMessage;} }
 boot();
 
 let viewportFrame;

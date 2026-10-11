@@ -15,7 +15,6 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
   const fallbackBase = fallbackBaseUrl ?? config.fallbackBaseUrl ?? '';
   const bases = [primaryBase, fallbackBase].filter((base, index, all) => all.indexOf(base) === index);
   const serverlessMode = mode === 'serverless';
-  const serverlessCall = globalThis.Telegram?.WebApp?.Serverless?.call;
 
   const headers = () => {
     const result = { 'x-telegram-init-data': initData };
@@ -43,10 +42,11 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
     for (const base of bases) {
       try {
         const useServerless = serverlessMode && base === primaryBase;
-        if (useServerless && typeof serverlessCall === 'function') {
+        const serverlessApi = globalThis.Telegram?.WebApp?.Serverless;
+        if (useServerless && typeof serverlessApi?.call === 'function') {
           const payloadBody = await serializeBody(options.body);
           const payload = await new Promise((resolve, reject) => {
-            serverlessCall('api', {
+            serverlessApi.call('api', {
               route: path,
               method: options.method || 'GET',
               body: payloadBody,
