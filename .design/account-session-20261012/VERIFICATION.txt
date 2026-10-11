@@ -1,0 +1,31 @@
+Changed branch: browser account session UX
+
+Artifacts:
+- MODIFIED_FILE: .design/account-session-20261012/MODIFIED_FILE.txt
+- DIFF_FILE: .design/account-session-20261012/DIFF_FILE.patch
+- VERIFICATION: .design/account-session-20261012/VERIFICATION.txt
+- ROLLBACK: .design/account-session-20261012/ROLLBACK.sh
+
+BASELINE
+Command: git archive HEAD | tar -x -C "$TMP"; (cd "$TMP" && npm test)
+Literal result: # tests 23; # pass 23; # fail 0; exit status 0.
+Command: (cd "$TMP" && npm run check)
+Literal result: node --check chain completed; exit status 0.
+Command: (cd "$TMP" && npm run build)
+Literal result: Vite build completed; exit status 0.
+
+MODIFIED
+Command: npm test
+Literal result: # tests 26; # pass 26; # fail 0; exit status 0.
+Command: npm run check
+Literal result: node --check chain completed; exit status 0.
+Command: npm run build
+Literal result: Vite build completed; exit status 0.
+
+ROLLBACK
+Command: .design/account-session-20261012/ROLLBACK.sh "$ROLLBACK_COPY"
+Literal result: restored package.json and src/main.js from HEAD; removed new auth helper/test; exit status 0.
+Command: sha256sum "$ROLLBACK_COPY/package.json" "$ROLLBACK_COPY/src/main.js"
+Literal result: matched BASELINE.sha256; restored behavior is the 23-test baseline branch. `npm test` then reported # tests 23; # pass 23; # fail 0; exit status 0.
+
+Production deployment was not run in this change.

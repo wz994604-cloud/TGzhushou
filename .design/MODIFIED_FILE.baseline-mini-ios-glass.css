@@ -1,0 +1,94 @@
+/* Mini App iOS glass finish. The existing pink/blue canvas remains the source of truth. */
+html[data-surface="mini"] {
+  --mini-glass:rgba(255,255,255,.54);
+  --mini-glass-strong:rgba(238,247,255,.82);
+  --mini-glass-soft:rgba(205,229,250,.34);
+  --mini-line:rgba(255,255,255,.72);
+  --mini-shadow:0 8px 22px rgba(41,74,115,.11);
+  --mini-ink:#172f50;
+  --mini-muted:#425c79;
+  font-family:"Source Han Sans SC","Noto Sans SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+}
+
+html[data-surface="mini"] body {
+  background:
+    radial-gradient(circle at 15% 0%,rgba(255,179,211,.42),transparent 38%),
+    linear-gradient(145deg,#f6d8e8 0%,#dceafb 58%,#cbdcf6 100%);
+  color:var(--mini-ink);
+}
+
+html[data-surface="mini"] .mini-shell { background:transparent; }
+html[data-surface="mini"] #locked {
+  margin:24px 14px;
+  padding:24px 18px;
+  background:linear-gradient(135deg,var(--mini-glass),rgba(185,219,249,.34));
+  border:1px solid var(--mini-line);
+  border-radius:20px;
+  box-shadow:var(--mini-shadow),inset 0 1px rgba(255,255,255,.58);
+  backdrop-filter:blur(18px) saturate(120%);
+}
+html[data-surface="mini"] .mini-topbar,
+html[data-surface="mini"] .mini-nav {
+  background:linear-gradient(120deg,rgba(255,255,255,.68),rgba(215,235,255,.52));
+  border-color:var(--mini-line);
+  box-shadow:inset 0 1px rgba(255,255,255,.72),var(--mini-shadow);
+  backdrop-filter:blur(20px) saturate(125%);
+}
+html[data-surface="mini"] .mini-topbar { color:var(--mini-ink); }
+html[data-surface="mini"] .mini-title { font-size:20px;line-height:28px;font-weight:600; }
+html[data-surface="mini"] .mini-topbar select,
+html[data-surface="mini"] input,
+html[data-surface="mini"] select,
+html[data-surface="mini"] textarea,
+html[data-surface="mini"] .ql-editor {
+  color:var(--mini-ink);
+  background:var(--mini-glass-strong);
+  border-color:var(--mini-line);
+  box-shadow:inset 0 1px rgba(255,255,255,.7);
+}
+html[data-surface="mini"] .mini-viewport>.page { padding:16px 14px 24px; }
+html[data-surface="mini"] .mini-shell .card,
+html[data-surface="mini"] .mini-shell .asset-card,
+html[data-surface="mini"] .mini-shell .button-editor,
+html[data-surface="mini"] .mini-shell .surface-feedback,
+html[data-surface="mini"] .mini-shell .mini-run-card {
+  background:linear-gradient(135deg,var(--mini-glass),rgba(185,219,249,.34));
+  border:1px solid var(--mini-line);
+  border-radius:16px;
+  box-shadow:var(--mini-shadow),inset 0 1px rgba(255,255,255,.58);
+  backdrop-filter:blur(18px) saturate(120%);
+}
+html[data-surface="mini"] .mini-shell h2 { font-size:20px;line-height:28px;font-weight:600; }
+html[data-surface="mini"] .mini-shell h3,
+html[data-surface="mini"] .mini-shell h4 { font-size:16px;line-height:24px;font-weight:600; }
+html[data-surface="mini"] .mini-shell p,
+html[data-surface="mini"] .mini-shell label,
+html[data-surface="mini"] .mini-shell button,
+html[data-surface="mini"] .mini-shell input,
+html[data-surface="mini"] .mini-shell select { font-size:14px;line-height:22px; }
+html[data-surface="mini"] .mini-shell .hint,
+html[data-surface="mini"] .mini-shell .muted,
+html[data-surface="mini"] .mini-shell small { color:var(--mini-muted);font-size:12px;line-height:18px; }
+html[data-surface="mini"] .mini-nav button { border-radius:12px;color:var(--mini-muted);font-size:12px; }
+html[data-surface="mini"] .mini-nav button.active { color:var(--accent);background:rgba(255,255,255,.52);box-shadow:inset 0 1px rgba(255,255,255,.8); }
+html[data-surface="mini"] .mini-chat .chat-list,
+html[data-surface="mini"] .mini-chat .chat-main { background:rgba(242,248,255,.22); }
+html[data-surface="mini"] .mini-chat .chat-list { padding:10px 14px 16px; }
+html[data-surface="mini"] .mini-chat .chat-conversation { background:rgba(255,255,255,.42);border:1px solid rgba(255,255,255,.58);border-radius:14px;margin:6px 0;box-shadow:inset 0 1px rgba(255,255,255,.5); }
+html[data-surface="mini"] .mini-chat .chat-conversation.selected { background:rgba(185,220,250,.64);border-color:rgba(255,255,255,.86); }
+html[data-surface="mini"] .mini-chat .chat-head { background:rgba(255,255,255,.58);border-bottom:1px solid var(--mini-line);backdrop-filter:blur(18px); }
+html[data-surface="mini"] .mini-chat .chat-messages { background:transparent;background-image:none;padding:14px; }
+html[data-surface="mini"] .mini-chat .chat-bubble { background:rgba(255,255,255,.74);border:1px solid var(--mini-line);border-radius:14px;padding:10px 12px 30px;box-shadow:0 4px 12px rgba(41,74,115,.08); }
+html[data-surface="mini"] .mini-chat .chat-bubble.out { background:rgba(188,222,251,.78); }
+html[data-surface="mini"] .mini-chat #chatComposer { background:rgba(224,237,250,.88);border-top:1px solid var(--mini-line);backdrop-filter:blur(18px); }
+html[data-surface="mini"] .mini-chat .chat-tools { display:flex;flex-wrap:wrap;align-items:center;gap:6px; }
+html[data-surface="mini"] .mini-chat .chat-tools button,
+html[data-surface="mini"] .mini-chat .chat-tools .file-button { min-height:44px;border-radius:10px; }
+html[data-surface="mini"] .mini-chat #chatSend { min-width:72px;margin-left:auto; }
+html[data-surface="mini"] :is(button,input,select,textarea,.ql-editor):focus-visible { outline:2px solid #5aaef1;outline-offset:2px; }
+
+@media (max-width:390px) {
+  html[data-surface="mini"] .mini-topbar { padding-left:8px;padding-right:8px; }
+  html[data-surface="mini"] .mini-topbar .publisher-switch { max-width:42%; }
+  html[data-surface="mini"] .mini-viewport>.page { padding-left:10px;padding-right:10px; }
+}

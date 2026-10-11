@@ -13,3 +13,5 @@ playwright-report/
 artifacts/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+
+.tgcloud/

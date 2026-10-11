@@ -1,4 +1,5 @@
-param([Parameter(Mandatory=$true)][string]$Target,[Parameter(Mandatory=$true)][string]$Backup)
-$ErrorActionPreference = 'Stop'
-Copy-Item -LiteralPath $Backup -Destination $Target -Force
-Write-Output "ROLLBACK_OK target=$Target backup=$Backup"
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cp "$ROOT/.design/MODIFIED_FILE.baseline-mini-ios-glass.css" "$ROOT/src/mini-ios-glass.css"
+printf '%s\n' "Restored src/mini-ios-glass.css from .design/MODIFIED_FILE.baseline-mini-ios-glass.css"

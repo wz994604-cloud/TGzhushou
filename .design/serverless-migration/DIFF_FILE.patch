@@ -1,0 +1,109 @@
+diff --git a/src/api-client.js b/src/api-client.js
+index 6671964..05c9566 100644
+--- a/src/api-client.js
++++ b/src/api-client.js
+@@ -15,6 +15,7 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
+   const fallbackBase = fallbackBaseUrl ?? config.fallbackBaseUrl ?? '';
+   const bases = [primaryBase, fallbackBase].filter((base, index, all) => all.indexOf(base) === index);
+   const serverlessMode = mode === 'serverless';
++  const serverlessCall = globalThis.Telegram?.WebApp?.Serverless?.call;
+ 
+   const headers = () => {
+     const result = { 'x-telegram-init-data': initData };
+@@ -42,7 +43,20 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
+     for (const base of bases) {
+       try {
+         const useServerless = serverlessMode && base === primaryBase;
++        if (useServerless && typeof serverlessCall === 'function') {
++          const payloadBody = await serializeBody(options.body);
++          const payload = await new Promise((resolve, reject) => {
++            serverlessCall('api', {
++              route: path,
++              method: options.method || 'GET',
++              body: payloadBody,
++              publisherId: getPublisherId(),
++            }, (error, result) => error ? reject(error) : resolve(result));
++          });
++          return { ok: true, status: 200, serverlessPayload: payload, headers: new Headers({ 'content-type': 'application/json' }), json: async () => payload };
++        }
+         const endpointPath = String(base || '').replace(/\/$/, '').endsWith('/api') ? '/api' : '/api/api';
++        const legacyOptions = { ...options, body: options.body instanceof FormData || options.body == null || typeof options.body === 'string' ? options.body : JSON.stringify(options.body) };
+         const response = useServerless
+           ? await fetch(joinBase(base, endpointPath), {
+             method: 'POST',
+@@ -54,7 +68,7 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
+               publisherId: getPublisherId(),
+             }),
+           })
+-          : await fetch(joinBase(base, path), options);
++          : await fetch(joinBase(base, path), legacyOptions);
+         // Auth and validation errors belong to the selected backend. Only a
+         // missing/unavailable route is eligible for the configured fallback.
+         if (response.status < 500 && response.status !== 404) return response;
+@@ -73,9 +87,9 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
+     const response = await request(url, {
+       method,
+       headers: requestHeaders,
+-      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
++      body,
+     });
+-    const result = await response.json().catch(() => ({}));
++    const result = response.serverlessPayload ?? await response.json().catch(() => ({}));
+     if (!response.ok) throw Object.assign(new Error(result.error || result.description || `请求失败 (${response.status})`), { status: response.status, code: result.parameters?.code });
+     return result;
+   }
+diff --git a/tgcloud/endpoints/api.js b/tgcloud/endpoints/api.js
+index 2b761d0..e2a0d9c 100644
+--- a/tgcloud/endpoints/api.js
++++ b/tgcloud/endpoints/api.js
+@@ -51,7 +51,10 @@ async function ensureTaskPayload(input, publisher) {
+   const targetIds = [...new Set((Array.isArray(input?.targetIds) ? input.targetIds : []).map(safeId).filter(Boolean))];
+   if (!targetIds.length) fail('请选择发布目标', 'TARGET_REQUIRED');
+   const placeholders = targetIds.map(() => '?').join(',');
+-  const targets = await db.all(`SELECT id FROM targets WHERE bot_id=? AND can_publish=1 AND id IN (${placeholders})`, publisher.id, ...targetIds);
++  const targets = await db.all(`SELECT id FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${targetIds.map((_, index) => `:target${index}`).join(',')})`, {
++    ':botId': publisher.id,
++    ...Object.fromEntries(targetIds.map((id, index) => [`:target${index}`, id])),
++  });
+   if (targets.length !== targetIds.length) fail('有目标不存在或缺少发布权限', 'TARGET_INVALID');
+   const mediaId = input?.mediaId ? safeId(input.mediaId) : null;
+   if (mediaId && !await db.get('SELECT id FROM media WHERE id=:id', { ':id': mediaId })) fail('媒体不存在', 'MEDIA_NOT_FOUND');
+@@ -68,7 +71,11 @@ async function taskRun(task, publisher, source = 'MANUAL') {
+     ':delta': task.delta_json, ':buttons': task.buttons_json, ':mediaId': task.media_id, ':createdAt': now(),
+   });
+   const runId = Number(run.lastInsertRowid);
+-  const targets = await db.all(`SELECT id,chat_id,title FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${JSON.parse(task.target_ids_json).map(() => '?').join(',')})`, publisher.id, ...JSON.parse(task.target_ids_json));
++  const targetIds = JSON.parse(task.target_ids_json);
++  const targets = await db.all(`SELECT id,chat_id,title FROM targets WHERE bot_id=:botId AND can_publish=1 AND id IN (${targetIds.map((_, index) => `:target${index}`).join(',')})`, {
++    ':botId': publisher.id,
++    ...Object.fromEntries(targetIds.map((id, index) => [`:target${index}`, id])),
++  });
+   for (const target of targets) {
+     await db.run(`INSERT INTO deliveries(run_id,target_id,chat_id,title,status,started_at) VALUES(:runId,:targetId,:chatId,:title,'SENDING',:startedAt)`, {
+       ':runId': runId, ':targetId': target.id, ':chatId': target.chat_id, ':title': target.title, ':startedAt': now(),
+@@ -112,6 +119,11 @@ async function handle(input, account) {
+     return { admin: { id: account.telegram_id, name: account.display_name, username: account.login_username || account.username, canManageBots: Boolean(account.can_manage_bots), canManageAccounts: Boolean(account.can_manage_bots) }, timezone: 'Asia/Shanghai', publishers, publisher: publicPublisher(publisher), targets, tasks };
+   }
+ 
++  if (path === 'bots' && method === 'GET') {
++    if (!account.can_manage_bots) fail('仅管理员可查看机器人配置', 'FORBIDDEN');
++    return db.all("SELECT id,username,role,updated_at FROM publishers ORDER BY role,username");
++  }
++
+   if (path === 'publisher' && method === 'POST') {
+     if (!account.can_manage_bots) fail('仅管理员可配置机器人', 'FORBIDDEN');
+     const token = String(body.token || '').trim();
+diff --git a/tgcloud/lib/serverless.js b/tgcloud/lib/serverless.js
+index 5f3ae8a..da33444 100644
+--- a/tgcloud/lib/serverless.js
++++ b/tgcloud/lib/serverless.js
+@@ -51,7 +51,8 @@ export async function publisherFor(input, account, { required = true } = {}) {
+     ? await db.all("SELECT id, username, token, role FROM publishers WHERE role='publisher' ORDER BY username")
+     : await db.all(`SELECT p.id, p.username, p.token, p.role FROM publishers p
+       JOIN publisher_permissions pp ON pp.publisher_id=p.id WHERE pp.user_id=:userId ORDER BY p.username`, { ':userId': account.id });
+-  const publisher = (requested && allowed.find((item) => String(item.id) === requested)) || allowed[0] || null;
++  const publisher = requested ? allowed.find((item) => String(item.id) === requested) || null : allowed[0] || null;
++  if (requested && !publisher) fail('当前账号未授权该发布机器人', 'PUBLISHER_FORBIDDEN');
+   if (!publisher && required) fail('请先配置发布机器人', 'PUBLISHER_REQUIRED');
+   return publisher;
+ }
