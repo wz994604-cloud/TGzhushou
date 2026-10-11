@@ -1,0 +1,7 @@
+Changed branch: browser account session UX
+
+Modified files:
+- src/main.js: account card now exposes “退出当前账号”, distinguishes Telegram Mini App session, and uses shared auth recovery text.
+- src/auth-session.js: testable browser logout and auth-recovery helpers.
+- tests/auth-session.test.js: logout success/failure and browser-vs-Telegram behavior tests.
+- package.json: includes the new test file in npm test.
