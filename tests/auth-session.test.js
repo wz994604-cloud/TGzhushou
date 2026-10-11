@@ -29,3 +29,35 @@ test('auth recovery distinguishes browser accounts from Telegram sessions', () =
   assert.equal(accountActionLabel(false), '退出当前账号');
   assert.equal(accountActionLabel(true), '重新验证当前会话');
 });
+
+// The page must not mix Telegram recovery actions with browser credentials.
+const { showAuthScreen } = await import('../src/auth-session.js');
+function authElements() {
+  return Object.fromEntries(['locked','workspace','loginForm','loginTitle','loginIntro','loginHint','authError','telegramRecovery','authRetry','closeSession'].map(id => [id, { hidden: false, textContent: '', dataset: {} }]));
+}
+test('Telegram auth failure hides password form and provides session recovery', () => {
+  const elements = authElements();
+  showAuthScreen(elements, { status: 401 }, true);
+  assert.equal(elements.workspace.hidden, true);
+  assert.equal(elements.locked.hidden, false);
+  assert.equal(elements.loginForm.hidden, true);
+  assert.equal(elements.loginHint.hidden, true);
+  assert.equal(elements.telegramRecovery.hidden, false);
+  assert.equal(elements.loginTitle.textContent, '无法验证当前会话');
+});
+test('browser login stays available without Telegram recovery instructions', () => {
+  const elements = authElements();
+  showAuthScreen(elements, { status: 401 }, false);
+  assert.equal(elements.loginForm.hidden, false);
+  assert.equal(elements.telegramRecovery.hidden, true);
+  assert.equal(elements.loginTitle.textContent, '登录管理后台');
+  assert.doesNotMatch(elements.authError.textContent, /Telegram/);
+});
+test('network failures offer retry without claiming Telegram credentials failed', () => {
+  const elements = authElements();
+  showAuthScreen(elements, new Error('网络中断'), true);
+  assert.equal(elements.loginForm.hidden, true);
+  assert.equal(elements.authRetry.hidden, false);
+  assert.equal(elements.loginTitle.textContent, '暂时连接不上工作台');
+  assert.match(elements.authError.textContent, /网络中断/);
+});

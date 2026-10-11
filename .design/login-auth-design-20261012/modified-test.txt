@@ -1,0 +1,64 @@
+TAP version 13
+# Subtest: API client uses the configured Serverless base
+ok 1 - API client uses the configured Serverless base
+  ---
+  duration_ms: 38.698908
+  type: 'test'
+  ...
+# Subtest: API client falls back to Railway when Serverless is unavailable
+ok 2 - API client falls back to Railway when Serverless is unavailable
+  ---
+  duration_ms: 1.998801
+  type: 'test'
+  ...
+# Subtest: Serverless endpoint base accepts a configured /api suffix
+ok 3 - Serverless endpoint base accepts a configured /api suffix
+  ---
+  duration_ms: 1.265983
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount clears the current browser account and returns to login
+ok 4 - logoutCurrentAccount clears the current browser account and returns to login
+  ---
+  duration_ms: 2.861201
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount surfaces logout failures without pretending the account ended
+ok 5 - logoutCurrentAccount surfaces logout failures without pretending the account ended
+  ---
+  duration_ms: 0.738908
+  type: 'test'
+  ...
+# Subtest: auth recovery distinguishes browser accounts from Telegram sessions
+ok 6 - auth recovery distinguishes browser accounts from Telegram sessions
+  ---
+  duration_ms: 1.280081
+  type: 'test'
+  ...
+# Subtest: Telegram auth failure hides password form and provides session recovery
+ok 7 - Telegram auth failure hides password form and provides session recovery
+  ---
+  duration_ms: 0.368096
+  type: 'test'
+  ...
+# Subtest: browser login stays available without Telegram recovery instructions
+ok 8 - browser login stays available without Telegram recovery instructions
+  ---
+  duration_ms: 0.32098
+  type: 'test'
+  ...
+# Subtest: network failures offer retry without claiming Telegram credentials failed
+ok 9 - network failures offer retry without claiming Telegram credentials failed
+  ---
+  duration_ms: 0.232126
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 186.234802
