@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {defaultButtonRow,normalizeButtonRows,reflowAutomaticButtonRows,emojiPopoverPosition,emojiMatches} from '../src/workbench-utils.js';
+import {defaultButtonRow,normalizeButtonRows,reflowAutomaticButtonRows,emojiPopoverPosition,emojiMatches,miniTabForPage,miniTabPages,clampMiniStep} from '../src/workbench-utils.js';
+
+test('Mini App exposes exactly five primary tabs and maps secondary pages back to their owner',()=>{
+ assert.deepEqual(miniTabPages,['chat','editor','assets','tasks','settings']);
+ assert.equal(miniTabForPage('players'),'settings');
+ assert.equal(miniTabForPage('logs'),'tasks');
+ assert.equal(miniTabForPage('settings'),'settings');
+ assert.equal(miniTabForPage('unknown'),'chat');
+});
+test('Mini App editor step stays within the five-step flow',()=>{
+ assert.equal(clampMiniStep(-1),0);
+ assert.equal(clampMiniStep(2),2);
+ assert.equal(clampMiniStep(99),4);
+});
 test('new automatic buttons use paired rows and delete reflows by actual index',()=>{
  const buttons=Array.from({length:6},(_,i)=>({row:defaultButtonRow(i),rowExplicit:false}));
  assert.deepEqual(buttons.map(b=>b.row),[0,0,1,1,2,2]);buttons.splice(1,1);reflowAutomaticButtonRows(buttons);
