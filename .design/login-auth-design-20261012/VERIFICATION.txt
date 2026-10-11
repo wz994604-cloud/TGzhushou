@@ -1,0 +1,219 @@
+Branch: feature/login-auth-design
+Baseline commit: 63423f56ab0c77a4a7935f37490a4770abeb96d8
+Changed fields: login form/Telegram recovery visibility; login copy/icons/layout; password aria-pressed; browser API mode selected by initData, not SDK existence.
+Figma: https://www.figma.com/design/rndf2fEmqOZWZoYOKTcM2W (2:33, 2:58)
+MODIFIED_FILE: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/login-auth-design-20261012/MODIFIED_FILE
+DIFF_FILE: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/login-auth-design-20261012/DIFF_FILE.patch
+VERIFICATION: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/login-auth-design-20261012/VERIFICATION.txt
+ROLLBACK: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/login-auth-design-20261012/ROLLBACK.sh
+Original hashes: BASELINE.sha256. Modified snapshots: modified/.
+Live working files remain modified. Rollback ran only on an isolated temporary copy.
+
+BASELINE
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/login-auth-design-20261012/baseline
+COMMAND: ['node', '--test', 'tests/auth-session.test.js']
+INPUT: local fixture files; no production data
+STDOUT:
+TAP version 13
+# Subtest: logoutCurrentAccount clears the current browser account and returns to login
+ok 1 - logoutCurrentAccount clears the current browser account and returns to login
+  ---
+  duration_ms: 2.090166
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount surfaces logout failures without pretending the account ended
+ok 2 - logoutCurrentAccount surfaces logout failures without pretending the account ended
+  ---
+  duration_ms: 0.673888
+  type: 'test'
+  ...
+# Subtest: auth recovery distinguishes browser accounts from Telegram sessions
+ok 3 - auth recovery distinguishes browser accounts from Telegram sessions
+  ---
+  duration_ms: 0.274053
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 141.36367
+
+STDERR:
+
+EXIT: 0
+
+MODIFIED
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手
+COMMAND: ['node', '--test', 'tests/auth-session.test.js', 'tests/api-client.test.js']
+INPUT: local fixture files; no production data
+STDOUT:
+TAP version 13
+# Subtest: API client uses the configured Serverless base
+ok 1 - API client uses the configured Serverless base
+  ---
+  duration_ms: 37.267227
+  type: 'test'
+  ...
+# Subtest: API client falls back to Railway when Serverless is unavailable
+ok 2 - API client falls back to Railway when Serverless is unavailable
+  ---
+  duration_ms: 2.03039
+  type: 'test'
+  ...
+# Subtest: Serverless endpoint base accepts a configured /api suffix
+ok 3 - Serverless endpoint base accepts a configured /api suffix
+  ---
+  duration_ms: 0.958735
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount clears the current browser account and returns to login
+ok 4 - logoutCurrentAccount clears the current browser account and returns to login
+  ---
+  duration_ms: 2.590384
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount surfaces logout failures without pretending the account ended
+ok 5 - logoutCurrentAccount surfaces logout failures without pretending the account ended
+  ---
+  duration_ms: 0.723586
+  type: 'test'
+  ...
+# Subtest: auth recovery distinguishes browser accounts from Telegram sessions
+ok 6 - auth recovery distinguishes browser accounts from Telegram sessions
+  ---
+  duration_ms: 1.170647
+  type: 'test'
+  ...
+# Subtest: Telegram auth failure hides password form and provides session recovery
+ok 7 - Telegram auth failure hides password form and provides session recovery
+  ---
+  duration_ms: 0.485466
+  type: 'test'
+  ...
+# Subtest: browser login stays available without Telegram recovery instructions
+ok 8 - browser login stays available without Telegram recovery instructions
+  ---
+  duration_ms: 0.764187
+  type: 'test'
+  ...
+# Subtest: network failures offer retry without claiming Telegram credentials failed
+ok 9 - network failures offer retry without claiming Telegram credentials failed
+  ---
+  duration_ms: 0.457502
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 176.25689
+
+STDERR:
+
+EXIT: 0
+
+ROLLBACK
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手
+COMMAND: ['/Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/login-auth-design-20261012/ROLLBACK.sh', '/var/folders/23/z_qmy1d103n5q7qhcnv83knm0000gn/T/login-rollback-jkt6bq6z']
+INPUT: local fixture files; no production data
+STDOUT:
+RESTORED: 4 files; SHA256 MATCH
+
+STDERR:
+
+EXIT: 0
+
+RESTORED_BEHAVIOR
+CWD: /var/folders/23/z_qmy1d103n5q7qhcnv83knm0000gn/T/login-rollback-jkt6bq6z
+COMMAND: ['node', '--test', 'tests/auth-session.test.js']
+INPUT: local fixture files; no production data
+STDOUT:
+TAP version 13
+# Subtest: logoutCurrentAccount clears the current browser account and returns to login
+ok 1 - logoutCurrentAccount clears the current browser account and returns to login
+  ---
+  duration_ms: 2.494032
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount surfaces logout failures without pretending the account ended
+ok 2 - logoutCurrentAccount surfaces logout failures without pretending the account ended
+  ---
+  duration_ms: 0.7075
+  type: 'test'
+  ...
+# Subtest: auth recovery distinguishes browser accounts from Telegram sessions
+ok 3 - auth recovery distinguishes browser accounts from Telegram sessions
+  ---
+  duration_ms: 0.279996
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 143.719333
+
+STDERR:
+
+EXIT: 0
+
+BUILD
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手
+COMMAND: ['npm', 'run', 'build']
+INPUT: local fixture files; no production data
+STDOUT:
+
+> tgzhushou@0.1.0 build
+> vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 738 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.65 kB │ gzip:  0.41 kB
+dist/assets/index-CC5BLg24.css  149.98 kB │ gzip: 25.63 kB
+dist/assets/core-Djq8_Zg8.js      2.75 kB │ gzip:  1.08 kB
+dist/assets/index-DhgLFjNO.js   319.71 kB │ gzip: 98.21 kB
+
+✓ built in 276ms
+
+STDERR:
+
+EXIT: 0
+
+DIFF_CHECK
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手
+COMMAND: ['git', '-c', 'core.whitespace=cr-at-eol', 'diff', '--check']
+INPUT: local fixture files; no production data
+STDOUT:
+
+STDERR:
+
+EXIT: 0
+
+UI LOCAL FIXTURE:
+Command: npm run dev -- --port 5173; node preview-fixture.mjs (port 5174)
+Input: /bootstrap -> 401 {"error":"未授权"}; /auth/login -> 401 {"error":"账号或密码错误"}.
+Input: /?mini -> mocked Telegram initData=fixture; Serverless callback Error('未授权'), status=401; close() marks data-fixture-closed=true.
+Browser output: 登录管理后台; 登录状态已失效，请重新登录。; credentials rejected -> 账号或密码错误.
+Password toggle output: input type=text, aria-pressed=true, label=隐藏密码.
+Telegram output: 无法验证当前会话; password form hidden; close button visible; close callback observed true.
+320x568 output: documentWidth=320; card x=16 width=288 top=40 bottom=624.875; page scroll allowed, no horizontal overflow.
+1280x800 output: documentWidth=1280; card x=430 width=420 top=77.0078125 bottom=647.7890625.
+390x844 browser / Telegram screenshots saved and visually inspected; gray background, readable dark text, blue action, no field nesting borders.
+UI status: PASS (local mocked responses, not production).
+Not pushed, merged, or deployed. Real Telegram iOS/Android and Windows native client unverified.

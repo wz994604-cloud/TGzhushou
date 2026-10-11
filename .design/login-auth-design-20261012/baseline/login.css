@@ -1,0 +1,97 @@
+/* Login surface follows the approved light liquid-glass client composition. */
+html[data-surface="web"] body:has(#locked:not([hidden])) {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(62% 72% at 6% 8%, rgba(255, 192, 233, .82), transparent 68%),
+    radial-gradient(55% 70% at 94% 12%, rgba(177, 214, 255, .82), transparent 70%),
+    radial-gradient(50% 60% at 74% 96%, rgba(255, 225, 190, .54), transparent 72%),
+    linear-gradient(135deg, #f5d8ee 0%, #e7e2f8 48%, #cfe4f7 100%);
+  color: var(--macos-ink);
+  font-family: var(--macos-font);
+}
+
+body:has(#locked:not([hidden]))::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .26;
+  background-image: radial-gradient(rgba(255,255,255,.72) .7px, transparent .7px);
+  background-size: 7px 7px;
+  mask-image: linear-gradient(to bottom, #000, transparent 85%);
+}
+
+body:has(#locked:not([hidden])) .app-header { display: none; }
+
+#locked.login-shell {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  min-height: calc(100vh - var(--desktop-titlebar-height, 0px));
+  margin: 0;
+  padding: 36px 24px 48px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+/* Native macOS titlebar overlays the webview; keep the form centered while allowing content underneath it. */
+body.desktop-client #locked.login-shell {
+  min-height:100vh;
+  padding-top:72px;
+  padding-bottom:48px;
+}
+
+#locked .login-card {
+  width: min(480px, 100%);
+  padding: 40px;
+  border: 1px solid var(--macos-glass-border);
+  border-radius: var(--macos-radius-card);
+  background: var(--macos-surface);
+  box-shadow: inset 0 1px 0 var(--macos-glass-highlight), var(--macos-shadow-card);
+  backdrop-filter: blur(30px) saturate(130%);
+  -webkit-backdrop-filter: blur(30px) saturate(130%);
+}
+
+.login-brand { display:flex; align-items:center; gap:var(--macos-space-3); margin-bottom:var(--macos-space-6); color:var(--macos-ink); }
+.login-brand > span:last-child { display:grid; gap:2px; }
+.login-brand strong { font-size:16px; line-height:1.2; }
+.login-brand small { color:var(--macos-secondary-ink); font-size:12px; }
+.login-brand-mark { display:grid; place-items:center; width:40px; height:40px; overflow:hidden; border:1px solid var(--macos-glass-border); border-radius:var(--macos-radius-control); background:rgba(255,255,255,.36); box-shadow:inset 0 1px 0 var(--macos-glass-highlight); }
+.login-brand-mark svg { width:24px; height:24px; }
+.login-card h2 { margin:0; color:var(--macos-ink); font-size:24px; line-height:1.3; letter-spacing:-.02em; }
+#locked .login-intro { margin:8px 0 28px; color:#737c96; font-size:14px; }
+.login-form { display:grid; gap:18px; }
+#locked .login-form label { display:grid; gap:8px; margin:0; color:#53607b; font-size:14px; font-weight:400; }
+.login-field { display:flex; align-items:center; min-height:54px; padding:0 14px; gap:10px; border:1px solid rgba(255,255,255,.66); border-radius:14px; background:rgba(239,247,255,.35); box-shadow:inset 0 1px 0 rgba(255,255,255,.6); transition:border-color .16s ease, box-shadow .16s ease, background .16s ease; }
+.login-field > span { color:#8994ae; font-size:18px; line-height:1; }
+.login-field:focus-within { border-color:rgba(232,111,168,.9); background:rgba(255,255,255,.43); box-shadow:0 0 0 3px rgba(235,114,171,.16), inset 0 1px 0 rgba(255,255,255,.8); }
+#locked .login-field input { min-width:0; width:100%; height:50px; min-height:0; margin:0; padding:0; border:0; outline:0; background:transparent; color:var(--macos-ink); font:inherit; }
+.login-field input::placeholder { color:#a7aec0; }
+.login-field input[aria-invalid="true"] { color:#b44365; }
+.login-field:has(input[aria-invalid="true"]) { border-color:rgba(190,67,101,.72); box-shadow:0 0 0 3px rgba(190,67,101,.12); }
+.login-field button { flex:0 0 auto; width:28px; height:28px; padding:0; border:0; background:transparent; color:#7d88a2; cursor:pointer; }
+#locked .login-submit { width:100%; min-height:52px; margin-top:6px; border-radius:var(--macos-radius-control); background:var(--macos-pink); border-color:rgba(255,255,255,.28); box-shadow:inset 0 1px 0 rgba(255,255,255,.28), 0 6px 14px rgba(184,61,120,.22); }
+.login-submit:hover { filter:brightness(1.04); transform:translateY(-1px); }
+.login-submit:active { transform:translateY(0); }
+.login-submit:disabled { opacity:.66; cursor:wait; transform:none; }
+.login-form.is-loading .login-submit::after { content:" …"; }
+#locked .login-error { min-height:20px; margin:14px 0 0; color:#b44365; font-size:13px; }
+#locked .login-hint { margin:18px 0 0; color:#7d87a1; font-size:13px; line-height:1.6; }
+.login-hint code { padding:2px 6px; border-radius:6px; background:rgba(255,255,255,.35); color:#5d6680; }
+.login-footer { position:absolute; bottom:22px; margin:0; color:rgba(80,91,126,.68); font-size:12px; }
+
+@media (max-width: 760px) {
+  #locked.login-shell { width:100%; min-height:calc(100vh - 24px); margin:0; padding:24px 24px 52px; }
+  #locked .login-card { padding:32px 24px 28px; border-radius:24px; }
+  .login-footer { bottom:16px; }
+}
+
+@media (max-height: 700px) and (min-width: 761px) {
+  #locked.login-shell { min-height:calc(100vh - 24px); margin:0; padding-top:24px; padding-bottom:36px; }
+  #locked .login-card { padding-top:30px; padding-bottom:26px; }
+  .login-brand { margin-bottom:18px; }
+  .login-intro { margin-bottom:18px; }
+  .login-footer { bottom:12px; }
+}
