@@ -16,6 +16,8 @@ html[data-surface="mini"] {
   --ios-green:#34c759;
   --ios-radius:12px;
   --ios-row-height:52px;
+  --ios-page-gutter:16px;
+  --ios-touch:44px;
   --canvas:var(--ios-bg);
   --bg:var(--ios-grouped);
   --subtle:var(--ios-secondary);
@@ -87,7 +89,7 @@ html[data-surface="mini"] .mini-viewport {
   scroll-padding-bottom:calc(76px + env(safe-area-inset-bottom));
 }
 html[data-surface="mini"] .mini-viewport>.page {
-  padding:20px 16px calc(28px + env(safe-area-inset-bottom));
+  padding:20px var(--ios-page-gutter) calc(28px + env(safe-area-inset-bottom));
 }
 html[data-surface="mini"] .mini-viewport>.page>.section-title {
   margin-bottom:16px;
@@ -191,6 +193,9 @@ html[data-surface="mini"] .mini-shell .file-button:has(input:disabled) { opacity
 
 /* Native-looking tab bar. */
 html[data-surface="mini"] .mini-nav {
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  align-items:start;
   min-height:calc(50px + env(safe-area-inset-bottom));
   padding:3px 8px env(safe-area-inset-bottom);
   background:rgba(249,249,249,.94);
@@ -200,7 +205,8 @@ html[data-surface="mini"] .mini-nav {
   -webkit-backdrop-filter:saturate(180%) blur(18px);
 }
 html[data-surface="mini"] .mini-nav button {
-  min-height:48px;
+  width:auto;
+  min-height:var(--ios-touch);
   gap:2px;
   color:var(--ios-tertiary-label);
   border-radius:8px;
@@ -302,6 +308,17 @@ html[data-surface="mini"] .toast { bottom:calc(64px + env(safe-area-inset-bottom
   html[data-surface="mini"] .mini-chat .chat-bubble.out { background:#1c5d2b; color:#f2f2f7; }
 }
 
+@media (prefers-reduced-motion:reduce) {
+  html[data-surface="mini"] *,
+  html[data-surface="mini"] *::before,
+  html[data-surface="mini"] *::after {
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    scroll-behavior:auto !important;
+    transition-duration:.01ms !important;
+  }
+}
+
 /* Figma parity: explicit component states and native iOS interaction feedback. */
 html[data-surface="mini"] .mini-shell [aria-busy="true"] { cursor:progress; }
 html[data-surface="mini"] .mini-shell [aria-busy="true"]::after,
@@ -355,6 +372,18 @@ html[data-surface="mini"] .mini-shell .asset-card:active { background:var(--ios-
 html[data-surface="mini"] .mini-shell .list-row button { min-width:44px; }
 html[data-surface="mini"] .mini-shell .chat-avatar,
 html[data-surface="mini"] .mini-shell .details-avatar { width:44px; height:44px; border-radius:50%; }
+
+/* Five-tab secondary pages: grouped rows stay readable without adding tabs. */
+html[data-surface="mini"] .mini-shell .mini-settings-forms,
+html[data-surface="mini"] .mini-shell .mini-settings-forms > .card { display:flex; flex-direction:column; gap:12px; }
+html[data-surface="mini"] .mini-shell .mini-settings-forms > .card { margin:0; }
+html[data-surface="mini"] .mini-shell .mini-task-card,
+html[data-surface="mini"] .mini-shell .mini-run-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:center; }
+html[data-surface="mini"] .mini-shell .mini-task-card .wrap-actions,
+html[data-surface="mini"] .mini-shell .mini-run-card .wrap-actions { grid-column:1 / -1; justify-content:flex-end; }
+html[data-surface="mini"] .mini-shell .asset-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+html[data-surface="mini"] .mini-shell .asset-grid > .empty-state { grid-column:1 / -1; }
+html[data-surface="mini"] .mini-shell .empty-state { min-height:96px; display:grid; place-items:center; text-align:center; padding:20px; color:var(--ios-tertiary-label); }
 
 /* Segmented Control / Sheet */
 html[data-surface="mini"] .mini-steps,

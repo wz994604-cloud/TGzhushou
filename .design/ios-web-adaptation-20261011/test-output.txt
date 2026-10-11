@@ -1,0 +1,128 @@
+
+> tgzhushou@0.1.0 test
+> node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js
+
+TAP version 13
+# Subtest: API client uses the configured Serverless base
+ok 1 - API client uses the configured Serverless base
+  ---
+  duration_ms: 28.77474
+  type: 'test'
+  ...
+# Subtest: API client falls back to Railway when Serverless is unavailable
+ok 2 - API client falls back to Railway when Serverless is unavailable
+  ---
+  duration_ms: 1.340585
+  type: 'test'
+  ...
+# Subtest: Serverless endpoint base accepts a configured /api suffix
+ok 3 - Serverless endpoint base accepts a configured /api suffix
+  ---
+  duration_ms: 0.738458
+  type: 'test'
+  ...
+# Subtest: valid Mini App HMAC includes signature field and accepts bound account
+ok 4 - valid Mini App HMAC includes signature field and accepts bound account
+  ---
+  duration_ms: 2.733294
+  type: 'test'
+  ...
+# Subtest: admin list accepts common separators and removes duplicates
+ok 5 - admin list accepts common separators and removes duplicates
+  ---
+  duration_ms: 1.227078
+  type: 'test'
+  ...
+# Subtest: rejects tampering, a different account, expired auth and duplicate fields
+ok 6 - rejects tampering, a different account, expired auth and duplicate fields
+  ---
+  duration_ms: 1.360407
+  type: 'test'
+  ...
+# Subtest: backspace covers ordinary text, newline, graphemes, and custom embeds
+ok 7 - backspace covers ordinary text, newline, graphemes, and custom embeds
+  ---
+  duration_ms: 21.467685
+  type: 'test'
+  ...
+# Subtest: selections and split formatting runs keep whole characters and terminal newline
+ok 8 - selections and split formatting runs keep whole characters and terminal newline
+  ---
+  duration_ms: 0.429699
+  type: 'test'
+  ...
+# Subtest: normalizes WPS numeric and scientific Telegram IDs without losing text IDs
+ok 9 - normalizes WPS numeric and scientific Telegram IDs without losing text IDs
+  ---
+  duration_ms: 1.336965
+  type: 'test'
+  ...
+# Subtest: parses WPS CSV BOM, quoted commas and CRLF rows
+ok 10 - parses WPS CSV BOM, quoted commas and CRLF rows
+  ---
+  duration_ms: 1.01494
+  type: 'test'
+  ...
+# Subtest: Mini App exposes exactly five primary tabs and maps secondary pages back to their owner
+ok 11 - Mini App exposes exactly five primary tabs and maps secondary pages back to their owner
+  ---
+  duration_ms: 2.107834
+  type: 'test'
+  ...
+# Subtest: Mini App editor step stays within the five-step flow
+ok 12 - Mini App editor step stays within the five-step flow
+  ---
+  duration_ms: 0.284699
+  type: 'test'
+  ...
+# Subtest: new automatic buttons use paired rows and delete reflows by actual index
+ok 13 - new automatic buttons use paired rows and delete reflows by actual index
+  ---
+  duration_ms: 1.122016
+  type: 'test'
+  ...
+# Subtest: manual rows survive deletion, including a manually chosen default row
+ok 14 - manual rows survive deletion, including a manually chosen default row
+  ---
+  duration_ms: 0.319121
+  type: 'test'
+  ...
+# Subtest: stored server rows lacking metadata are preserved, not guessed automatic
+ok 15 - stored server rows lacking metadata are preserved, not guessed automatic
+  ---
+  duration_ms: 0.225112
+  type: 'test'
+  ...
+# Subtest: missing and invalid row values get two-column defaults
+ok 16 - missing and invalid row values get two-column defaults
+  ---
+  duration_ms: 0.224627
+  type: 'test'
+  ...
+# Subtest: emoji popup chooses upwards and clamps inside the viewport
+ok 17 - emoji popup chooses upwards and clamps inside the viewport
+  ---
+  duration_ms: 0.477451
+  type: 'test'
+  ...
+# Subtest: emoji popup falls below top anchors and remains inside short viewports
+ok 18 - emoji popup falls below top anchors and remains inside short viewports
+  ---
+  duration_ms: 0.163328
+  type: 'test'
+  ...
+# Subtest: emoji search covers true custom emoji IDs and alternatives only
+ok 19 - emoji search covers true custom emoji IDs and alternatives only
+  ---
+  duration_ms: 0.711399
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 154.961447

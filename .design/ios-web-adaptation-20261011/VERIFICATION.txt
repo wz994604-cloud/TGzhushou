@@ -1,0 +1,46 @@
+TARGET: TGzhushou Mini App iOS方案 Web 适配
+BRANCH: feature/serverless-migration
+BASE: cdaceac72a64ece8c801392d9e4cd86d4c20e509
+
+CHANGED_BRANCH_OR_FIELD:
+- Mini App primary tabs: chat, editor, assets, tasks, settings
+- Secondary mapping: players -> settings; logs -> tasks
+- Editor step index clamped to 0...4 with aria-hidden/current state
+- iOS Mini App CSS tokens and five-column tab bar
+
+BASELINE_COMMAND: npm run build
+BASELINE_INPUT: existing HEAD before this change
+BASELINE_LITERAL_RESULT: built successfully (737 modules transformed)
+BASELINE_EXIT: 0
+
+MODIFIED_COMMAND: npm run build
+MODIFIED_INPUT: current working tree
+MODIFIED_LITERAL_RESULT: built successfully (737 modules transformed)
+MODIFIED_EXIT: 0
+
+TEST_COMMAND: npm test
+TEST_INPUT: repository test suite
+TEST_LITERAL_RESULT: 19 tests passed, 0 failed
+TEST_EXIT: 0
+
+ROLLBACK_COMMAND: .design/ios-web-adaptation-20261011/ROLLBACK.sh <baseline-copy>
+ROLLBACK_INPUT: temporary copy populated with current files
+ROLLBACK_LITERAL_RESULT: restored baseline copy exactly
+ROLLBACK_EXIT: 0
+
+RESTORED_BEHAVIOR: baseline copy matched git HEAD after reverse patch.
+CURRENT_BEHAVIOR: five-tab Mini App navigation and bounded five-step editor are active in the working tree.
+UNVERIFIED: real iPhone Telegram WebView font rendering, keyboard height, return gesture, and dark-mode device rendering.
+
+LOCAL_SMOKE_COMMAND: npm run dev -- --host 127.0.0.1
+LOCAL_SMOKE_RESULT: Vite served http://127.0.0.1:5173/ and rendered the existing login surface.
+LOCAL_SMOKE_EXIT: 0
+LOCAL_SMOKE_LIMIT: Telegram WebApp init data was unavailable outside Telegram, so authenticated Mini App tabs were not reachable in this smoke run.
+
+FINAL_REVIEW: self-review corrected editor step label scope before final run.
+FINAL_BUILD_COMMAND: npm run build
+FINAL_BUILD_RESULT: built successfully, 737 modules transformed
+FINAL_BUILD_EXIT: 0
+FINAL_TEST_COMMAND: npm test
+FINAL_TEST_RESULT: 19 tests passed, 0 failed
+FINAL_TEST_EXIT: 0

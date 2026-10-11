@@ -1,0 +1,16 @@
+MODIFIED_FILE
+
+Plan: docs/superpowers/plans/2026-10-11-ios方案-web适配.md
+Base: cdaceac72a64ece8c801392d9e4cd86d4c20e509
+Changed branch/fields:
+- Mini App primary navigation: chat, editor, assets, tasks, settings
+- Secondary page mapping: players -> settings, logs -> tasks
+- Editor step state: clamp to 0...4 and expose aria-hidden/current step
+- iOS tokens: page gutter, touch target, five-column tab bar, reduced motion, grouped secondary cards
+
+Changed files:
+- src/main.js
+- src/workbench-shell.js
+- src/workbench-utils.js
+- src/mini-ios-glass.css
+- tests/workbench-utils.test.js

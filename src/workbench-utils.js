@@ -1,4 +1,11 @@
 // UI-only rules; row values are sent unchanged to the existing backend.
+export const miniTabPages = ['chat', 'editor', 'assets', 'tasks', 'settings'];
+const miniSecondaryTab = { players: 'settings', logs: 'tasks' };
+export function miniTabForPage(page) {
+  return miniTabPages.includes(page) ? page : miniSecondaryTab[page] || 'chat';
+}
+export const clampMiniStep = step => Math.max(0, Math.min(4, Number.isFinite(step) ? step : 0));
+
 export const defaultButtonRow = index => Math.floor(index / 2);
 export function normalizeButtonRows(list) {
   list.forEach((button, index) => {

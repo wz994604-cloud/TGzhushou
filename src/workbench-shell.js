@@ -1,4 +1,5 @@
 // Presentation only. Existing form nodes keep their IDs, values and API handlers.
+import { miniTabForPage, clampMiniStep } from './workbench-utils.js';
 const $ = id => document.getElementById(id);
 const pages = { chat:'聊天', editor:'编写活动', assets:'素材管理', players:'联系人 / 用户', tasks:'自动化任务', logs:'发布记录', settings:'系统设置' };
 const paths = {
@@ -34,12 +35,13 @@ export function mountWorkbench({ mini, navigate, backChat }) {
   viewport.append(...sections); content.append(viewport);
   workspace.className=mini?'mini-shell':'desktop-shell';
   document.documentElement.dataset.surface=mini?'mini':'web';
+  const editorStepLabels=['消息','媒体 / 按钮','目标','时间','预览发布'];
   let title, back, details, step=0, stepPanels=[], stepButtons=[], settingButtons=[];
   let settingsOpen=false,editorActions;
   const setStep=index=>{
-    step=Math.max(0,Math.min(4,index));
-    stepPanels.forEach((panel,i)=>panel.hidden=i!==step);
-    stepButtons.forEach((b,i)=>{b.classList.toggle('active',i===step);b.setAttribute('aria-current',i===step?'step':'false');});
+    step=clampMiniStep(index);
+    stepPanels.forEach((panel,i)=>{panel.hidden=i!==step;panel.setAttribute('aria-hidden',String(i!==step));});
+    stepButtons.forEach((b,i)=>{b.classList.toggle('active',i===step);b.setAttribute('aria-current',i===step?'step':'false');b.setAttribute('aria-label',`${i+1}. ${editorStepLabels[i]}`);});
     if($('miniPrevious')) { $('miniPrevious').disabled=step===0; $('miniNext').hidden=step===4; }
     if(step===4) $('previewPanel').open=true;
     viewport.scrollTop=0;
@@ -58,7 +60,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
     publisher.querySelector('label').classList.add('sr-only');
     top.append(back,title,publisher); workspace.replaceChildren(top,content);
     const nav=node('nav','mini-nav'); nav.setAttribute('aria-label','小程序导航');
-    for(const [id,label] of [['chat','聊天'],['editor','编写'],['assets','素材'],['players','用户'],['tasks','任务'],['settings','设置']]) {
+    for(const [id,label] of [['chat','聊天'],['editor','编写'],['assets','素材'],['tasks','任务'],['settings','设置']]) {
       const b=node('button','',`${icon(id)}<span>${label}</span>`); b.type='button'; b.dataset.tab=id; b.onclick=()=>navigate(id); nav.append(b);
     }
     workspace.append(nav);
@@ -128,11 +130,10 @@ export function mountWorkbench({ mini, navigate, backChat }) {
   if(mini) {
     const steps=node('div','mini-steps');steps.setAttribute('aria-label','编写步骤');
     const body=node('div','mini-editor-steps');
-    const labels=['消息','媒体 / 按钮','目标','时间','预览发布'];
     const groups=[[message],[media,buttons],[delivery,users],[time],[preview,actions]];
     groups.forEach((group,i)=>{
-      const b=node('button','',`${i+1}. ${labels[i]}`); b.type='button';b.onclick=()=>setStep(i);steps.append(b);stepButtons.push(b);
-      const panel=node('section','mini-editor-step');panel.setAttribute('aria-label',labels[i]);panel.append(...group);body.append(panel);stepPanels.push(panel);
+      const b=node('button','',`${i+1}. ${editorStepLabels[i]}`); b.type='button';b.onclick=()=>setStep(i);steps.append(b);stepButtons.push(b);
+      const panel=node('section','mini-editor-step');panel.setAttribute('aria-label',editorStepLabels[i]);panel.append(...group);body.append(panel);stepPanels.push(panel);
     });
     editor.querySelector('.section-title').after(steps,body);
     const footer=node('div','mini-step-actions','<button id="miniPrevious" class="secondary" type="button">上一步</button><button id="miniNext" class="primary" type="button">下一步</button>');body.after(footer);
@@ -208,7 +209,8 @@ export function mountWorkbench({ mini, navigate, backChat }) {
       workspace.dataset.page=id;if(editorActions)editorActions.hidden=id!=='editor';
       if(title)title.textContent=pages[id]||'活动中枢';
       if(back)back.disabled=id==='chat'&&workspace.dataset.chatOpen!=='true';
-      workspace.querySelectorAll('[data-tab],[data-rail-tab]').forEach(b=>{const active=(b.dataset.tab||b.dataset.railTab)===(mini&&id==='logs'?'tasks':id);b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+      const activePage = mini ? miniTabForPage(id) : id;
+      workspace.querySelectorAll('[data-tab],[data-rail-tab]').forEach(b=>{const active=(b.dataset.tab||b.dataset.railTab)===activePage;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
       viewport.scrollTop=0;
     },
     account(data) {

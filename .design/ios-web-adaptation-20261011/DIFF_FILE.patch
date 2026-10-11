@@ -1,0 +1,198 @@
+diff --git a/docs/MINI_APP_IOS_HANDOFF.md b/docs/MINI_APP_IOS_HANDOFF.md
+index b6eb4f3..b1f885e 100644
+--- a/docs/MINI_APP_IOS_HANDOFF.md
++++ b/docs/MINI_APP_IOS_HANDOFF.md
+@@ -52,3 +52,13 @@
+ ## 尚需人工验收
+ 
+ 真实 iPhone 与 Telegram 内置 WebView 的字体渲染、键盘高度、返回手势和深色模式需要在设备上确认。
++
++## 2026-10-11 Web 方案适配
++
++- Mini App 底部主导航已收口为：聊天、编写、素材、任务、设置。
++- 用户页作为设置下的二级能力保留，发布记录作为任务下的二级能力保留；不会新增底部 Tab。
++- 编辑器五步状态增加边界保护和可访问性状态：消息、媒体 / 按钮、目标、时间、预览发布。
++- iOS CSS 增加五列 Tab Bar、统一页面边距与 44px 触控目标、深色模式和减少动效支持。
++- 本轮回滚与验证材料位于 `.design/ios-web-adaptation-20261011/`。
++
++本轮未改变后端接口、Telegram 鉴权、机器人切换或数据库规则。
+diff --git a/src/mini-ios-glass.css b/src/mini-ios-glass.css
+index c6ae145..1b8e4c5 100644
+--- a/src/mini-ios-glass.css
++++ b/src/mini-ios-glass.css
+@@ -16,6 +16,8 @@ html[data-surface="mini"] {
+   --ios-green:#34c759;
+   --ios-radius:12px;
+   --ios-row-height:52px;
++  --ios-page-gutter:16px;
++  --ios-touch:44px;
+   --canvas:var(--ios-bg);
+   --bg:var(--ios-grouped);
+   --subtle:var(--ios-secondary);
+@@ -87,7 +89,7 @@ html[data-surface="mini"] .mini-viewport {
+   scroll-padding-bottom:calc(76px + env(safe-area-inset-bottom));
+ }
+ html[data-surface="mini"] .mini-viewport>.page {
+-  padding:20px 16px calc(28px + env(safe-area-inset-bottom));
++  padding:20px var(--ios-page-gutter) calc(28px + env(safe-area-inset-bottom));
+ }
+ html[data-surface="mini"] .mini-viewport>.page>.section-title {
+   margin-bottom:16px;
+@@ -191,6 +193,9 @@ html[data-surface="mini"] .mini-shell .file-button:has(input:disabled) { opacity
+ 
+ /* Native-looking tab bar. */
+ html[data-surface="mini"] .mini-nav {
++  display:grid;
++  grid-template-columns:repeat(5,minmax(0,1fr));
++  align-items:start;
+   min-height:calc(50px + env(safe-area-inset-bottom));
+   padding:3px 8px env(safe-area-inset-bottom);
+   background:rgba(249,249,249,.94);
+@@ -200,7 +205,8 @@ html[data-surface="mini"] .mini-nav {
+   -webkit-backdrop-filter:saturate(180%) blur(18px);
+ }
+ html[data-surface="mini"] .mini-nav button {
+-  min-height:48px;
++  width:auto;
++  min-height:var(--ios-touch);
+   gap:2px;
+   color:var(--ios-tertiary-label);
+   border-radius:8px;
+@@ -302,6 +308,17 @@ html[data-surface="mini"] .toast { bottom:calc(64px + env(safe-area-inset-bottom
+   html[data-surface="mini"] .mini-chat .chat-bubble.out { background:#1c5d2b; color:#f2f2f7; }
+ }
+ 
++@media (prefers-reduced-motion:reduce) {
++  html[data-surface="mini"] *,
++  html[data-surface="mini"] *::before,
++  html[data-surface="mini"] *::after {
++    animation-duration:.01ms !important;
++    animation-iteration-count:1 !important;
++    scroll-behavior:auto !important;
++    transition-duration:.01ms !important;
++  }
++}
++
+ /* Figma parity: explicit component states and native iOS interaction feedback. */
+ html[data-surface="mini"] .mini-shell [aria-busy="true"] { cursor:progress; }
+ html[data-surface="mini"] .mini-shell [aria-busy="true"]::after,
+@@ -356,6 +373,18 @@ html[data-surface="mini"] .mini-shell .list-row button { min-width:44px; }
+ html[data-surface="mini"] .mini-shell .chat-avatar,
+ html[data-surface="mini"] .mini-shell .details-avatar { width:44px; height:44px; border-radius:50%; }
+ 
++/* Five-tab secondary pages: grouped rows stay readable without adding tabs. */
++html[data-surface="mini"] .mini-shell .mini-settings-forms,
++html[data-surface="mini"] .mini-shell .mini-settings-forms > .card { display:flex; flex-direction:column; gap:12px; }
++html[data-surface="mini"] .mini-shell .mini-settings-forms > .card { margin:0; }
++html[data-surface="mini"] .mini-shell .mini-task-card,
++html[data-surface="mini"] .mini-shell .mini-run-card { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:center; }
++html[data-surface="mini"] .mini-shell .mini-task-card .wrap-actions,
++html[data-surface="mini"] .mini-shell .mini-run-card .wrap-actions { grid-column:1 / -1; justify-content:flex-end; }
++html[data-surface="mini"] .mini-shell .asset-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
++html[data-surface="mini"] .mini-shell .asset-grid > .empty-state { grid-column:1 / -1; }
++html[data-surface="mini"] .mini-shell .empty-state { min-height:96px; display:grid; place-items:center; text-align:center; padding:20px; color:var(--ios-tertiary-label); }
++
+ /* Segmented Control / Sheet */
+ html[data-surface="mini"] .mini-steps,
+ html[data-surface="mini"] .mini-shell .task-filters { scrollbar-width:none; }
+diff --git a/src/workbench-shell.js b/src/workbench-shell.js
+index 6ccbf24..bba684f 100644
+--- a/src/workbench-shell.js
++++ b/src/workbench-shell.js
+@@ -1,4 +1,5 @@
+ // Presentation only. Existing form nodes keep their IDs, values and API handlers.
++import { miniTabForPage, clampMiniStep } from './workbench-utils.js';
+ const $ = id => document.getElementById(id);
+ const pages = { chat:'聊天', editor:'编写活动', assets:'素材管理', players:'联系人 / 用户', tasks:'自动化任务', logs:'发布记录', settings:'系统设置' };
+ const paths = {
+@@ -34,12 +35,13 @@ export function mountWorkbench({ mini, navigate, backChat }) {
+   viewport.append(...sections); content.append(viewport);
+   workspace.className=mini?'mini-shell':'desktop-shell';
+   document.documentElement.dataset.surface=mini?'mini':'web';
++  const editorStepLabels=['消息','媒体 / 按钮','目标','时间','预览发布'];
+   let title, back, details, step=0, stepPanels=[], stepButtons=[], settingButtons=[];
+   let settingsOpen=false,editorActions;
+   const setStep=index=>{
+-    step=Math.max(0,Math.min(4,index));
+-    stepPanels.forEach((panel,i)=>panel.hidden=i!==step);
+-    stepButtons.forEach((b,i)=>{b.classList.toggle('active',i===step);b.setAttribute('aria-current',i===step?'step':'false');});
++    step=clampMiniStep(index);
++    stepPanels.forEach((panel,i)=>{panel.hidden=i!==step;panel.setAttribute('aria-hidden',String(i!==step));});
++    stepButtons.forEach((b,i)=>{b.classList.toggle('active',i===step);b.setAttribute('aria-current',i===step?'step':'false');b.setAttribute('aria-label',`${i+1}. ${editorStepLabels[i]}`);});
+     if($('miniPrevious')) { $('miniPrevious').disabled=step===0; $('miniNext').hidden=step===4; }
+     if(step===4) $('previewPanel').open=true;
+     viewport.scrollTop=0;
+@@ -58,7 +60,7 @@ export function mountWorkbench({ mini, navigate, backChat }) {
+     publisher.querySelector('label').classList.add('sr-only');
+     top.append(back,title,publisher); workspace.replaceChildren(top,content);
+     const nav=node('nav','mini-nav'); nav.setAttribute('aria-label','小程序导航');
+-    for(const [id,label] of [['chat','聊天'],['editor','编写'],['assets','素材'],['players','用户'],['tasks','任务'],['settings','设置']]) {
++    for(const [id,label] of [['chat','聊天'],['editor','编写'],['assets','素材'],['tasks','任务'],['settings','设置']]) {
+       const b=node('button','',`${icon(id)}<span>${label}</span>`); b.type='button'; b.dataset.tab=id; b.onclick=()=>navigate(id); nav.append(b);
+     }
+     workspace.append(nav);
+@@ -128,11 +130,10 @@ export function mountWorkbench({ mini, navigate, backChat }) {
+   if(mini) {
+     const steps=node('div','mini-steps');steps.setAttribute('aria-label','编写步骤');
+     const body=node('div','mini-editor-steps');
+-    const labels=['消息','媒体 / 按钮','目标','时间','预览发布'];
+     const groups=[[message],[media,buttons],[delivery,users],[time],[preview,actions]];
+     groups.forEach((group,i)=>{
+-      const b=node('button','',`${i+1}. ${labels[i]}`); b.type='button';b.onclick=()=>setStep(i);steps.append(b);stepButtons.push(b);
+-      const panel=node('section','mini-editor-step');panel.setAttribute('aria-label',labels[i]);panel.append(...group);body.append(panel);stepPanels.push(panel);
++      const b=node('button','',`${i+1}. ${editorStepLabels[i]}`); b.type='button';b.onclick=()=>setStep(i);steps.append(b);stepButtons.push(b);
++      const panel=node('section','mini-editor-step');panel.setAttribute('aria-label',editorStepLabels[i]);panel.append(...group);body.append(panel);stepPanels.push(panel);
+     });
+     editor.querySelector('.section-title').after(steps,body);
+     const footer=node('div','mini-step-actions','<button id="miniPrevious" class="secondary" type="button">上一步</button><button id="miniNext" class="primary" type="button">下一步</button>');body.after(footer);
+@@ -208,7 +209,8 @@ export function mountWorkbench({ mini, navigate, backChat }) {
+       workspace.dataset.page=id;if(editorActions)editorActions.hidden=id!=='editor';
+       if(title)title.textContent=pages[id]||'活动中枢';
+       if(back)back.disabled=id==='chat'&&workspace.dataset.chatOpen!=='true';
+-      workspace.querySelectorAll('[data-tab],[data-rail-tab]').forEach(b=>{const active=(b.dataset.tab||b.dataset.railTab)===(mini&&id==='logs'?'tasks':id);b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
++      const activePage = mini ? miniTabForPage(id) : id;
++      workspace.querySelectorAll('[data-tab],[data-rail-tab]').forEach(b=>{const active=(b.dataset.tab||b.dataset.railTab)===activePage;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+       viewport.scrollTop=0;
+     },
+     account(data) {
+diff --git a/src/workbench-utils.js b/src/workbench-utils.js
+index 6a3bfdd..5cbe4ec 100644
+--- a/src/workbench-utils.js
++++ b/src/workbench-utils.js
+@@ -1,4 +1,11 @@
+ // UI-only rules; row values are sent unchanged to the existing backend.
++export const miniTabPages = ['chat', 'editor', 'assets', 'tasks', 'settings'];
++const miniSecondaryTab = { players: 'settings', logs: 'tasks' };
++export function miniTabForPage(page) {
++  return miniTabPages.includes(page) ? page : miniSecondaryTab[page] || 'chat';
++}
++export const clampMiniStep = step => Math.max(0, Math.min(4, Number.isFinite(step) ? step : 0));
++
+ export const defaultButtonRow = index => Math.floor(index / 2);
+ export function normalizeButtonRows(list) {
+   list.forEach((button, index) => {
+diff --git a/tests/workbench-utils.test.js b/tests/workbench-utils.test.js
+index 9379c62..26e7315 100644
+--- a/tests/workbench-utils.test.js
++++ b/tests/workbench-utils.test.js
+@@ -1,6 +1,19 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+-import {defaultButtonRow,normalizeButtonRows,reflowAutomaticButtonRows,emojiPopoverPosition,emojiMatches} from '../src/workbench-utils.js';
++import {defaultButtonRow,normalizeButtonRows,reflowAutomaticButtonRows,emojiPopoverPosition,emojiMatches,miniTabForPage,miniTabPages,clampMiniStep} from '../src/workbench-utils.js';
++
++test('Mini App exposes exactly five primary tabs and maps secondary pages back to their owner',()=>{
++ assert.deepEqual(miniTabPages,['chat','editor','assets','tasks','settings']);
++ assert.equal(miniTabForPage('players'),'settings');
++ assert.equal(miniTabForPage('logs'),'tasks');
++ assert.equal(miniTabForPage('settings'),'settings');
++ assert.equal(miniTabForPage('unknown'),'chat');
++});
++test('Mini App editor step stays within the five-step flow',()=>{
++ assert.equal(clampMiniStep(-1),0);
++ assert.equal(clampMiniStep(2),2);
++ assert.equal(clampMiniStep(99),4);
++});
+ test('new automatic buttons use paired rows and delete reflows by actual index',()=>{
+  const buttons=Array.from({length:6},(_,i)=>({row:defaultButtonRow(i),rowExplicit:false}));
+  assert.deepEqual(buttons.map(b=>b.row),[0,0,1,1,2,2]);buttons.splice(1,1);reflowAutomaticButtonRows(buttons);
