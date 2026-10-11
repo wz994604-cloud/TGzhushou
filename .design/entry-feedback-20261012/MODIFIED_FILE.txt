@@ -1,0 +1,4 @@
+MODIFIED_FILE
+Branch: feature/serverless-migration
+Changed behavior: Railway entry bot now responds to /start, /login, /help, and unknown slash commands; admin/non-admin feedback is explicit; login links explain expiry and are not silently omitted.
+Files: server/index.js, server/entry-feedback.js, tests/entry-feedback.test.js, package.json

@@ -1,0 +1,36 @@
+TARGET: Railway entry bot feedback optimization
+BRANCH: feature/serverless-migration
+BASE: 1412e0710269a5e1669ae3ec4c2d7f0113669f6c
+
+CHANGED_FIELDS:
+- /start admin and non-admin responses
+- /login permission and success feedback
+- /help guidance
+- unknown slash command guidance
+
+BASELINE_COMMAND: node --test tests/entry-feedback.test.js
+BASELINE_RESULT: module missing before implementation (expected RED)
+BASELINE_EXIT: 1
+
+MODIFIED_COMMAND: node --test tests/entry-feedback.test.js
+MODIFIED_RESULT: 4 tests passed
+MODIFIED_EXIT: 0
+
+CHECK_COMMAND: npm run check
+CHECK_RESULT: node syntax checks passed
+CHECK_EXIT: 0
+
+BUILD_COMMAND: npm run build
+BUILD_RESULT: Vite build passed, 737 modules transformed
+BUILD_EXIT: 0
+
+FULL_TEST_COMMAND: npm test
+FULL_TEST_RESULT: 23 tests passed, 0 failed
+FULL_TEST_EXIT: 0
+
+ROLLBACK_COMMAND: .design/entry-feedback-20261012/ROLLBACK.sh <copy>
+ROLLBACK_RESULT: reverse patch verified on a separate copy; baseline restored
+ROLLBACK_EXIT: 0
+
+RESTORED_BEHAVIOR: prior silent/limited entry behavior.
+CURRENT_BEHAVIOR: explicit welcome, permission, login, help, and unknown-command feedback.

@@ -1,0 +1,140 @@
+diff --git a/package.json b/package.json
+index 295b850..f720628 100644
+--- a/package.json
++++ b/package.json
+@@ -8,7 +8,7 @@
+     "start": "node server/index.js",
+     "build": "vite build",
+     "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/auth.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/browser-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
+-    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js",
++    "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js tests/entry-feedback.test.js",
+     "serverless:check": "node scripts/serverless-structure-check.mjs && node scripts/serverless-schema-check.mjs",
+     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
+     "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
+diff --git a/server/index.js b/server/index.js
+index 9b89002..9f11f22 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -20,6 +20,7 @@ import { createMediaStore } from './media-store.js';
+ import { route, canAccessBot, currentBot, selectedBotId, requirePlayerBot, assertSelected } from './request-context.js';
+ import { registerTaskRoutes } from './routes-tasks.js';
+ import { registerChatRoutes } from './chat.js';
++import { entryCommand, entryReply, loginReply } from './entry-feedback.js';
+ 
+ const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
+ for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
+@@ -65,15 +66,19 @@ app.post('/tg/entry', async (req, res) => {
+   if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return res.sendStatus(403);
+   const chat = req.body?.message?.chat;
+   const handleEntry = async () => {
+-    if (chat?.type === 'private' && adminIds.includes(String(req.body.message.from?.id)) && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+-      const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
+-      if (base) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } });
+-    }
+-    if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
+-      const link = await browserAuth.issueLink(req.body.message.from?.id);
+-      if (link) await botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
+-        text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } });
++    if (chat?.type !== 'private') return;
++    const command = entryCommand(req.body?.message?.text);
++    if (!command) return;
++    const isAdmin = adminIds.includes(String(req.body.message.from?.id));
++    const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
++    if (command === 'login') {
++      const link = isAdmin ? await browserAuth.issueLink(req.body.message.from?.id) : null;
++      const reply = loginReply(link);
++      await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
++      return;
+     }
++    const reply = entryReply({ command, isAdmin, publicUrl: base });
++    if (reply) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
+   };
+   try { await handleEntry(); } catch (error) { console.error('Entry bot:', safeTelegramError(error)); }
+   res.sendStatus(200);
+diff --git a/server/entry-feedback.js b/server/entry-feedback.js
+new file mode 100644
+index 0000000..2f6a8b5
+--- /dev/null
++++ b/server/entry-feedback.js
+@@ -0,0 +1,43 @@
++const COMMAND_RE = /^\/([a-z0-9_]+)(?:@\w+)?(?:\s|$)/i;
++
++export function entryCommand(text) {
++  return String(text || '').match(COMMAND_RE)?.[1]?.toLowerCase() || '';
++}
++
++const helpText = [
++  '飞机助手入口帮助',
++  '',
++  '/start：打开活动工作台',
++  '/login：获取网页登录链接',
++  '/help：查看这份帮助',
++  '',
++  '如果按钮无法打开，请重新发送 /start；仍有问题请联系管理员。',
++].join('\n');
++
++export function entryReply({ command, isAdmin, publicUrl }) {
++  if (command === 'start' && isAdmin && publicUrl) {
++    return {
++      text: '欢迎使用飞机助手。',
++      reply_markup: { inline_keyboard: [[{ text: '打开活动工作台', web_app: { url: publicUrl } }]] },
++    };
++  }
++  if (command === 'start' && isAdmin) {
++    return { text: '工作台地址暂未配置，请联系管理员检查 Railway 的 PUBLIC_URL。' };
++  }
++  if (command === 'start') {
++    return { text: '欢迎使用飞机助手。\n当前账号暂无管理权限，请联系管理员开通后再使用。' };
++  }
++  if (command === 'login') {
++    return isAdmin
++      ? null
++      : { text: '当前账号没有网页登录权限，请联系管理员开通后再重试。' };
++  }
++  if (command === 'help') return { text: helpText };
++  return { text: '暂不支持这个入口命令。发送 /help 查看可用命令。' };
++}
++
++export function loginReply(url) {
++  return url
++    ? { text: '网页登录链接已生成，有效期 5 分钟，请勿转发给他人。', reply_markup: { inline_keyboard: [[{ text: '打开网页登录', url }]] } }
++    : { text: '当前账号没有网页登录权限，请联系管理员开通后再重试。' };
++}
+diff --git a/tests/entry-feedback.test.js b/tests/entry-feedback.test.js
+new file mode 100644
+index 0000000..9b5fc86
+--- /dev/null
++++ b/tests/entry-feedback.test.js
+@@ -0,0 +1,32 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { entryCommand, entryReply } from '../server/entry-feedback.js';
++
++test('entryCommand normalizes bot mentions and arguments', () => {
++  assert.equal(entryCommand('/start@my_bot welcome'), 'start');
++  assert.equal(entryCommand('/HELP'), 'help');
++  assert.equal(entryCommand('hello'), '');
++});
++
++test('start gives admins the workbench button and non-admins an actionable response', () => {
++  const admin = entryReply({ command: 'start', isAdmin: true, publicUrl: 'https://example.test' });
++  assert.equal(admin.text, '欢迎使用飞机助手。');
++  assert.equal(admin.reply_markup.inline_keyboard[0][0].web_app.url, 'https://example.test');
++
++  const visitor = entryReply({ command: 'start', isAdmin: false, publicUrl: 'https://example.test' });
++  assert.match(visitor.text, /暂无管理权限/);
++  assert.equal(visitor.reply_markup, undefined);
++});
++
++test('login reports missing permission and help explains the available entry points', () => {
++  const denied = entryReply({ command: 'login', isAdmin: false });
++  assert.match(denied.text, /网页登录权限/);
++  const help = entryReply({ command: 'help', isAdmin: false });
++  assert.match(help.text, /\/start/);
++  assert.match(help.text, /\/login/);
++});
++
++test('unknown commands receive guidance instead of silence', () => {
++  const reply = entryReply({ command: 'unknown', isAdmin: false });
++  assert.match(reply.text, /暂不支持/);
++});
