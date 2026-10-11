@@ -20,6 +20,7 @@ import { createMediaStore } from './media-store.js';
 import { route, canAccessBot, currentBot, selectedBotId, requirePlayerBot, assertSelected } from './request-context.js';
 import { registerTaskRoutes } from './routes-tasks.js';
 import { registerChatRoutes } from './chat.js';
+import { entryCommand, entryReply, loginReply } from './entry-feedback.js';
 
 const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
 for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
@@ -65,15 +66,19 @@ app.post('/tg/entry', async (req, res) => {
   if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return res.sendStatus(403);
   const chat = req.body?.message?.chat;
   const handleEntry = async () => {
-    if (chat?.type === 'private' && adminIds.includes(String(req.body.message.from?.id)) && /^\/start(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
-      const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
-      if (base) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, text: '点击下方按钮打开活动后台。', reply_markup: { inline_keyboard: [[{ text: '打开活动后台', web_app: { url: base } }]] } });
+    if (chat?.type !== 'private') return;
+    const command = entryCommand(req.body?.message?.text);
+    if (!command) return;
+    const isAdmin = adminIds.includes(String(req.body.message.from?.id));
+    const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
+    if (command === 'login') {
+      const link = isAdmin ? await browserAuth.issueLink(req.body.message.from?.id) : null;
+      const reply = loginReply(link);
+      await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
+      return;
     }
-    if (chat?.type === 'private' && /^\/login(?:@\w+)?(?:\s|$)/.test(String(req.body.message.text || ''))) {
-      const link = await browserAuth.issueLink(req.body.message.from?.id);
-      if (link) await botCall(process.env.ENTRY_BOT_TOKEN,'sendMessage',{ chat_id:chat.id,
-        text:'一次性网页登录链接，5 分钟内使用：',reply_markup:{ inline_keyboard:[[{ text:'打开工作台',url:link }]] } });
-    }
+    const reply = entryReply({ command, isAdmin, publicUrl: base });
+    if (reply) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
   };
   try { await handleEntry(); } catch (error) { console.error('Entry bot:', safeTelegramError(error)); }
   res.sendStatus(200);
