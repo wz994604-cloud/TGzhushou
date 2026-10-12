@@ -1,0 +1,223 @@
+Branch: feature/fix-railway-mini-auth
+Changed field: workbench API mode is railway, base defaults to /api for browsers and Mini Apps; Telegram initData remains an authentication header, never a backend selector.
+Observed production: latest HTTP logs repeatedly show POST /api/api -> 401 after page assets index-DhgLFjNO.js. Server exposes GET /api/bootstrap, not Serverless API handler.
+Cause: main.js selects Serverless for Telegram initData, retaining an obsolete backend path after migration to Railway.
+Fix: createWorkbenchApiClient pins Railway REST while retaining the generic Serverless client for other callers; no backend/auth/database configuration changes.
+Regression: browser and Mini App requests GET /api/bootstrap; mock Serverless call count 0; signed Telegram fixture accepted by real verifyInitData via real local HTTP; expired identity still rejected 401. Railway base origin and /api suffix supported.
+Baseline 3 passed; regression red 2 failed; modified 15 passed; build passed; rollback restored 3 files and original 3 tests passed. Live working files remain fixed.
+Status: local only; not pushed/merged/deployed. Real Telegram production retest pending release approval.
+MODIFIED_FILE: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/railway-mini-auth-fix-20261012/MODIFIED_FILE
+DIFF_FILE.patch: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/railway-mini-auth-fix-20261012/DIFF_FILE.patch
+VERIFICATION.txt: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/railway-mini-auth-fix-20261012/VERIFICATION.txt
+ROLLBACK.sh: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/railway-mini-auth-fix-20261012/ROLLBACK.sh
+BASELINE
+COMMAND: ['node', '--test', 'tests/api-client.test.js']
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/railway-mini-auth-fix-20261012/baseline
+INPUT: local fixture, no production credentials
+OUTPUT:
+TAP version 13
+# Subtest: API client uses the configured Serverless base
+ok 1 - API client uses the configured Serverless base
+  ---
+  duration_ms: 22.721132
+  type: 'test'
+  ...
+# Subtest: API client falls back to Railway when Serverless is unavailable
+ok 2 - API client falls back to Railway when Serverless is unavailable
+  ---
+  duration_ms: 0.989428
+  type: 'test'
+  ...
+# Subtest: Serverless endpoint base accepts a configured /api suffix
+ok 3 - Serverless endpoint base accepts a configured /api suffix
+  ---
+  duration_ms: 0.792505
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 125.815604
+
+EXIT: 0
+
+MODIFIED
+COMMAND: ['node', '--test', 'tests/api-client.test.js', 'tests/auth-session.test.js', 'tests/auth.test.js']
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手
+INPUT: local fixture, no production credentials
+OUTPUT:
+TAP version 13
+# Subtest: API client uses the configured Serverless base
+ok 1 - API client uses the configured Serverless base
+  ---
+  duration_ms: 27.28086
+  type: 'test'
+  ...
+# Subtest: API client falls back to Railway when Serverless is unavailable
+ok 2 - API client falls back to Railway when Serverless is unavailable
+  ---
+  duration_ms: 1.232745
+  type: 'test'
+  ...
+# Subtest: Serverless endpoint base accepts a configured /api suffix
+ok 3 - Serverless endpoint base accepts a configured /api suffix
+  ---
+  duration_ms: 0.657452
+  type: 'test'
+  ...
+# Subtest: Railway workbench uses REST even with Telegram SDK: browser
+ok 4 - Railway workbench uses REST even with Telegram SDK: browser
+  ---
+  duration_ms: 1.59809
+  type: 'test'
+  ...
+# Subtest: Railway workbench uses REST even with Telegram SDK: Mini App
+ok 5 - Railway workbench uses REST even with Telegram SDK: Mini App
+  ---
+  duration_ms: 0.880827
+  type: 'test'
+  ...
+# Subtest: Railway REST bootstrap accepts signed Mini App identity with the real verifier
+ok 6 - Railway REST bootstrap accepts signed Mini App identity with the real verifier
+  ---
+  duration_ms: 41.687877
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount clears the current browser account and returns to login
+ok 7 - logoutCurrentAccount clears the current browser account and returns to login
+  ---
+  duration_ms: 2.137492
+  type: 'test'
+  ...
+# Subtest: logoutCurrentAccount surfaces logout failures without pretending the account ended
+ok 8 - logoutCurrentAccount surfaces logout failures without pretending the account ended
+  ---
+  duration_ms: 0.584493
+  type: 'test'
+  ...
+# Subtest: auth recovery distinguishes browser accounts from Telegram sessions
+ok 9 - auth recovery distinguishes browser accounts from Telegram sessions
+  ---
+  duration_ms: 1.006618
+  type: 'test'
+  ...
+# Subtest: Telegram auth failure hides password form and provides session recovery
+ok 10 - Telegram auth failure hides password form and provides session recovery
+  ---
+  duration_ms: 0.287084
+  type: 'test'
+  ...
+# Subtest: browser login stays available without Telegram recovery instructions
+ok 11 - browser login stays available without Telegram recovery instructions
+  ---
+  duration_ms: 0.253832
+  type: 'test'
+  ...
+# Subtest: network failures offer retry without claiming Telegram credentials failed
+ok 12 - network failures offer retry without claiming Telegram credentials failed
+  ---
+  duration_ms: 0.191382
+  type: 'test'
+  ...
+# Subtest: valid Mini App HMAC includes signature field and accepts bound account
+ok 13 - valid Mini App HMAC includes signature field and accepts bound account
+  ---
+  duration_ms: 2.478123
+  type: 'test'
+  ...
+# Subtest: admin list accepts common separators and removes duplicates
+ok 14 - admin list accepts common separators and removes duplicates
+  ---
+  duration_ms: 1.180133
+  type: 'test'
+  ...
+# Subtest: rejects tampering, a different account, expired auth and duplicate fields
+ok 15 - rejects tampering, a different account, expired auth and duplicate fields
+  ---
+  duration_ms: 1.427582
+  type: 'test'
+  ...
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 224.072753
+
+EXIT: 0
+
+BUILD
+COMMAND: ['npm', 'run', 'build']
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手
+INPUT: local fixture, no production credentials
+OUTPUT:
+
+> tgzhushou@0.1.0 build
+> vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 738 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.65 kB │ gzip:  0.41 kB
+dist/assets/index-CC5BLg24.css  149.98 kB │ gzip: 25.63 kB
+dist/assets/core-Djq8_Zg8.js      2.75 kB │ gzip:  1.08 kB
+dist/assets/index-1i2EcPBA.js   319.73 kB │ gzip: 98.20 kB
+
+✓ built in 180ms
+
+EXIT: 0
+
+ROLLBACK
+COMMAND: ['/Users/jack/Codex-Workspace/01_Projects/飞机助手/.design/railway-mini-auth-fix-20261012/ROLLBACK.sh', '/var/folders/23/z_qmy1d103n5q7qhcnv83knm0000gn/T/railway-auth-rollback-f6n8a9pz']
+CWD: /Users/jack/Codex-Workspace/01_Projects/飞机助手
+INPUT: local fixture, no production credentials
+OUTPUT:
+RESTORED: 3 files; SHA256 MATCH
+
+EXIT: 0
+
+RESTORED_BEHAVIOR
+COMMAND: ['node', '--test', 'tests/api-client.test.js']
+CWD: /var/folders/23/z_qmy1d103n5q7qhcnv83knm0000gn/T/railway-auth-rollback-f6n8a9pz
+INPUT: local fixture, no production credentials
+OUTPUT:
+TAP version 13
+# Subtest: API client uses the configured Serverless base
+ok 1 - API client uses the configured Serverless base
+  ---
+  duration_ms: 24.8615
+  type: 'test'
+  ...
+# Subtest: API client falls back to Railway when Serverless is unavailable
+ok 2 - API client falls back to Railway when Serverless is unavailable
+  ---
+  duration_ms: 1.06443
+  type: 'test'
+  ...
+# Subtest: Serverless endpoint base accepts a configured /api suffix
+ok 3 - Serverless endpoint base accepts a configured /api suffix
+  ---
+  duration_ms: 0.563499
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 135.274158
+
+EXIT: 0

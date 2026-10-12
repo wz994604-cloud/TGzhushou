@@ -1,0 +1,124 @@
+diff --git a/src/api-client.js b/src/api-client.js
+index b9ac0e8..eb29c59 100644
+--- a/src/api-client.js
++++ b/src/api-client.js
+@@ -108,3 +108,16 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
+ 
+   return { api, image, headers, bases };
+ }
++
++// The production workbench is hosted on Railway, including Telegram Mini Apps.
++// Telegram initData authenticates REST requests; it does not select a backend.
++export function createWorkbenchApiClient({ initData = '', getPublisherId = () => '' } = {}) {
++  const base = String(runtimeConfig().railwayBase || '').replace(/\/$/, '');
++  return createApiClient({
++    initData,
++    getPublisherId,
++    mode: 'railway',
++    baseUrl: base.endsWith('/api') ? base : `${base}/api`,
++    fallbackBaseUrl: base.endsWith('/api') ? base : `${base}/api`,
++  });
++}
+diff --git a/src/main.js b/src/main.js
+index b2fe5c9..bd075e5 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -13,7 +13,7 @@ import { initDesktopShell } from './desktop-bridge.js';
+ import { mountWorkbench } from './workbench-shell.js';
+ import { defaultButtonRow, normalizeButtonRows, reflowAutomaticButtonRows, emojiPopoverPosition, emojiMatches } from './workbench-utils.js';
+ import { installSentEditor } from './sent-editor.js';
+-import { createApiClient } from './api-client.js';
++import { createWorkbenchApiClient } from './api-client.js';
+ import { logoutCurrentAccount, showAuthScreen, accountActionLabel } from './auth-session.js';
+ 
+ await initDesktopShell();
+@@ -38,13 +38,9 @@ const playerCache = new Map();
+ let playerPage = 1;
+ let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
+ const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
+-const apiRuntime = globalThis.__TGZ_API_CONFIG__ && typeof globalThis.__TGZ_API_CONFIG__ === 'object' ? globalThis.__TGZ_API_CONFIG__ : {};
+-const client = createApiClient({
++const client = createWorkbenchApiClient({
+   initData,
+   getPublisherId: () => selectedPublisherId,
+-  mode: initData ? 'serverless' : 'railway',
+-  baseUrl: initData ? (apiRuntime.serverlessBase || '') : (apiRuntime.railwayBase || ''),
+-  fallbackBaseUrl: apiRuntime.fallbackBaseUrl || '',
+ });
+ const { api } = client;
+ const loadImage = createImageLoader(client.image);
+diff --git a/tests/api-client.test.js b/tests/api-client.test.js
+index 55625bb..81e0a44 100644
+--- a/tests/api-client.test.js
++++ b/tests/api-client.test.js
+@@ -51,3 +51,70 @@ test('Serverless endpoint base accepts a configured /api suffix', async () => {
+     globalThis.fetch = originalFetch;
+   }
+ });
++
++for (const initData of ['', 'signed-telegram-fixture']) {
++  test(`Railway workbench uses REST even with Telegram SDK: ${initData ? 'Mini App' : 'browser'}`, async () => {
++    const originalFetch = globalThis.fetch;
++    const originalTelegram = globalThis.Telegram;
++    const originalConfig = globalThis.__TGZ_API_CONFIG__;
++    const requests = [];
++    let serverlessCalls = 0;
++    globalThis.Telegram = { WebApp: { Serverless: { call() { serverlessCalls++; throw new Error('old backend must not be used'); } } } };
++    globalThis.__TGZ_API_CONFIG__ = { serverlessBase: 'https://old.example' };
++    globalThis.fetch = async (url, options) => {
++      requests.push({ url, options });
++      return new Response(JSON.stringify({ admin: { id: 'fixture' } }), { headers: { 'content-type': 'application/json' } });
++    };
++    try {
++      const { createWorkbenchApiClient } = await import('../src/api-client.js');
++      const client = createWorkbenchApiClient({ initData, getPublisherId: () => 'fixture-bot' });
++      await client.api('/bootstrap');
++      assert.equal(serverlessCalls, 0);
++      assert.equal(requests[0].url, '/api/bootstrap');
++      assert.equal(requests[0].options.method, 'GET');
++      assert.equal(requests[0].options.headers['x-telegram-init-data'], initData);
++      assert.equal(requests[0].options.headers['x-publisher-id'], 'fixture-bot');
++      globalThis.fetch = async () => new Response(JSON.stringify({ error: '登录已过期，请重新打开小程序' }), { status: 401 });
++      await assert.rejects(client.api('/bootstrap'), { status: 401, message: '登录已过期，请重新打开小程序' });
++    } finally {
++      globalThis.fetch = originalFetch;
++      if (originalTelegram === undefined) delete globalThis.Telegram; else globalThis.Telegram = originalTelegram;
++      if (originalConfig === undefined) delete globalThis.__TGZ_API_CONFIG__; else globalThis.__TGZ_API_CONFIG__ = originalConfig;
++    }
++  });
++}
++
++test('Railway REST bootstrap accepts signed Mini App identity with the real verifier', async () => {
++  const { createServer } = await import('node:http');
++  const { verifyInitData } = await import('../server/auth.js');
++  const { signedData, entryToken } = await import('./helpers.js');
++  const { createWorkbenchApiClient } = await import('../src/api-client.js');
++  const originalConfig = globalThis.__TGZ_API_CONFIG__;
++  const paths = [];
++  const server = createServer((req, res) => {
++    paths.push(`${req.method} ${req.url}`);
++    res.setHeader('content-type', 'application/json');
++    try {
++      assert.equal(req.url, '/api/bootstrap');
++      const admin = verifyInitData(req.headers['x-telegram-init-data'], entryToken, '123456');
++      res.end(JSON.stringify({ admin }));
++    } catch (error) {
++      res.statusCode = 401;
++      res.end(JSON.stringify({ error: error.message }));
++    }
++  });
++  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
++  const origin = `http://127.0.0.1:${server.address().port}`;
++  try {
++    for (const railwayBase of [origin, `${origin}/api/`]) {
++      globalThis.__TGZ_API_CONFIG__ = { railwayBase };
++      const result = await createWorkbenchApiClient({ initData: signedData() }).api('/bootstrap');
++      assert.equal(result.admin.id, '123456');
++    }
++    assert.deepEqual(paths, ['GET /api/bootstrap', 'GET /api/bootstrap']);
++    await assert.rejects(createWorkbenchApiClient({ initData: signedData(123456, { auth_date: '1' }) }).api('/bootstrap'), { status: 401 });
++  } finally {
++    if (originalConfig === undefined) delete globalThis.__TGZ_API_CONFIG__; else globalThis.__TGZ_API_CONFIG__ = originalConfig;
++    await new Promise(resolve => server.close(resolve));
++  }
++});
