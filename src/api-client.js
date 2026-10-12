@@ -108,3 +108,16 @@ export function createApiClient({ initData = '', getPublisherId = () => '', base
 
   return { api, image, headers, bases };
 }
+
+// The production workbench is hosted on Railway, including Telegram Mini Apps.
+// Telegram initData authenticates REST requests; it does not select a backend.
+export function createWorkbenchApiClient({ initData = '', getPublisherId = () => '' } = {}) {
+  const base = String(runtimeConfig().railwayBase || '').replace(/\/$/, '');
+  return createApiClient({
+    initData,
+    getPublisherId,
+    mode: 'railway',
+    baseUrl: base.endsWith('/api') ? base : `${base}/api`,
+    fallbackBaseUrl: base.endsWith('/api') ? base : `${base}/api`,
+  });
+}

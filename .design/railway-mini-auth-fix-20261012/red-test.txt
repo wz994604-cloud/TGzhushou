@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: API client uses the configured Serverless base
+ok 1 - API client uses the configured Serverless base
+  ---
+  duration_ms: 23.376921
+  type: 'test'
+  ...
+# Subtest: API client falls back to Railway when Serverless is unavailable
+ok 2 - API client falls back to Railway when Serverless is unavailable
+  ---
+  duration_ms: 0.984807
+  type: 'test'
+  ...
+# Subtest: Serverless endpoint base accepts a configured /api suffix
+ok 3 - Serverless endpoint base accepts a configured /api suffix
+  ---
+  duration_ms: 0.605304
+  type: 'test'
+  ...
+# Subtest: Railway workbench uses REST even with Telegram SDK: browser
+not ok 4 - Railway workbench uses REST even with Telegram SDK: browser
+  ---
+  duration_ms: 1.170339
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/api-client.test.js:56:3'
+  failureType: 'testCodeFailure'
+  error: 'createWorkbenchApiClient is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/tests/api-client.test.js:70:22)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: Railway workbench uses REST even with Telegram SDK: Mini App
+not ok 5 - Railway workbench uses REST even with Telegram SDK: Mini App
+  ---
+  duration_ms: 0.305388
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/api-client.test.js:56:3'
+  failureType: 'testCodeFailure'
+  error: 'createWorkbenchApiClient is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/tests/api-client.test.js:70:22)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 3
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 127.534655

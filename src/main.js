@@ -13,7 +13,7 @@ import { initDesktopShell } from './desktop-bridge.js';
 import { mountWorkbench } from './workbench-shell.js';
 import { defaultButtonRow, normalizeButtonRows, reflowAutomaticButtonRows, emojiPopoverPosition, emojiMatches } from './workbench-utils.js';
 import { installSentEditor } from './sent-editor.js';
-import { createApiClient } from './api-client.js';
+import { createWorkbenchApiClient } from './api-client.js';
 import { logoutCurrentAccount, showAuthScreen, accountActionLabel } from './auth-session.js';
 
 await initDesktopShell();
@@ -38,13 +38,9 @@ const playerCache = new Map();
 let playerPage = 1;
 let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
 const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
-const apiRuntime = globalThis.__TGZ_API_CONFIG__ && typeof globalThis.__TGZ_API_CONFIG__ === 'object' ? globalThis.__TGZ_API_CONFIG__ : {};
-const client = createApiClient({
+const client = createWorkbenchApiClient({
   initData,
   getPublisherId: () => selectedPublisherId,
-  mode: initData ? 'serverless' : 'railway',
-  baseUrl: initData ? (apiRuntime.serverlessBase || '') : (apiRuntime.railwayBase || ''),
-  fallbackBaseUrl: apiRuntime.fallbackBaseUrl || '',
 });
 const { api } = client;
 const loadImage = createImageLoader(client.image);
