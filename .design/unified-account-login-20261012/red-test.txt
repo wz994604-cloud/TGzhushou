@@ -1,0 +1,173 @@
+TAP version 13
+# Subtest: logout ends current account only and calls login transition
+not ok 1 - logout ends current account only and calls login transition
+  ---
+  duration_ms: 3.383147
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/auth-session.test.js:4:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      [
+        {
+          options: {
+    -       credentials: 'same-origin',
+            method: 'POST'
+          },
+          url: '/auth/logout'
+        }
+      ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0:
+      url: '/auth/logout'
+      options:
+        method: 'POST'
+        credentials: 'same-origin'
+  actual:
+    0:
+      url: '/auth/logout'
+      options:
+        method: 'POST'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/tests/auth-session.test.js:7:9)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: logout failure leaves current session intact
+ok 2 - logout failure leaves current session intact
+  ---
+  duration_ms: 0.562476
+  type: 'test'
+  ...
+# Subtest: all surfaces show password form on expiry and never demand Telegram reopening
+not ok 3 - all surfaces show password form on expiry and never demand Telegram reopening
+  ---
+  duration_ms: 0.586316
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/auth-session.test.js:13:1'
+  failureType: 'testCodeFailure'
+  error: "Cannot set properties of undefined (setting 'authMode')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    showAuthScreen (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/src/auth-session.js:21:36)
+    TestContext.<anonymous> (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/tests/auth-session.test.js:14:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: network errors allow retry without hiding account login
+not ok 4 - network errors allow retry without hiding account login
+  ---
+  duration_ms: 0.184145
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/auth-session.test.js:19:1'
+  failureType: 'testCodeFailure'
+  error: "Cannot set properties of undefined (setting 'authMode')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    showAuthScreen (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/src/auth-session.js:21:36)
+    TestContext.<anonymous> (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/tests/auth-session.test.js:20:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# node:internal/modules/esm/resolve:275
+#     throw new ERR_MODULE_NOT_FOUND(
+#           ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/jack/Codex-Workspace/01_Projects/飞机助手/server/account-auth.js' imported from /Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/auth.test.js
+#     at finalizeResolution (node:internal/modules/esm/resolve:275:11)
+#     at moduleResolve (node:internal/modules/esm/resolve:865:10)
+#     at defaultResolve (node:internal/modules/esm/resolve:989:11)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:747:20)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:182:49) {
+#   code: 'ERR_MODULE_NOT_FOUND',
+#   url: 'file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/server/account-auth.js'
+# }
+# Node.js v22.23.3
+# Subtest: tests/auth.test.js
+not ok 2 - tests/auth.test.js
+  ---
+  duration_ms: 102.929259
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/auth.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: entryCommand normalizes bot mentions and arguments
+ok 6 - entryCommand normalizes bot mentions and arguments
+  ---
+  duration_ms: 1.294519
+  type: 'test'
+  ...
+# Subtest: start opens account login for every Telegram user
+not ok 7 - start opens account login for every Telegram user
+  ---
+  duration_ms: 0.318957
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/entry-feedback.test.js:7:40'
+  failureType: 'testCodeFailure'
+  error: "Cannot read properties of undefined (reading 'inline_keyboard')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/tests/entry-feedback.test.js:9:34)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: login opens account login for every Telegram user
+not ok 8 - login opens account login for every Telegram user
+  ---
+  duration_ms: 0.135278
+  type: 'test'
+  location: '/Users/jack/Codex-Workspace/01_Projects/飞机助手/tests/entry-feedback.test.js:7:40'
+  failureType: 'testCodeFailure'
+  error: "Cannot read properties of undefined (reading 'inline_keyboard')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/jack/Codex-Workspace/01_Projects/%E9%A3%9E%E6%9C%BA%E5%8A%A9%E6%89%8B/tests/entry-feedback.test.js:9:34)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: help and unknown commands explain public account login entry
+ok 9 - help and unknown commands explain public account login entry
+  ---
+  duration_ms: 0.312122
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 3
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 122.695719

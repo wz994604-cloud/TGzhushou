@@ -1,6 +1,7 @@
 # Telegram Serverless 迁移说明
 
-> 状态：Phase 1 盘点完成；当前不改变 Railway 生产运行方式。
+> 历史迁移方案，已停用，不是当前登录规则或发布流程。生产统一使用 Railway 与账号密码，参见 [统一登录规则](ACCOUNT_LOGIN.md)。
+> `tgcloud/` 和相关脚本仅保留为历史迁移资料，不参与当前应用运行。
 
 ## 目标架构
 

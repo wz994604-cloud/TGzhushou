@@ -1,0 +1,1347 @@
+diff --git a/.env.example b/.env.example
+index bc512eb..a6ff5f0 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,5 +1,4 @@
+ ENTRY_BOT_TOKEN=
+-ADMIN_TG_IDS=
+ CONFIG_KEY=
+ ADMIN_LOGIN_ACCOUNTS=[]
+ FFA_API_BASE_URL=https://fferwepba.ffyl88.com
+diff --git a/README.md b/README.md
+index 86b7ac9..e72a593 100644
+--- a/README.md
++++ b/README.md
+@@ -5,7 +5,6 @@
+ ## 必需环境变量
+ 
+ - `ENTRY_BOT_TOKEN`：Telegram 入口机器人 Token。
+-- `ADMIN_TG_IDS`：允许管理后台的 Telegram 数字用户 ID。
+ - `CONFIG_KEY`：32 字节 Base64 密钥，用于加密机器人 Token。
+ - `ADMIN_LOGIN_ACCOUNTS`：网页登录账号 JSON 数组。
+ - `PUBLIC_URL`：Railway 对外 HTTPS 域名。
+@@ -30,3 +29,8 @@ npm start
+ ## 数据库
+ 
+ 首次启动会按 `server/schema.sql` 初始化 PostgreSQL。生产数据库访问使用异步连接池。
++
++## 登录与权限
++
++所有客户端统一使用后台账号密码。Telegram 只提供小程序入口，不参与后台授权。
++详细规则见 [统一登录规则](docs/ACCOUNT_LOGIN.md)。
+diff --git a/docs/SERVERLESS_MIGRATION.md b/docs/SERVERLESS_MIGRATION.md
+index 67fdab3..3f267e7 100644
+--- a/docs/SERVERLESS_MIGRATION.md
++++ b/docs/SERVERLESS_MIGRATION.md
+@@ -1,6 +1,7 @@
+ # Telegram Serverless 迁移说明
+ 
+-> 状态：Phase 1 盘点完成；当前不改变 Railway 生产运行方式。
++> 历史迁移方案，已停用，不是当前登录规则或发布流程。生产统一使用 Railway 与账号密码，参见 [统一登录规则](ACCOUNT_LOGIN.md)。
++> `tgcloud/` 和相关脚本仅保留为历史迁移资料，不参与当前应用运行。
+ 
+ ## 目标架构
+ 
+diff --git a/package.json b/package.json
+index 46e7734..aaa7cbc 100644
+--- a/package.json
++++ b/package.json
+@@ -7,16 +7,11 @@
+     "dev": "vite --host 127.0.0.1",
+     "start": "node server/index.js",
+     "build": "vite build",
+-    "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/auth.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/browser-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
++    "check": "node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/account-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js",
+     "test": "node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js tests/entry-feedback.test.js tests/auth-session.test.js",
+-    "serverless:check": "node scripts/serverless-structure-check.mjs && node scripts/serverless-schema-check.mjs",
+     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
+     "desktop:build": "tauri build --no-bundle --config desktop/src-tauri/tauri.conf.json",
+-    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json",
+-    "serverless:push": "pnpm run build && tgcloud push",
+-    "serverless:migrate": "tgcloud migrate --yes",
+-    "serverless:deploy": "pnpm run serverless:push && pnpm run serverless:migrate",
+-    "serverless:seed-publishers": "./scripts/serverless-seed-publishers.sh"
++    "desktop:package": "tauri build --config desktop/src-tauri/tauri.conf.json"
+   },
+   "engines": {
+     "node": ">=22"
+diff --git a/server/auth.js b/server/auth.js
+deleted file mode 100644
+index c62aa57..0000000
+--- a/server/auth.js
++++ /dev/null
+@@ -1,29 +0,0 @@
+-import crypto from 'node:crypto';
+-
+-export function parseAdminIds(raw) {
+-  const values = String(raw || '').split(/[,，;；\s]+/).map(value => value.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+-  if (!values.length || values.some(value => !/^\d+$/.test(value))) throw new Error('ADMIN_TG_IDS 必须是分隔的 Telegram 数字用户 ID');
+-  return [...new Set(values)];
+-}
+-
+-export function verifyInitData(raw, botToken, adminId, now = Date.now()) {
+-  const allowedIds = (Array.isArray(adminId) ? adminId : String(adminId || '').split(','))
+-    .map(value => String(value).trim()).filter(Boolean);
+-  if (!raw || raw.length > 8192 || !botToken || !allowedIds.length || allowedIds.some(value => !/^\d+$/.test(value))) throw new Error('未授权');
+-  const params = new URLSearchParams(raw);
+-  if ([...params.keys()].some((key, index, keys) => keys.indexOf(key) !== index)) throw new Error('身份数据无效');
+-  const hash = params.get('hash');
+-  if (!/^[0-9a-f]{64}$/i.test(hash || '')) throw new Error('身份数据无效');
+-  const issued = Number(params.get('auth_date'));
+-  if (!Number.isSafeInteger(issued) || issued * 1000 > now + 60_000 || issued * 1000 < now - 86_400_000) throw new Error('登录已过期，请重新打开小程序');
+-  // Bot-token HMAC includes signature; only the third-party Ed25519 flow excludes it.
+-  const data = [...params.entries()].filter(([key]) => key !== 'hash')
+-    .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, value]) => `${key}=${value}`).join('\n');
+-  const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+-  const expected = crypto.createHmac('sha256', secret).update(data).digest();
+-  if (!crypto.timingSafeEqual(expected, Buffer.from(hash, 'hex'))) throw new Error('身份签名无效');
+-  let user;
+-  try { user = JSON.parse(params.get('user') || '{}'); } catch { throw new Error('身份数据无效'); }
+-  if (!allowedIds.includes(String(user.id))) throw new Error('当前 Telegram 账号没有管理权限');
+-  return { id: String(user.id), name: [user.first_name, user.last_name].filter(Boolean).join(' ') };
+-}
+diff --git a/server/browser-auth.js b/server/browser-auth.js
+deleted file mode 100644
+index 55dc9bf..0000000
+--- a/server/browser-auth.js
++++ /dev/null
+@@ -1,121 +0,0 @@
+-import crypto from 'node:crypto';
+-import {getSetting, setSetting} from './db.js';
+-
+-const digest = value => crypto.createHash('sha256').update(value).digest('hex');
+-const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part => {
+-  const at = part.indexOf('='); return at < 0 ? ['', ''] : [part.slice(0,at).trim(),part.slice(at+1).trim()];
+-}));
+-
+-export async function createBrowserAuth(db, adminIds, publicUrl, credentials = {}) {
+-  const base = String(publicUrl || '').replace(/\/$/, '');
+-  const salt = String(credentials.salt || 'tgzhushou-browser-login');
+-  const accounts = (Array.isArray(credentials.accounts) ? credentials.accounts : [])
+-    .map(account => {
+-      if (account?.publisherIds !== undefined && (!Array.isArray(account.publisherIds) || account.publisherIds.some(id => !/^\d+$/.test(String(id)))))
+-        throw new Error('管理员 publisherIds 应为机器人 ID 数组');
+-      return {username:String(account?.username || '').trim(), password:String(account?.password || ''),
+-        ...(account?.publisherIds !== undefined ? {publisherIds:[...new Set(account.publisherIds.map(String))]} : {})};
+-    })
+-    .filter(account => account.username && account.password)
+-    .map(({password, ...account}) => ({...account, passwordKey:crypto.scryptSync(password, salt, 32)}));
+-  const failures = new Map();
+-  const storedAccounts = async () => JSON.parse((await getSetting(db, 'admin_accounts_v1')) || '[]');
+-  const findAccount = async username => accounts.find(account => account.username === username) || (await storedAccounts()).find(account => account.username === username);
+-  const sameOrigin = req => {
+-    const origin = req.get('origin');
+-    return Boolean(origin && new URL(origin).host === req.get('host'));
+-  };
+-  const createSession = async (adminId, now = Date.now(), username = '') => {
+-    const session = crypto.randomBytes(32).toString('base64url');
+-    await db.prepare('INSERT INTO browser_sessions(session_hash,admin_id,expires_at,created_at,last_seen,login_username) VALUES(?,?,?,?,?,?)')
+-      .run(digest(session),String(adminId),now+24*60*60_000,now,now,username);
+-    return session;
+-  };
+-  const setSession = (res, session) => res.set('Set-Cookie',`tgzhushou_session=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
+-  async function issueLink(adminId) {
+-    if (!adminIds.includes(String(adminId)) || !base) return null;
+-    const token = crypto.randomBytes(32).toString('base64url');
+-    await db.prepare('DELETE FROM browser_links WHERE expires_at<?').run(Date.now());
+-    await db.prepare('INSERT INTO browser_links(token_hash,admin_id,expires_at) VALUES(?,?,?)')
+-      .run(digest(token),String(adminId),Date.now()+5*60_000);
+-    return `${base}/#login=${token}`;
+-  }
+-  async function authenticate(req) {
+-    const raw = cookies(req.get('cookie')).tgzhushou_session;
+-    if (!raw || !/^[A-Za-z0-9_-]{40,100}$/.test(raw)) return null;
+-    const row = await db.prepare('SELECT * FROM browser_sessions WHERE session_hash=? AND expires_at>?').get(digest(raw),Date.now());
+-    if (!row || (!row.login_username && !adminIds.includes(row.admin_id))) return null;
+-    if (!['GET','HEAD','OPTIONS'].includes(req.method)) {
+-      const origin = req.get('origin');
+-      if (!origin || new URL(origin).host !== req.get('host')) return null;
+-    }
+-    if (Date.now()-row.last_seen>60_000) await db.prepare('UPDATE browser_sessions SET last_seen=? WHERE session_hash=?').run(Date.now(),row.session_hash);
+-    const account = row.login_username ? await findAccount(row.login_username) : null;
+-    if (row.login_username && !account) return null;
+-    return {id:row.admin_id, name:account?.username || '管理员', username:account?.username || '',
+-      canManageBots:account?.username === 'wz9946',
+-      canManageAccounts:account?.username === 'wz9946',
+-      ...(account?.username !== 'wz9946' && account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
+-  }
+-  function routes(app) {
+-    app.get('/auth/admin-accounts', async (req, res) => {
+-      if ((await authenticate(req))?.canManageAccounts !== true) return res.sendStatus(403);
+-      res.json({accounts:[...accounts,...(await storedAccounts())].map(({username,publisherIds}) => ({username,publisherIds})),
+-        publishers:await db.prepare('SELECT id,username FROM publishers ORDER BY username').all()});
+-    });
+-    app.post('/auth/admin-accounts', async (req, res) => {
+-      if (!sameOrigin(req) || (await authenticate(req))?.canManageAccounts !== true) return res.sendStatus(403);
+-      const username = String(req.body?.username || '').trim(), password = String(req.body?.password || '');
+-      const publisherIds = req.body?.publisherIds;
+-      const validPublisherIds = new Set((await db.prepare('SELECT id FROM publishers').all()).map(row => String(row.id)));
+-      if (!/^[A-Za-z0-9]{4,64}$/.test(username) || password.length < 4 || password.length > 128 ||
+-          !Array.isArray(publisherIds) || !publisherIds.length || publisherIds.length > 100 ||
+-          publisherIds.some(id => typeof id !== 'string' || !/^\d+$/.test(id) || !validPublisherIds.has(id)))
+-        return res.status(400).json({error:'账号须为 4–64 位字母数字，密码须为 4–128 位，并选择有效机器人'});
+-      if (['wz9946','wz994604'].includes(username) || (await findAccount(username))) return res.status(409).json({error:'账号已存在或为保留账号'});
+-      const passwordSalt = crypto.randomBytes(16).toString('base64url');
+-      const account = {username,passwordSalt,passwordHash:crypto.scryptSync(password,passwordSalt,32).toString('base64'),publisherIds:[...new Set(publisherIds)]};
+-      await db.transaction(async () => {
+-        const saved = await storedAccounts();
+-        if (saved.some(item => item.username === username)) throw new Error('账号已存在');
+-        await setSetting(db,'admin_accounts_v1',JSON.stringify([...saved,account]));
+-      })();
+-      res.status(201).json({username,publisherIds:account.publisherIds});
+-    });
+-    app.post('/auth/exchange', async (req, res) => {
+-      const token = String(req.body?.token || '');
+-      if (!/^[A-Za-z0-9_-]{40,100}$/.test(token)) return res.sendStatus(401);
+-      const hash = digest(token), now = Date.now();
+-      const row = await db.prepare('SELECT * FROM browser_links WHERE token_hash=? AND expires_at>?').get(hash,now);
+-      if (!row || !adminIds.includes(row.admin_id)) return res.sendStatus(401);
+-      await db.prepare('DELETE FROM browser_links WHERE token_hash=?').run(hash);
+-      setSession(res, await createSession(row.admin_id, now));
+-      res.json({ ok:true });
+-    });
+-    app.post('/auth/login', async (req, res) => {
+-      if (!sameOrigin(req)) return res.sendStatus(403);
+-      if (!accounts.length && !(await storedAccounts()).length) return res.status(503).json({ error:'账号登录尚未配置，请联系管理员' });
+-      const now = Date.now(), ip = req.ip || 'unknown', state = failures.get(ip) || { count:0, until:0 };
+-      if (state.until > now) return res.status(429).json({ error:'登录失败次数过多，请稍后再试' });
+-      const inputUser = String(req.body?.username || '').trim(), inputPassword = String(req.body?.password || '');
+-      if (inputPassword.length > 128) return res.status(401).json({error:'账号或密码错误'});
+-      const account = await findAccount(inputUser);
+-      const inputKey = crypto.scryptSync(inputPassword, account?.passwordSalt || salt, 32);
+-      const passwordKey = account?.passwordKey || Buffer.from(account?.passwordHash || '', 'base64');
+-      const valid = Boolean(account && inputKey.length === passwordKey.length && crypto.timingSafeEqual(inputKey, passwordKey));
+-      if (!valid) {
+-        state.count += 1; if (state.count >= 5) { state.count = 0; state.until = now + 15*60_000; }
+-        failures.set(ip, state); return res.status(401).json({ error:'账号或密码错误' });
+-      }
+-      failures.delete(ip); setSession(res, await createSession(`account:${account.username}`, now, account.username)); res.json({ ok:true });
+-    });
+-    app.post('/auth/logout', async (req, res) => {
+-      if (!sameOrigin(req)) return res.sendStatus(403);
+-      const raw = cookies(req.get('cookie')).tgzhushou_session;
+-      if (raw) await db.prepare('DELETE FROM browser_sessions WHERE session_hash=?').run(digest(raw));
+-      res.set('Set-Cookie','tgzhushou_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+-      res.json({ ok:true });
+-    });
+-  }
+-  return { issueLink, authenticate, routes };
+-}
+diff --git a/server/entry-feedback.js b/server/entry-feedback.js
+index 2f6a8b5..91603eb 100644
+--- a/server/entry-feedback.js
++++ b/server/entry-feedback.js
+@@ -1,43 +1,22 @@
+ const COMMAND_RE = /^\/([a-z0-9_]+)(?:@\w+)?(?:\s|$)/i;
+-
+ export function entryCommand(text) {
+   return String(text || '').match(COMMAND_RE)?.[1]?.toLowerCase() || '';
+ }
+-
+ const helpText = [
+-  '飞机助手入口帮助',
+-  '',
+-  '/start：打开活动工作台',
+-  '/login：获取网页登录链接',
+-  '/help：查看这份帮助',
+-  '',
+-  '如果按钮无法打开，请重新发送 /start；仍有问题请联系管理员。',
++  '飞机助手入口帮助', '',
++  '/start：打开工作台登录页', '/login：打开工作台登录页', '/help：查看这份帮助', '',
++  '所有用户均可打开入口，使用管理员分配的账号密码登录。',
++  '账号和机器人权限请联系管理员配置。',
+ ].join('\n');
+-
+-export function entryReply({ command, isAdmin, publicUrl }) {
+-  if (command === 'start' && isAdmin && publicUrl) {
++export function entryReply({ command, publicUrl }) {
++  if (command === 'start' || command === 'login') {
++    const url = String(publicUrl || '').replace(/\/$/, '');
++    if (!url) return { text: '工作台地址暂未配置，请联系管理员检查 Railway 的 PUBLIC_URL。' };
+     return {
+-      text: '欢迎使用飞机助手。',
+-      reply_markup: { inline_keyboard: [[{ text: '打开活动工作台', web_app: { url: publicUrl } }]] },
++      text: '欢迎使用飞机助手。请使用后台账号密码登录。',
++      reply_markup: { inline_keyboard: [[{ text: '打开工作台登录', web_app: { url } }]] },
+     };
+   }
+-  if (command === 'start' && isAdmin) {
+-    return { text: '工作台地址暂未配置，请联系管理员检查 Railway 的 PUBLIC_URL。' };
+-  }
+-  if (command === 'start') {
+-    return { text: '欢迎使用飞机助手。\n当前账号暂无管理权限，请联系管理员开通后再使用。' };
+-  }
+-  if (command === 'login') {
+-    return isAdmin
+-      ? null
+-      : { text: '当前账号没有网页登录权限，请联系管理员开通后再重试。' };
+-  }
+   if (command === 'help') return { text: helpText };
+   return { text: '暂不支持这个入口命令。发送 /help 查看可用命令。' };
+ }
+-
+-export function loginReply(url) {
+-  return url
+-    ? { text: '网页登录链接已生成，有效期 5 分钟，请勿转发给他人。', reply_markup: { inline_keyboard: [[{ text: '打开网页登录', url }]] } }
+-    : { text: '当前账号没有网页登录权限，请联系管理员开通后再重试。' };
+-}
+diff --git a/server/index.js b/server/index.js
+index 9f11f22..f7ca704 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -8,23 +8,21 @@ import crypto from 'node:crypto';
+ import { fileURLToPath } from 'node:url';
+ import { openDatabase, getSetting, setSetting, encryptToken, decryptToken } from './db.js';
+ import { listPublishers, savePublisher } from './publishers.js';
+-import { parseAdminIds, verifyInitData } from './auth.js';
+ import { botCall, safeTelegramError } from './telegram.js';
+ import { renderDelta, normalizeButtons } from './format.js';
+ import { normalizeSchedule, nextSlot } from './schedule.js';
+ import { createScheduler } from './scheduler.js';
+ import { normalizeTelegramId, decodeCsv, parseCsv } from './player-utils.js';
+ import { initializePlayerImports, playerSourceToken, savePlayerSourceToken, upsertPlayers } from './player-store.js';
+-import { createBrowserAuth } from './browser-auth.js';
++import { createAccountAuth, requireAccount } from './account-auth.js';
+ import { createMediaStore } from './media-store.js';
+ import { route, canAccessBot, currentBot, selectedBotId, requirePlayerBot, assertSelected } from './request-context.js';
+ import { registerTaskRoutes } from './routes-tasks.js';
+ import { registerChatRoutes } from './chat.js';
+-import { entryCommand, entryReply, loginReply } from './entry-feedback.js';
++import { entryCommand, entryReply } from './entry-feedback.js';
+ 
+ const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
+ for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
+-const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS);
+ if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
+ if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
+ const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
+@@ -38,7 +36,7 @@ async function kickScheduler() {
+   await scheduler.tick();
+ }
+ const app = express();
+-const browserAuth = await createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
++const accountAuth = await createAccountAuth(db, {
+   accounts: (() => {
+     try {
+       const parsed = JSON.parse(process.env.ADMIN_LOGIN_ACCOUNTS || '[]');
+@@ -53,7 +51,7 @@ const browserAuth = await createBrowserAuth(db, adminIds, process.env.PUBLIC_URL
+ app.disable('x-powered-by');
+ app.use(express.json({ limit: '512kb' }));
+ app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+-browserAuth.routes(app);
++accountAuth.routes(app);
+ 
+ app.get('/healthz', async (_req, res) => {
+   try { await db.prepare('SELECT 1').get(); res.json({ ok: true, database: true }); }
+@@ -69,27 +67,16 @@ app.post('/tg/entry', async (req, res) => {
+     if (chat?.type !== 'private') return;
+     const command = entryCommand(req.body?.message?.text);
+     if (!command) return;
+-    const isAdmin = adminIds.includes(String(req.body.message.from?.id));
+-    const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
+-    if (command === 'login') {
+-      const link = isAdmin ? await browserAuth.issueLink(req.body.message.from?.id) : null;
+-      const reply = loginReply(link);
+-      await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
+-      return;
+-    }
+-    const reply = entryReply({ command, isAdmin, publicUrl: base });
++    const reply = entryReply({ command, publicUrl: process.env.PUBLIC_URL });
+     if (reply) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
+   };
+   try { await handleEntry(); } catch (error) { console.error('Entry bot:', safeTelegramError(error)); }
+   res.sendStatus(200);
+ });
+ 
++app.use('/api', requireAccount(accountAuth));
+ app.use('/api', async (req, res, next) => {
+   try {
+-    req.admin = await browserAuth.authenticate(req) || (req.get('x-telegram-init-data')
+-      ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
+-      : null);
+-    if (!req.admin) throw new Error('未授权');
+     if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)
+       return res.status(403).json({error:'仅 wz9946 可管理或配置机器人'});
+     const selected = String(req.get('x-publisher-id') || '');
+@@ -104,7 +91,7 @@ app.use('/api', async (req, res, next) => {
+     }
+     next();
+   }
+-  catch (error) { res.status(401).json({ error: error.message }); }
++  catch (error) { next(error); }
+ });
+ 
+ registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL, publisherFor:currentBot });
+diff --git a/server/schema.sql b/server/schema.sql
+index 54ed520..3cf142b 100644
+--- a/server/schema.sql
++++ b/server/schema.sql
+@@ -94,9 +94,6 @@
+       webhook_status TEXT NOT NULL DEFAULT 'NOT_CHECKED',
+       secret TEXT, last_error TEXT, checked_at INTEGER
+     );
+-    CREATE TABLE IF NOT EXISTS browser_links(
+-      token_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL, expires_at INTEGER NOT NULL
+-    );
+     CREATE TABLE IF NOT EXISTS browser_sessions(
+       session_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL,
+       expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+diff --git a/src/api-client.js b/src/api-client.js
+index eb29c59..5c921d7 100644
+--- a/src/api-client.js
++++ b/src/api-client.js
+@@ -1,123 +1,34 @@
+-function runtimeConfig() {
+-  const config = globalThis.__TGZ_API_CONFIG__;
+-  return config && typeof config === 'object' ? config : {};
+-}
+-
+-function joinBase(base, path) {
+-  const normalizedBase = String(base || '').replace(/\/$/, '');
+-  const normalizedPath = String(path || '').startsWith('/') ? path : `/${path}`;
+-  return normalizedBase ? `${normalizedBase}${normalizedPath}` : normalizedPath;
+-}
+-
+-export function createApiClient({ initData = '', getPublisherId = () => '', baseUrl, fallbackBaseUrl, mode } = {}) {
+-  const config = runtimeConfig();
+-  const primaryBase = baseUrl ?? (mode === 'serverless' ? config.serverlessBase : config.railwayBase) ?? config.baseUrl ?? '';
+-  const fallbackBase = fallbackBaseUrl ?? config.fallbackBaseUrl ?? '';
+-  const bases = [primaryBase, fallbackBase].filter((base, index, all) => all.indexOf(base) === index);
+-  const serverlessMode = mode === 'serverless';
+-
++// Every client uses the same Railway REST endpoints and account session cookie.
++export function createWorkbenchApiClient({ getPublisherId = () => '', onUnauthorized = () => {} } = {}) {
++  const config = globalThis.__TGZ_API_CONFIG__ || {};
++  const origin = String(config.railwayBase || '').replace(/\/$/, '');
++  const base = origin.endsWith('/api') ? origin : `${origin}/api`;
+   const headers = () => {
+-    const result = { 'x-telegram-init-data': initData };
+     const publisherId = getPublisherId();
+-    if (publisherId) result['x-publisher-id'] = publisherId;
+-    return result;
++    return publisherId ? { 'x-publisher-id': publisherId } : {};
+   };
+-
+-  async function serializeBody(body) {
+-    if (!(body instanceof FormData)) return body;
+-    const result = {};
+-    for (const [key, value] of body.entries()) {
+-      if (typeof value === 'string') { result[key] = value; continue; }
+-      const bytes = new Uint8Array(await value.arrayBuffer());
+-      let binary = '';
+-      const chunk = 0x8000;
+-      for (let index = 0; index < bytes.length; index += chunk) binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+-      result[key] = { name: value.name || key, mime: value.type || 'application/octet-stream', base64: btoa(binary) };
+-    }
+-    return result;
+-  }
+-
+   async function request(path, options = {}) {
+-    let lastError;
+-    for (const base of bases) {
+-      try {
+-        const useServerless = serverlessMode && base === primaryBase;
+-        const serverlessApi = globalThis.Telegram?.WebApp?.Serverless;
+-        if (useServerless && typeof serverlessApi?.call === 'function') {
+-          const payloadBody = await serializeBody(options.body);
+-          const payload = await new Promise((resolve, reject) => {
+-            serverlessApi.call('api', {
+-              route: path,
+-              method: options.method || 'GET',
+-              body: payloadBody,
+-              publisherId: getPublisherId(),
+-            }, (error, result) => error ? reject(error) : resolve(result));
+-          });
+-          return { ok: true, status: 200, serverlessPayload: payload, headers: new Headers({ 'content-type': 'application/json' }), json: async () => payload };
+-        }
+-        const endpointPath = String(base || '').replace(/\/$/, '').endsWith('/api') ? '/api' : '/api/api';
+-        const legacyOptions = { ...options, body: options.body instanceof FormData || options.body == null || typeof options.body === 'string' ? options.body : JSON.stringify(options.body) };
+-        const response = useServerless
+-          ? await fetch(joinBase(base, endpointPath), {
+-            method: 'POST',
+-            headers: { ...(options.headers || {}), 'content-type': 'application/json' },
+-            body: JSON.stringify({
+-              route: path,
+-              method: options.method || 'GET',
+-              body: await serializeBody(options.body),
+-              publisherId: getPublisherId(),
+-            }),
+-          })
+-          : await fetch(joinBase(base, path), legacyOptions);
+-        // Auth and validation errors belong to the selected backend. Only a
+-        // missing/unavailable route is eligible for the configured fallback.
+-        if (response.status < 500 && response.status !== 404) return response;
+-        if (base === bases.at(-1)) return response;
+-      } catch (error) {
+-        lastError = error;
+-        if (base === bases.at(-1)) throw error;
+-      }
+-    }
+-    throw lastError || new Error('API unavailable');
++    const response = await fetch(`${base}${path.startsWith('/') ? path : `/${path}`}`, {
++      ...options, credentials: 'same-origin',
++    });
++    if (response.status === 401) onUnauthorized(Object.assign(new Error('请登录账号'), { status: 401 }));
++    return response;
+   }
+-
+-  async function api(url, method = 'GET', body) {
++  async function api(path, method = 'GET', body) {
+     const requestHeaders = headers();
+     if (body && !(body instanceof FormData)) requestHeaders['content-type'] = 'application/json';
+-    const response = await request(url, {
+-      method,
+-      headers: requestHeaders,
+-      body,
++    const response = await request(path, {
++      method, headers: requestHeaders,
++      body: body instanceof FormData || body == null || typeof body === 'string' ? body : JSON.stringify(body),
+     });
+-    const result = response.serverlessPayload ?? await response.json().catch(() => ({}));
+-    if (!response.ok) throw Object.assign(new Error(result.error || result.description || `请求失败 (${response.status})`), { status: response.status, code: result.parameters?.code });
++    const result = await response.json().catch(() => ({}));
++    if (!response.ok) throw Object.assign(new Error(result.error || `请求失败 (${response.status})`), { status: response.status });
+     return result;
+   }
+-
+-  async function image(url) {
+-    const response = await request(url, { headers: headers() });
++  async function image(path) {
++    const response = await request(path, { headers: headers() });
+     if (!response.ok) throw Object.assign(new Error('图片加载失败'), { status: response.status });
+-    if (serverlessMode && response.headers.get('content-type')?.includes('application/json')) {
+-      const result = await response.json();
+-      if (!result?.__binary || !result.base64) throw new Error('图片响应无效');
+-      const bytes = Uint8Array.from(atob(result.base64), (char) => char.charCodeAt(0));
+-      return new Blob([bytes], { type: result.mime || 'application/octet-stream' });
+-    }
+     return response.blob();
+   }
+-
+-  return { api, image, headers, bases };
+-}
+-
+-// The production workbench is hosted on Railway, including Telegram Mini Apps.
+-// Telegram initData authenticates REST requests; it does not select a backend.
+-export function createWorkbenchApiClient({ initData = '', getPublisherId = () => '' } = {}) {
+-  const base = String(runtimeConfig().railwayBase || '').replace(/\/$/, '');
+-  return createApiClient({
+-    initData,
+-    getPublisherId,
+-    mode: 'railway',
+-    baseUrl: base.endsWith('/api') ? base : `${base}/api`,
+-    fallbackBaseUrl: base.endsWith('/api') ? base : `${base}/api`,
+-  });
++  return { api, image, headers };
+ }
+diff --git a/src/auth-session.js b/src/auth-session.js
+index 3b52031..4a8eeb4 100644
+--- a/src/auth-session.js
++++ b/src/auth-session.js
+@@ -1,33 +1,18 @@
+ export async function logoutCurrentAccount({ fetchImpl = fetch, onLoggedOut = () => {} } = {}) {
+-  const response = await fetchImpl('/auth/logout', { method: 'POST' });
++  const response = await fetchImpl('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+   if (!response?.ok) throw new Error('退出当前账号失败，请稍后重试');
+   await onLoggedOut();
+ }
+-
+-export function authRecoveryMessage(error, miniApp) {
+-  if (miniApp && (error?.status === 401 || error?.status === 403)) return 'Telegram 身份验证失败，请从入口机器人重新打开。';
+-  if (error?.status === 401 || error?.status === 403 || error?.message === '未授权') return '登录状态已失效，请重新登录。';
+-  return `工作台加载失败：${error?.message || '未知错误'}`;
++export function authRecoveryMessage(error) {
++  if (error?.status === 401) return '请登录账号；登录状态已失效时，请重新登录。';
++  return `工作台加载失败：${error?.message || '请检查网络连接后重试'}`;
+ }
+-
+-export function accountActionLabel(miniApp) {
+-  return miniApp ? '重新验证当前会话' : '退出当前账号';
+-}
+-
+-export function showAuthScreen(elements, error, miniApp) {
+-  const denied = error?.status === 401 || error?.status === 403;
++export function showAuthScreen(elements, error) {
+   elements.workspace.hidden = true;
+   elements.locked.hidden = false;
+-  elements.locked.dataset.authMode = miniApp ? 'telegram' : 'browser';
+-  elements.loginForm.hidden = miniApp;
+-  elements.loginHint.hidden = miniApp;
+-  elements.telegramRecovery.hidden = !miniApp;
+-  elements.authRetry.hidden = !miniApp || denied;
+-  elements.loginTitle.textContent = miniApp
+-    ? (denied ? '无法验证当前会话' : '暂时连接不上工作台')
+-    : '登录管理后台';
+-  elements.loginIntro.textContent = miniApp
+-    ? (denied ? '请关闭当前小程序，从 Telegram 入口机器人重新打开活动助手。' : '请检查网络连接后重试。')
+-    : '使用管理员账号密码进入运营工作台';
+-  elements.authError.textContent = miniApp && denied ? '' : authRecoveryMessage(error, miniApp);
++  elements.loginForm.hidden = false;
++  elements.authRetry.hidden = error?.status === 401;
++  elements.loginTitle.textContent = '登录管理后台';
++  elements.loginIntro.textContent = '使用管理员账号密码进入运营工作台';
++  elements.authError.textContent = authRecoveryMessage(error);
+ }
+diff --git a/src/login.css b/src/login.css
+index 117f8d5..a69425a 100644
+--- a/src/login.css
++++ b/src/login.css
+@@ -46,12 +46,11 @@ html[data-surface] #locked .login-submit:disabled { opacity:.66; cursor:wait; }
+ #locked .login-form.is-loading .login-submit::after { content:" …"; }
+ html[data-surface] #locked .login-error { min-height:0; margin:16px 0 0; color:#c9342b; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+ #locked .login-error:empty { display:none; }
+-html[data-surface] #locked .login-hint, #locked .recovery-hint { margin:20px 0 0; color:#636366; font-size:13px; line-height:1.7; }
+-html[data-surface] #locked .login-hint code { padding:2px 6px; border-radius:6px; background:#f2f2f7; color:#3a3a3c; }
+-#locked .telegram-recovery { display:grid; gap:12px; }
+-#locked .recovery-hint { margin:0; }
+ html[data-surface] #locked .login-footer { position:static; margin:0; color:#636366; font-size:12px; text-align:center; line-height:1.6; }
+ @media (max-width:360px) {
+   html[data-surface] #locked.login-shell { padding-left:16px; padding-right:16px; }
+   html[data-surface] #locked .login-card { padding:24px 20px; }
+ }
++
++html[data-surface] #locked .login-hint { margin:20px 0 0; color:#636366; font-size:13px; line-height:1.7; }
++html[data-surface] #locked #authRetry { width:100%; margin-top:16px; min-height:44px; }
+diff --git a/src/main.js b/src/main.js
+index bd075e5..13be78c 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -14,13 +14,13 @@ import { mountWorkbench } from './workbench-shell.js';
+ import { defaultButtonRow, normalizeButtonRows, reflowAutomaticButtonRows, emojiPopoverPosition, emojiMatches } from './workbench-utils.js';
+ import { installSentEditor } from './sent-editor.js';
+ import { createWorkbenchApiClient } from './api-client.js';
+-import { logoutCurrentAccount, showAuthScreen, accountActionLabel } from './auth-session.js';
++import { logoutCurrentAccount, showAuthScreen } from './auth-session.js';
+ 
+ await initDesktopShell();
+ const tg = window.Telegram?.WebApp;
+ tg?.ready(); tg?.expand();
+-document.documentElement.classList.toggle("tg-mini-app", Boolean(tg?.initData));
+-const initData = tg?.initData || '';
++const isMiniApp = Boolean(tg?.initData); // Layout only; account authentication is identical on every surface.
++document.documentElement.classList.toggle("tg-mini-app", isMiniApp);
+ const $ = id => document.getElementById(id);
+ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+ const fmt = value => value ? new Date(value).toLocaleString('zh-CN', { timeZone:'Asia/Shanghai', hour12:false }) : '—';
+@@ -39,7 +39,7 @@ let playerPage = 1;
+ let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
+ const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
+ const client = createWorkbenchApiClient({
+-  initData,
++  onUnauthorized: displayAuthScreen,
+   getPublisherId: () => selectedPublisherId,
+ });
+ const { api } = client;
+@@ -105,7 +105,7 @@ function setEmojiState(node, state, label = '') {
+ }
+ 
+ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hidden="true"><svg viewBox="0 0 48 48" role="presentation"><path d="M24 5 28.2 19.8 43 24l-14.8 4.2L24 43l-4.2-14.8L5 24l14.8-4.2L24 5Z" fill="currentColor"/><circle cx="37" cy="11" r="3" fill="currentColor" opacity=".72"/><circle cx="11" cy="37" r="3" fill="currentColor" opacity=".72"/></svg></div><div class="brand-copy"><span class="eyebrow">运营工作台</span><h1>活动中枢</h1><p id="identity">Telegram 活动发布工作台</p></div><div class="header-meta"><span class="online-dot" aria-hidden="true"></span><span class="chip">北京时间</span></div></header>
+-<div id="locked" class="login-shell" hidden><div class="login-card"><div class="login-brand"><span class="login-brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path d="M21.6 2.4 10.9 13.1M21.6 2.4 15 21.6l-4.1-8.5L2.4 9l19.2-6.6Z" fill="none" stroke="rgba(255,255,255,.94)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>活动助手</strong><small>Telegram 运营工作台</small></span></div><h2 id="loginTitle">登录管理后台</h2><p id="loginIntro" class="login-intro">使用管理员账号密码进入运营工作台</p><form id="loginForm" class="login-form" novalidate><label for="loginUsername">账号<div class="login-field"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><input id="loginUsername" autocomplete="username" placeholder="请输入管理员账号" autocapitalize="none" spellcheck="false" required></div></label><label for="loginPassword">密码<div class="login-field"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></svg></span><input id="loginPassword" type="password" autocomplete="current-password" placeholder="请输入密码" required><button id="toggleLoginPassword" type="button" aria-label="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18"/></svg></button></div></label><button id="loginSubmit" class="primary login-submit" type="submit">登录</button></form><div id="telegramRecovery" class="telegram-recovery" hidden><button id="authRetry" class="primary login-submit" type="button" hidden>重新连接</button><button id="closeSession" class="primary login-submit" type="button">关闭当前小程序</button><p class="recovery-hint">返回入口机器人后，重新点击打开工作台。</p></div><p id="authError" class="login-error" role="alert"></p><p id="loginHint" class="login-hint">也可以继续使用 Telegram 入口机器人发送 <code>/login</code>。</p></div><p class="login-footer">集中管理消息、活动与发布任务</p></div>
++<div id="locked" class="login-shell" hidden><div class="login-card"><div class="login-brand"><span class="login-brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" role="presentation"><path d="M21.6 2.4 10.9 13.1M21.6 2.4 15 21.6l-4.1-8.5L2.4 9l19.2-6.6Z" fill="none" stroke="rgba(255,255,255,.94)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>活动助手</strong><small>Telegram 运营工作台</small></span></div><h2 id="loginTitle">登录管理后台</h2><p id="loginIntro" class="login-intro">使用管理员账号密码进入运营工作台</p><form id="loginForm" class="login-form" novalidate><label for="loginUsername">账号<div class="login-field"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><input id="loginUsername" autocomplete="username" placeholder="请输入管理员账号" autocapitalize="none" spellcheck="false" required></div></label><label for="loginPassword">密码<div class="login-field"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></svg></span><input id="loginPassword" type="password" autocomplete="current-password" placeholder="请输入密码" required><button id="toggleLoginPassword" type="button" aria-label="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18"/></svg></button></div></label><button id="loginSubmit" class="primary login-submit" type="submit">登录</button></form><p id="authError" class="login-error" role="alert" aria-live="polite"></p><button id="authRetry" class="quiet" type="button" hidden>重新连接</button><p class="login-hint">账号由管理员创建，请联系管理员获取账号及机器人权限。</p></div><p class="login-footer">集中管理消息、活动与发布任务</p></div>
+ <main id="workspace" hidden>
+ <aside class="app-rail" aria-label="机器人和功能"><div class="rail-brand" aria-label="活动中枢"><span class="rail-brand-mark" aria-hidden="true">✦</span><span class="rail-brand-copy"><strong>活动中枢</strong><small>运营工作台</small></span></div><button class="rail-menu" aria-label="菜单" type="button">☰</button><div id="railBots" class="rail-bots"></div><div class="rail-nav"><button data-rail-tab="chat" aria-label="聊天" title="聊天"><span class="nav-glyph">◌</span><span class="nav-label">聊天</span></button><button data-rail-tab="editor" aria-label="编写活动" title="编写活动"><span class="nav-glyph">✎</span><span class="nav-label">编写活动</span></button><button data-rail-tab="assets" aria-label="素材管理" title="素材管理"><span class="nav-glyph">▧</span><span class="nav-label">素材管理</span></button><button data-rail-tab="players" aria-label="联系人 / 用户" title="联系人 / 用户"><span class="nav-glyph">♙</span><span class="nav-label">联系人 / 用户</span></button><button data-rail-tab="tasks" aria-label="自动化任务" title="自动化任务"><span class="nav-glyph">☷</span><span class="nav-label">自动化任务</span></button><button data-rail-tab="logs" aria-label="发布记录" title="发布记录"><span class="nav-glyph">◷</span><span class="nav-label">发布记录</span></button><button data-rail-tab="settings" aria-label="系统设置" title="系统设置"><span class="nav-glyph">⚙</span><span class="nav-label">系统设置</span></button></div><div class="rail-account"><strong>管理员</strong><small id="railAccountId">工作区账号</small></div></aside>
+ <div class="publisher-switch"><label for="publisherSelect">当前发布机器人</label><select id="publisherSelect" aria-label="当前发布机器人"></select></div>
+@@ -131,11 +131,11 @@ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hi
+ <details id="broadcastPanel" class="card"><summary>私信记录</summary><button id="refreshBroadcasts" class="quiet">刷新</button><div id="broadcastList"></div></details></section>
+ <section id="tasks" class="page" hidden><div class="section-title"><div><h2>发布任务</h2><p>查看状态与下次发送时间。</p></div><button id="refreshTasks" class="quiet">刷新</button></div><div id="taskList"></div></section>
+ <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
+-<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>绑定机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p id="publisherManagementHint" class="hint">仅 wz9946 可添加或配置机器人；普通管理员可操作已授权机器人的业务。</p><div id="boundPublisherList"></div><p class="hint">入口机器人用于管理员登录，与当前绑定机器人独立。当前后端尚未返回入口机器人资料，页面不推测其用户名或收消息状态。</p></div><div id="ffaCard" class="card"><h3>用户导入</h3><p id="importSourceHint" class="hint"></p><button id="settingsImportUsers" class="secondary" type="button">去用户页导入名单</button><div id="legacyImportSettings"><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从用户数据后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" aria-label="目标群或频道" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p id="accountSessionHint" class="hint">当前浏览器账号可在这里退出，退出后会回到登录页面。</p><p class="hint">只有 wz9946 可以添加管理账号；新账号仅可操作所选机器人。</p><div id="accountManagement" hidden><button id="addAccount" class="primary" type="button">添加账号</button><form id="accountForm" hidden><label>账号<input id="newAccountUsername" minlength="4" maxlength="64" pattern="[A-Za-z0-9]{4,64}" autocomplete="off" required></label><label>密码<input id="newAccountPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" required></label><fieldset><legend>可操作的机器人</legend><div id="accountPublishers"></div></fieldset><button class="primary" type="submit">保存账号</button><button id="cancelAccount" class="quiet" type="button">取消</button></form><div id="accountList"></div></div><button id="browserLogout" class="quiet" type="button">退出当前账号</button></div></section>
++<section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>绑定机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p id="publisherManagementHint" class="hint">仅 wz9946 可添加或配置机器人；普通管理员可操作已授权机器人的业务。</p><div id="boundPublisherList"></div><p class="hint">入口机器人只提供工作台入口；所有客户端使用同一套账号密码和机器人授权。</p></div><div id="ffaCard" class="card"><h3>用户导入</h3><p id="importSourceHint" class="hint"></p><button id="settingsImportUsers" class="secondary" type="button">去用户页导入名单</button><div id="legacyImportSettings"><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从用户数据后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" aria-label="目标群或频道" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p id="accountSessionHint" class="hint">退出仅结束当前登录会话，其他设备不受影响。</p><p class="hint">只有 wz9946 可以添加管理账号；新账号仅可操作所选机器人。</p><div id="accountManagement" hidden><button id="addAccount" class="primary" type="button">添加账号</button><form id="accountForm" hidden><label>账号<input id="newAccountUsername" minlength="4" maxlength="64" pattern="[A-Za-z0-9]{4,64}" autocomplete="off" required></label><label>密码<input id="newAccountPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" required></label><fieldset><legend>可操作的机器人</legend><div id="accountPublishers"></div></fieldset><button class="primary" type="submit">保存账号</button><button id="cancelAccount" class="quiet" type="button">取消</button></form><div id="accountList"></div></div><button id="accountLogout" class="quiet" type="button">退出当前账号</button></div></section>
+ </main><div id="toast" class="toast" role="status" hidden></div>
+ <dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button><button id="savePack" class="quiet" disabled title="请先加载真实表情包">保存</button></div><div id="savedPackTabs" class="pack-tabs"></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><p id="packError" class="inline-error" role="alert" hidden></p><input id="emojiSearch" type="search" aria-label="搜索专属表情" placeholder="搜索当前表情包的表情或 ID"><div id="emojiGrid"></div></dialog>`;
+ 
+-const ui = mountWorkbench({ mini:Boolean(initData), navigate:changeTab, backChat:()=> $('chatBack').click() });
++const ui = mountWorkbench({ mini:isMiniApp, navigate:changeTab, backChat:()=> $('chatBack').click() });
+ const assetIntentBar=document.createElement('div');assetIntentBar.className='asset-intent-bar';assetIntentBar.hidden=true;
+ assetIntentBar.innerHTML='<span id="assetIntentText"></span><button id="cancelAssetIntent" class="quiet" type="button">取消并返回</button>';
+ $('assets').querySelector('.section-title').after(assetIntentBar);
+@@ -197,7 +197,7 @@ quill.on('selection-change', range => { if (range) savedRange = range; });
+ quill.on('text-change', () => { insertedEmbedPending=false; $('textCount').textContent = `${quill.getText().trimEnd().length} / ${mediaId ? 1024 : 4096}`; remember(); preview(); });
+ chatQuill = new Quill('#chatInput', { theme:'snow', placeholder:'输入消息…', modules:{ toolbar:'#chatToolbar' }, formats:['bold','italic','underline','link','customEmoji'] });
+ chatQuill.root.setAttribute('role','textbox');chatQuill.root.setAttribute('aria-label','消息内容');chatQuill.root.setAttribute('aria-multiline','true');
+-if(!initData)new ResizeObserver(([entry])=>{const compact=entry.contentRect.width<680,composer=$('chatComposer');composer.classList.toggle('compact-composer',compact);if(!compact){$('chatToolsMore')?.setAttribute('aria-expanded','false');composer.querySelector('.chat-tools')?.classList.remove('tools-expanded');}}).observe($('chatComposer'));
++if(!isMiniApp)new ResizeObserver(([entry])=>{const compact=entry.contentRect.width<680,composer=$('chatComposer');composer.classList.toggle('compact-composer',compact);if(!compact){$('chatToolsMore')?.setAttribute('aria-expanded','false');composer.querySelector('.chat-tools')?.classList.remove('tools-expanded');}}).observe($('chatComposer'));
+ installLinkEditor(Quill, chatQuill, { trigger:$('chatLink'),dialogId:'chatLinkDialog',idPrefix:'chat-' });
+ installClipboardMatchers(chatQuill);
+ chatQuill.on('selection-change', range => { if (range) chatRange = range; });
+@@ -567,7 +567,7 @@ $('assetPacks').onclick=event=>{const i=event.target.dataset.assetPack;if(i===un
+ function openAssetPicker(target){if(target==='chat'&&!activeChat)target='body';const context=assetIntent;changeTab(target==='chat'?'chat':'editor');openPicker(target,$(target==='chat'?'chatEmoji':'bodyEmoji'));if(context)finishAssetIntent(false);}
+ $('openAssetEditor').onclick=()=>changeTab('editor');$('openAssetEmoji').onclick=()=>{if(assetIntent)openAssetPicker(assetIntent.source==='chat'?'chat':'body');else openPicker('asset-manage');$('packSettings').open=true;};
+ function populateTargets(selected = []) { $('targetChecks').innerHTML=data.targets.map(t=>`<label class="check"><input type="checkbox" name="target" value="${t.id}" ${selected.includes(t.id)?'checked':''} ${t.can_publish?'':'disabled'}><span>${esc(t.title)}<small>${esc(t.last_error || t.chat_id)}</small></span></label>`).join('')||'<p class="muted">请先在「设置」中添加群或频道。</p>'; }
+-async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=Object.assign({publishers:[],targets:[],admin:{}},result||{});selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=data.admin?`${data.admin.name||'管理账号'} · ID ${data.admin.id||'—'}`:'未登录';ui.account(data);if(!initData)action(loadAdminAccounts);else $('accountManagement').hidden=true; $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length||(!initData&&publisherChanging); renderRailPublisher(); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
++async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=Object.assign({publishers:[],targets:[],admin:{}},result||{});selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=data.admin?`${data.admin.name||'管理账号'} · ID ${data.admin.id||'—'}`:'未登录';ui.account(data);action(loadAdminAccounts); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length||publisherChanging; renderRailPublisher(); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
+ function renderRailPublisher() {
+   const rail=$('railBots');if(!rail)return;
+   rail.querySelector('.rail-bot')?.remove();
+@@ -596,14 +596,13 @@ async function switchPublisher(id) {
+   await fill(draft||{});
+   await loadPlayers(); await loadRuns();
+   await loadConversations();await loadInboxStatus();
+-  }finally{publisherChanging=false;if(!initData)$('publisherSelect').disabled=!data?.publishers?.length;}
++  }finally{publisherChanging=false;$('publisherSelect').disabled=!data?.publishers?.length;}
+ }
+ $('boundPublisherList').onclick=event=>{const id=event.target.dataset.boundBot;if(id)action(()=>switchPublisher(id),event.target);};
+ $('publisherSelect').onchange=event=>action(async()=>{
+   const select=event.currentTarget,id=select.value;
+   try { await switchPublisher(id);toast(`已切换到 @${publisherLabel(data?.publisher?.id||selectedPublisherId)}`); }
+   catch(error) {
+-    if(initData)throw error;
+     // Bootstrap is authoritative. Restore the last confirmed scope after a failed switch.
+     const confirmedId=data?.publisher?.id||'';
+     if(selectedPublisherId!==confirmedId){selectedPublisherId=confirmedId;publisherRevision++;clearPlayerContext();}
+@@ -674,14 +673,11 @@ $('taskList').onclick = event => action(async () => {
+ }, event.target);
+ $('saveFfaToken').onclick = event => action(async()=>{throw new Error('玩家同步功能已停用');},event.currentTarget);
+ $('savePublisher').onclick = event => action(async()=>{const result=await api('/publisher','POST',{token:$('token').value});$('token').value='';await switchPublisher(result.id);toast('发布机器人已验证并保存');},event.currentTarget);
+-$('browserLogout').hidden=Boolean(initData);
+-$('browserLogout').textContent=accountActionLabel(Boolean(initData));
+-$('accountSessionHint').textContent=initData?'当前通过 Telegram 身份验证；重新打开入口机器人即可重新验证。':'当前浏览器账号会话，可退出并切换其他账号。';
+-$('browserLogout').onclick=()=>action(async()=>{await logoutCurrentAccount({onLoggedOut:()=>location.reload()});},$('browserLogout'));
++$('accountSessionHint').textContent='当前账号会话已保存。退出仅结束当前登录会话，可重新登录或切换账号。';
++$('accountLogout').onclick=()=>action(async()=>{await logoutCurrentAccount({onLoggedOut:()=>location.reload()});},$('accountLogout'));
+ $('toggleLoginPassword').onclick=()=>{const input=$('loginPassword');const visible=input.type==='text';input.type=visible?'password':'text';$('toggleLoginPassword').setAttribute('aria-pressed',String(!visible));$('toggleLoginPassword').setAttribute('aria-label',visible?'显示密码':'隐藏密码');};
+-$('closeSession').onclick=()=>tg?.close();
+ $('authRetry').onclick=()=>location.reload();
+-$('loginForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget, submit=$('loginSubmit'), username=$('loginUsername'), password=$('loginPassword'), error=$('authError');if(!form.reportValidity()){form.classList.add('was-validated');return;}submit.disabled=true;submit.setAttribute('aria-busy','true');form.classList.add('is-loading');error.textContent='';username.removeAttribute('aria-invalid');password.removeAttribute('aria-invalid');try{const response=await fetch('/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:username.value,password:password.value})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||`登录失败 (${response.status})`);location.reload();}catch(loginError){error.textContent=loginError.message;username.setAttribute('aria-invalid','true');password.setAttribute('aria-invalid','true');}finally{submit.disabled=false;submit.removeAttribute('aria-busy');form.classList.remove('is-loading');}};
++$('loginForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget, submit=$('loginSubmit'), username=$('loginUsername'), password=$('loginPassword'), error=$('authError');if(!form.reportValidity()){form.classList.add('was-validated');return;}submit.disabled=true;submit.setAttribute('aria-busy','true');form.classList.add('is-loading');error.textContent='';username.removeAttribute('aria-invalid');password.removeAttribute('aria-invalid');try{const response=await fetch('/auth/login',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({username:username.value,password:password.value})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||`登录失败 (${response.status})`);location.reload();}catch(loginError){error.textContent=loginError.message;username.setAttribute('aria-invalid','true');password.setAttribute('aria-invalid','true');}finally{submit.disabled=false;submit.removeAttribute('aria-busy');form.classList.remove('is-loading');}};
+ $('addTarget').onclick = event => action(async()=>{const t=await api('/targets','POST',{reference:$('targetRef').value});$('targetRef').value='';await refresh();toast(t.can_publish?'目标已添加':t.last_error,!t.can_publish);},event.currentTarget);
+ $('targets').onclick = event => action(async()=>{const id=event.target.dataset.deleteTarget;if(id&&confirm('删除该目标？引用它的任务将跳过此目标。')){await api(`/targets/${id}`,'DELETE');await refresh();}},event.target);
+ async function loadRuns() {
+@@ -698,7 +694,12 @@ $('runList').addEventListener('toggle',event=>{const details=event.target.closes
+ $('refreshTasks').onclick=event=>action(()=>ui.load('tasks',refresh),event.currentTarget);$('refreshLogs').onclick=event=>action(()=>ui.load('logs',async()=>{await loadRuns();await loadBroadcasts();}),event.currentTarget); updatePlayerSelection(); async function loadFfaStatus(){const context=playerContext(),r=await api('/ffa');if(!currentPlayerContext(context))return;$('ffaStatus').textContent=r.configured?`已配置：${r.baseUrl}`:`未配置（接口：${r.baseUrl}）`;}
+ $('editor').addEventListener('input', event => { if (!event.target.closest('#message, #buttons')) remember(); });$('kind').onchange=()=>{scheduleFields();remember();};
+ $('ffaCard').hidden = true;
+-async function boot() { try{const token=location.hash.match(/^#login=([A-Za-z0-9_-]+)$/)?.[1];if(token){const response=await fetch('/auth/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});history.replaceState(null,'',location.pathname);if(!response.ok)throw new Error('登录链接已过期或已使用');}await refresh();$('locked').hidden=true;$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){clearInterval(chatPolling);showAuthScreen(Object.fromEntries(['workspace','locked','loginForm','loginHint','telegramRecovery','authRetry','loginTitle','loginIntro','authError'].map(id=>[id,$(id)])),error,Boolean(initData));$('closeSession').hidden=typeof tg?.close!=='function';document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());} }
++function displayAuthScreen(error) {
++  clearInterval(chatPolling);
++  showAuthScreen(Object.fromEntries(['workspace','locked','loginForm','authRetry','loginTitle','loginIntro','authError'].map(id=>[id,$(id)])),error);
++  document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
++}
++async function boot() { try{await refresh();$('locked').hidden=true;$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){displayAuthScreen(error);} }
+ boot();
+ 
+ let viewportFrame;
+@@ -717,8 +718,9 @@ window.visualViewport?.addEventListener('scroll', updateViewport);
+ updateViewport();
+ 
+ async function accountRequest(method='GET',body) {
+-  const response=await fetch('/auth/admin-accounts',{method,headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
++  const response=await fetch('/auth/admin-accounts',{method,credentials:'same-origin',headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+   const result=await response.json().catch(()=>({}));
++  if(response.status===401)displayAuthScreen({status:401});
+   if(!response.ok)throw new Error(result.error||`账号操作失败 (${response.status})`);
+   return result;
+ }
+diff --git a/tests/api-client.test.js b/tests/api-client.test.js
+index 81e0a44..ec1dee8 100644
+--- a/tests/api-client.test.js
++++ b/tests/api-client.test.js
+@@ -1,120 +1,51 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+-import { createApiClient } from '../src/api-client.js';
++import {createWorkbenchApiClient} from '../src/api-client.js';
++import {accountFixture} from './account-auth-fixture.js';
+ 
+-test('API client uses the configured Serverless base', async () => {
+-  const originalFetch = globalThis.fetch;
+-  const requests = [];
+-  globalThis.fetch = async (url) => {
+-    requests.push(url);
+-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+-  };
+-  try {
+-    const client = createApiClient({ baseUrl: 'https://app.example', initData: 'signed' });
+-    await client.api('/bootstrap');
+-    assert.equal(requests[0], 'https://app.example/bootstrap');
+-  } finally {
+-    globalThis.fetch = originalFetch;
+-  }
++test('all surfaces use Railway cookie sessions; SDK cannot select legacy Serverless',async()=>{
++ const oldFetch=globalThis.fetch,oldTelegram=globalThis.Telegram,oldConfig=globalThis.__TGZ_API_CONFIG__;
++ const requests=[];let unauthorized=0;
++ globalThis.Telegram={WebApp:{initData:'unrelated-telegram',Serverless:{call(){throw new Error('obsolete backend');}}}};
++ globalThis.__TGZ_API_CONFIG__={serverlessBase:'https://obsolete.example',fallbackBaseUrl:'https://obsolete.example'};
++ globalThis.fetch=async(url,options)=>{requests.push({url,options});return new Response(JSON.stringify({ok:true}),{headers:{'content-type':'application/json'}})};
++ try {
++   const client=createWorkbenchApiClient({getPublisherId:()=> '1001',onUnauthorized:()=>unauthorized++});
++   await client.api('/bootstrap');
++   assert.equal(requests[0].url,'/api/bootstrap');assert.equal(requests[0].options.credentials,'same-origin');
++   assert.deepEqual(requests[0].options.headers,{'x-publisher-id':'1001'});
++   const body=new FormData();body.append('file',new Blob(['fixture']),'fixture.txt');
++   await client.api('/media','POST',body);assert.equal(requests[1].options.body,body);
++   assert.equal(requests[1].options.headers['content-type'],undefined);
++   await client.api('/tasks','POST',{title:'fixture'});assert.equal(requests[2].options.body,'{"title":"fixture"}');
++   globalThis.fetch=async()=>new Response(JSON.stringify({error:'没有权限'}),{status:403});
++   await assert.rejects(client.api('/bootstrap'),{status:403});assert.equal(unauthorized,0);
++   globalThis.fetch=async()=>new Response(JSON.stringify({error:'请登录账号'}),{status:401});
++   await assert.rejects(client.api('/bootstrap'),{status:401});assert.equal(unauthorized,1);
++   await assert.rejects(client.image('/media/1'),{status:401});assert.equal(unauthorized,2);
++ }finally {
++   globalThis.fetch=oldFetch;
++   if(oldTelegram===undefined)delete globalThis.Telegram;else globalThis.Telegram=oldTelegram;
++   if(oldConfig===undefined)delete globalThis.__TGZ_API_CONFIG__;else globalThis.__TGZ_API_CONFIG__=oldConfig;
++ }
+ });
+-
+-test('API client falls back to Railway when Serverless is unavailable', async () => {
+-  const originalFetch = globalThis.fetch;
+-  const requests = [];
+-  globalThis.fetch = async (url) => {
+-    requests.push(url);
+-    if (requests.length === 1) return new Response('{}', { status: 503 });
+-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+-  };
+-  try {
+-    const client = createApiClient({ baseUrl: 'https://serverless.example', fallbackBaseUrl: 'https://railway.example' });
+-    await client.api('/bootstrap');
+-    assert.deepEqual(requests, ['https://serverless.example/bootstrap', 'https://railway.example/bootstrap']);
+-  } finally {
+-    globalThis.fetch = originalFetch;
+-  }
+-});
+-
+-test('Serverless endpoint base accepts a configured /api suffix', async () => {
+-  const originalFetch = globalThis.fetch;
+-  const requests = [];
+-  globalThis.fetch = async (url, options) => {
+-    requests.push({ url, options });
+-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+-  };
+-  try {
+-    const client = createApiClient({ mode: 'serverless', baseUrl: 'https://app.example/api', initData: 'signed' });
+-    await client.api('/bootstrap');
+-    assert.equal(requests[0].url, 'https://app.example/api/api');
+-    assert.equal(JSON.parse(requests[0].options.body).route, '/bootstrap');
+-  } finally {
+-    globalThis.fetch = originalFetch;
+-  }
+-});
+-
+-for (const initData of ['', 'signed-telegram-fixture']) {
+-  test(`Railway workbench uses REST even with Telegram SDK: ${initData ? 'Mini App' : 'browser'}`, async () => {
+-    const originalFetch = globalThis.fetch;
+-    const originalTelegram = globalThis.Telegram;
+-    const originalConfig = globalThis.__TGZ_API_CONFIG__;
+-    const requests = [];
+-    let serverlessCalls = 0;
+-    globalThis.Telegram = { WebApp: { Serverless: { call() { serverlessCalls++; throw new Error('old backend must not be used'); } } } };
+-    globalThis.__TGZ_API_CONFIG__ = { serverlessBase: 'https://old.example' };
+-    globalThis.fetch = async (url, options) => {
+-      requests.push({ url, options });
+-      return new Response(JSON.stringify({ admin: { id: 'fixture' } }), { headers: { 'content-type': 'application/json' } });
+-    };
+-    try {
+-      const { createWorkbenchApiClient } = await import('../src/api-client.js');
+-      const client = createWorkbenchApiClient({ initData, getPublisherId: () => 'fixture-bot' });
+-      await client.api('/bootstrap');
+-      assert.equal(serverlessCalls, 0);
+-      assert.equal(requests[0].url, '/api/bootstrap');
+-      assert.equal(requests[0].options.method, 'GET');
+-      assert.equal(requests[0].options.headers['x-telegram-init-data'], initData);
+-      assert.equal(requests[0].options.headers['x-publisher-id'], 'fixture-bot');
+-      globalThis.fetch = async () => new Response(JSON.stringify({ error: '登录已过期，请重新打开小程序' }), { status: 401 });
+-      await assert.rejects(client.api('/bootstrap'), { status: 401, message: '登录已过期，请重新打开小程序' });
+-    } finally {
+-      globalThis.fetch = originalFetch;
+-      if (originalTelegram === undefined) delete globalThis.Telegram; else globalThis.Telegram = originalTelegram;
+-      if (originalConfig === undefined) delete globalThis.__TGZ_API_CONFIG__; else globalThis.__TGZ_API_CONFIG__ = originalConfig;
+-    }
+-  });
+-}
+-
+-test('Railway REST bootstrap accepts signed Mini App identity with the real verifier', async () => {
+-  const { createServer } = await import('node:http');
+-  const { verifyInitData } = await import('../server/auth.js');
+-  const { signedData, entryToken } = await import('./helpers.js');
+-  const { createWorkbenchApiClient } = await import('../src/api-client.js');
+-  const originalConfig = globalThis.__TGZ_API_CONFIG__;
+-  const paths = [];
+-  const server = createServer((req, res) => {
+-    paths.push(`${req.method} ${req.url}`);
+-    res.setHeader('content-type', 'application/json');
+-    try {
+-      assert.equal(req.url, '/api/bootstrap');
+-      const admin = verifyInitData(req.headers['x-telegram-init-data'], entryToken, '123456');
+-      res.end(JSON.stringify({ admin }));
+-    } catch (error) {
+-      res.statusCode = 401;
+-      res.end(JSON.stringify({ error: error.message }));
+-    }
+-  });
+-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+-  const origin = `http://127.0.0.1:${server.address().port}`;
+-  try {
+-    for (const railwayBase of [origin, `${origin}/api/`]) {
+-      globalThis.__TGZ_API_CONFIG__ = { railwayBase };
+-      const result = await createWorkbenchApiClient({ initData: signedData() }).api('/bootstrap');
+-      assert.equal(result.admin.id, '123456');
+-    }
+-    assert.deepEqual(paths, ['GET /api/bootstrap', 'GET /api/bootstrap']);
+-    await assert.rejects(createWorkbenchApiClient({ initData: signedData(123456, { auth_date: '1' }) }).api('/bootstrap'), { status: 401 });
+-  } finally {
+-    if (originalConfig === undefined) delete globalThis.__TGZ_API_CONFIG__; else globalThis.__TGZ_API_CONFIG__ = originalConfig;
+-    await new Promise(resolve => server.close(resolve));
+-  }
++test('real HTTP login, cookie-authenticated bootstrap, and logout share one account path',async()=>{
++ const f=await accountFixture(),oldFetch=globalThis.fetch,oldConfig=globalThis.__TGZ_API_CONFIG__;
++ try {
++   const cookie=await f.login('operator','operator-fixture-password');
++   // Node fetch has no browser cookie jar: forward only this local fixture's session cookie.
++   globalThis.fetch=(url,options)=>oldFetch(url,{...options,headers:{...options.headers,cookie}});
++   for(const railwayBase of [f.base,`${f.base}/api/`]) {
++     globalThis.__TGZ_API_CONFIG__={railwayBase};
++     const client=createWorkbenchApiClient();
++     const result=await client.api('/bootstrap');assert.equal(result.admin.username,'operator');
++   }
++   const client=createWorkbenchApiClient();
++   await f.request('/auth/logout',{method:'POST',headers:{cookie}});
++   await assert.rejects(client.api('/bootstrap'),{status:401});
++ }finally {
++   globalThis.fetch=oldFetch;
++   if(oldConfig===undefined)delete globalThis.__TGZ_API_CONFIG__;else globalThis.__TGZ_API_CONFIG__=oldConfig;
++   await f.close();
++ }
+ });
+diff --git a/tests/auth-session.test.js b/tests/auth-session.test.js
+index 602dd1c..bc9a928 100644
+--- a/tests/auth-session.test.js
++++ b/tests/auth-session.test.js
+@@ -1,63 +1,22 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+-import { logoutCurrentAccount, authRecoveryMessage, accountActionLabel } from '../src/auth-session.js';
+-
+-test('logoutCurrentAccount clears the current browser account and returns to login', async () => {
+-  const calls = [];
+-  let returnedToLogin = false;
+-  await logoutCurrentAccount({
+-    fetchImpl: async (url, options) => {
+-      calls.push({ url, options });
+-      return { ok: true };
+-    },
+-    onLoggedOut: () => { returnedToLogin = true; },
+-  });
+-  assert.deepEqual(calls, [{ url: '/auth/logout', options: { method: 'POST' } }]);
+-  assert.equal(returnedToLogin, true);
++import {logoutCurrentAccount,authRecoveryMessage,showAuthScreen} from '../src/auth-session.js';
++test('logout ends current account only and calls login transition',async()=>{
++ const calls=[];let returned=false;
++ await logoutCurrentAccount({fetchImpl:async(url,options)=>{calls.push({url,options});return {ok:true};},onLoggedOut:()=>returned=true});
++ assert.deepEqual(calls,[{url:'/auth/logout',options:{method:'POST',credentials:'same-origin'}}]);assert.equal(returned,true);
+ });
+-
+-test('logoutCurrentAccount surfaces logout failures without pretending the account ended', async () => {
+-  await assert.rejects(
+-    logoutCurrentAccount({ fetchImpl: async () => ({ ok: false, status: 500 }) }),
+-    /退出当前账号失败/,
+-  );
++test('logout failure leaves current session intact',async()=>{
++ await assert.rejects(logoutCurrentAccount({fetchImpl:async()=>({ok:false})}),/退出当前账号失败/);
+ });
+-
+-test('auth recovery distinguishes browser accounts from Telegram sessions', () => {
+-  assert.equal(authRecoveryMessage({ status: 401 }, false), '登录状态已失效，请重新登录。');
+-  assert.equal(authRecoveryMessage({ status: 401 }, true), 'Telegram 身份验证失败，请从入口机器人重新打开。');
+-  assert.equal(accountActionLabel(false), '退出当前账号');
+-  assert.equal(accountActionLabel(true), '重新验证当前会话');
++function elements(){return Object.fromEntries(['locked','workspace','loginForm','loginTitle','loginIntro','authError','authRetry'].map(id=>[id,{hidden:false,textContent:''}]))}
++test('all surfaces show password form on expiry and never demand Telegram reopening',()=>{
++ const e=elements();showAuthScreen(e,{status:401});
++ assert.equal(e.workspace.hidden,true);assert.equal(e.loginForm.hidden,false);assert.equal(e.locked.hidden,false);
++ assert.equal(e.authRetry.hidden,true);assert.equal(e.loginTitle.textContent,'登录管理后台');
++ assert.doesNotMatch(authRecoveryMessage({status:401}),/Telegram|重新打开/);
+ });
+-
+-// The page must not mix Telegram recovery actions with browser credentials.
+-const { showAuthScreen } = await import('../src/auth-session.js');
+-function authElements() {
+-  return Object.fromEntries(['locked','workspace','loginForm','loginTitle','loginIntro','loginHint','authError','telegramRecovery','authRetry','closeSession'].map(id => [id, { hidden: false, textContent: '', dataset: {} }]));
+-}
+-test('Telegram auth failure hides password form and provides session recovery', () => {
+-  const elements = authElements();
+-  showAuthScreen(elements, { status: 401 }, true);
+-  assert.equal(elements.workspace.hidden, true);
+-  assert.equal(elements.locked.hidden, false);
+-  assert.equal(elements.loginForm.hidden, true);
+-  assert.equal(elements.loginHint.hidden, true);
+-  assert.equal(elements.telegramRecovery.hidden, false);
+-  assert.equal(elements.loginTitle.textContent, '无法验证当前会话');
+-});
+-test('browser login stays available without Telegram recovery instructions', () => {
+-  const elements = authElements();
+-  showAuthScreen(elements, { status: 401 }, false);
+-  assert.equal(elements.loginForm.hidden, false);
+-  assert.equal(elements.telegramRecovery.hidden, true);
+-  assert.equal(elements.loginTitle.textContent, '登录管理后台');
+-  assert.doesNotMatch(elements.authError.textContent, /Telegram/);
+-});
+-test('network failures offer retry without claiming Telegram credentials failed', () => {
+-  const elements = authElements();
+-  showAuthScreen(elements, new Error('网络中断'), true);
+-  assert.equal(elements.loginForm.hidden, true);
+-  assert.equal(elements.authRetry.hidden, false);
+-  assert.equal(elements.loginTitle.textContent, '暂时连接不上工作台');
+-  assert.match(elements.authError.textContent, /网络中断/);
++test('network errors allow retry without hiding account login',()=>{
++ const e=elements();showAuthScreen(e,new Error('网络中断'));
++ assert.equal(e.authRetry.hidden,false);assert.equal(e.loginForm.hidden,false);assert.match(e.authError.textContent,/网络中断/);
+ });
+diff --git a/tests/auth.test.js b/tests/auth.test.js
+index 7fe6d98..be0ce64 100644
+--- a/tests/auth.test.js
++++ b/tests/auth.test.js
+@@ -1,22 +1,58 @@
+-import test from 'node:test';
+-import assert from 'node:assert/strict';
+-import { parseAdminIds, verifyInitData } from '../server/auth.js';
+-import { signedData, entryToken } from './helpers.js';
+-
+-test('valid Mini App HMAC includes signature field and accepts bound account', () => {
+-  assert.equal(verifyInitData(signedData(), entryToken, '123456').id, '123456');
+-  assert.equal(verifyInitData(signedData(999999), entryToken, '123456,999999').id, '999999');
+-});
+-test('admin list accepts common separators and removes duplicates', () => {
+-  assert.deepEqual(parseAdminIds('123456789, 987654321，123456789\n'), ['123456789', '987654321']);
+-  assert.throws(() => parseAdminIds('123abc,987'));
+-});
+-test('rejects tampering, a different account, expired auth and duplicate fields', () => {
+-  const raw = signedData();
+-  assert.throws(()=>verifyInitData(raw.replace('123456','999999'),entryToken,'123456'));
+-  assert.throws(()=>verifyInitData(signedData(999999),entryToken,'123456'));
+-  assert.throws(()=>verifyInitData(signedData(123456,{auth_date:'1'}),entryToken,'123456'));
+-  assert.throws(()=>verifyInitData(`${raw}&user=anything`,entryToken,'123456'));
+-  assert.throws(()=>verifyInitData(raw, 'different-token', '123456'));
+-});
+-
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {accountFixture} from './account-auth-fixture.js';
++
++test('all clients require account login; Telegram identity alone grants no access',async()=>{
++  const f=await accountFixture();try {
++    assert.equal((await f.request('/api/bootstrap',{headers:{'x-telegram-init-data':'any-telegram-identity'}})).status,401);
++    assert.equal((await f.request('/auth/admin-accounts')).status,401);
++    assert.equal((await f.request('/auth/login',{method:'POST',body:JSON.stringify({username:'operator',password:'wrong'})})).status,401);
++    const cookie=await f.login('operator','operator-fixture-password');
++    const response=await f.request('/api/bootstrap',{headers:{cookie,'x-telegram-init-data':'unrelated-identity'}});
++    const {admin}=await response.json();assert.equal(admin.username,'operator');assert.equal(admin.canManageAccounts,false);
++    assert.deepEqual(admin.publisherIds,['1001']);
++    assert.equal((await f.request('/api/bots/1001',{headers:{cookie}})).status,200);
++    assert.equal((await f.request('/api/bots/1002',{headers:{cookie}})).status,403);
++    assert.equal((await f.request('/auth/exchange',{method:'POST',body:JSON.stringify({token:'old-link-token'})})).status,404);
++    assert.equal('issueLink' in f.auth,false);
++  }finally{await f.close();}
++});
++test('only wz9946 creates accounts; new accounts retain assigned robot permissions',async()=>{
++  const f=await accountFixture();try {
++    const operator=await f.login('operator','operator-fixture-password');
++    const payload={username:'newuser',password:'new-fixture-password',publisherIds:['1002']};
++    assert.equal((await f.request('/auth/admin-accounts',{method:'POST',headers:{cookie:operator},body:JSON.stringify(payload)})).status,403);
++    const owner=await f.login();
++    assert.equal((await f.request('/auth/admin-accounts',{method:'POST',headers:{cookie:owner},body:JSON.stringify(payload)})).status,201);
++    const stored=JSON.parse(f.settings.get('admin_accounts_v1'))[0];assert.equal(stored.password,undefined);assert.ok(stored.passwordHash);
++    const cookie=await f.login('newuser','new-fixture-password');
++    assert.equal((await f.request('/api/bots/1002',{headers:{cookie}})).status,200);
++    assert.equal((await f.request('/api/bots/1001',{headers:{cookie}})).status,403);
++    assert.equal((await f.request('/auth/admin-accounts',{headers:{cookie}})).status,403);
++    assert.equal((await f.request('/auth/admin-accounts',{method:'POST',headers:{cookie:owner},body:JSON.stringify({...payload,username:'another',publisherIds:[]})})).status,400);
++  }finally{await f.close();}
++});
++test('logout ends only the current session; expired and legacy Telegram sessions are rejected',async()=>{
++  const f=await accountFixture();try{
++    const first=await f.login(),second=await f.login();
++    assert.equal((await f.request('/auth/logout',{method:'POST',headers:{cookie:first}})).status,200);
++    assert.equal((await f.request('/api/bootstrap',{headers:{cookie:first}})).status,401);
++    assert.equal((await f.request('/api/bootstrap',{headers:{cookie:second}})).status,200);
++    const row=f.sessions.get(f.hash(second));row.expires_at=1;
++    assert.equal((await f.request('/api/bootstrap',{headers:{cookie:second}})).status,401);
++    row.expires_at=Date.now()+60000;row.login_username='';row.admin_id='123456';
++    assert.equal((await f.request('/api/bootstrap',{headers:{cookie:second}})).status,401);
++  }finally{await f.close();}
++});
++test('cross-origin login/logout rejected; cookie remains HttpOnly Secure and rate limiting remains',async()=>{
++  const f=await accountFixture();try{
++    const cookie=await f.login();
++    assert.equal((await f.request('/auth/logout',{method:'POST',headers:{cookie,origin:'https://other.example'}})).status,403);
++    assert.equal((await f.request('/auth/login',{method:'POST',headers:{origin:'https://other.example'},body:'{}'})).status,403);
++    assert.equal((await f.request('/api/bootstrap',{headers:{cookie}})).status,200);
++    const logged=await f.request('/auth/login',{method:'POST',body:JSON.stringify({username:'wz9946',password:'owner-fixture-password'})});
++    assert.match(logged.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Lax/);
++    for(let i=0;i<5;i++)assert.equal((await f.request('/auth/login',{method:'POST',body:JSON.stringify({username:'nobody',password:'wrong'})})).status,401);
++    assert.equal((await f.request('/auth/login',{method:'POST',body:'{}'})).status,429);
++  }finally{await f.close();}
++});
+diff --git a/tests/entry-feedback.test.js b/tests/entry-feedback.test.js
+index 9b5fc86..9ead3d1 100644
+--- a/tests/entry-feedback.test.js
++++ b/tests/entry-feedback.test.js
+@@ -1,32 +1,16 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+ import { entryCommand, entryReply } from '../server/entry-feedback.js';
+-
+-test('entryCommand normalizes bot mentions and arguments', () => {
+-  assert.equal(entryCommand('/start@my_bot welcome'), 'start');
+-  assert.equal(entryCommand('/HELP'), 'help');
+-  assert.equal(entryCommand('hello'), '');
++test('entryCommand normalizes bot mentions and arguments',()=>{
++ assert.equal(entryCommand('/start@my_bot welcome'),'start');assert.equal(entryCommand('/HELP'),'help');assert.equal(entryCommand('hello'),'');
+ });
+-
+-test('start gives admins the workbench button and non-admins an actionable response', () => {
+-  const admin = entryReply({ command: 'start', isAdmin: true, publicUrl: 'https://example.test' });
+-  assert.equal(admin.text, '欢迎使用飞机助手。');
+-  assert.equal(admin.reply_markup.inline_keyboard[0][0].web_app.url, 'https://example.test');
+-
+-  const visitor = entryReply({ command: 'start', isAdmin: false, publicUrl: 'https://example.test' });
+-  assert.match(visitor.text, /暂无管理权限/);
+-  assert.equal(visitor.reply_markup, undefined);
++for(const command of ['start','login'])test(`${command} opens account login for every Telegram user`,()=>{
++ const reply=entryReply({command,publicUrl:'https://example.test'});
++ assert.equal(reply.reply_markup.inline_keyboard[0][0].web_app.url,'https://example.test');
++ assert.match(reply.text,/账号密码/);assert.doesNotMatch(reply.text,/暂无管理权限|5 分钟|免密/);
++ assert.match(entryReply({command}).text,/地址暂未配置/);
+ });
+-
+-test('login reports missing permission and help explains the available entry points', () => {
+-  const denied = entryReply({ command: 'login', isAdmin: false });
+-  assert.match(denied.text, /网页登录权限/);
+-  const help = entryReply({ command: 'help', isAdmin: false });
+-  assert.match(help.text, /\/start/);
+-  assert.match(help.text, /\/login/);
+-});
+-
+-test('unknown commands receive guidance instead of silence', () => {
+-  const reply = entryReply({ command: 'unknown', isAdmin: false });
+-  assert.match(reply.text, /暂不支持/);
++test('help and unknown commands explain public account login entry',()=>{
++ assert.match(entryReply({command:'help'}).text,/\/login/);
++ assert.match(entryReply({command:'unknown'}).text,/\/help/);
+ });
+diff --git a/tests/helpers.js b/tests/helpers.js
+deleted file mode 100644
+index 71f843f..0000000
+--- a/tests/helpers.js
++++ /dev/null
+@@ -1,11 +0,0 @@
+-import crypto from 'node:crypto';
+-export const entryToken = '111111:LOCAL_TEST_ENTRY_TOKEN_1234567890';
+-export const publisherToken = '222222:LOCAL_TEST_PUBLISH_TOKEN_123456789';
+-export const configKey = Buffer.alloc(32, 7).toString('base64');
+-export function signedData(userId = 123456, extras = {}) {
+-  const params = new URLSearchParams({ auth_date:String(Math.floor(Date.now()/1000)), user:JSON.stringify({ id:userId, first_name:'测试管理员' }), signature:'synthetic-third-party-signature', ...extras });
+-  const data = [...params.entries()].sort(([a],[b])=>a < b ? -1 : a > b ? 1 : 0).map(([key,value])=>`${key}=${value}`).join('\n');
+-  const secret = crypto.createHmac('sha256','WebAppData').update(entryToken).digest();
+-  params.set('hash',crypto.createHmac('sha256',secret).update(data).digest('hex'));
+-  return params.toString();
+-}
+diff --git a/server/account-auth.js b/server/account-auth.js
+new file mode 100644
+index 0000000..7dc5578
+--- /dev/null
++++ b/server/account-auth.js
+@@ -0,0 +1,114 @@
++import crypto from 'node:crypto';
++import {getSetting, setSetting} from './db.js';
++
++const digest = value => crypto.createHash('sha256').update(value).digest('hex');
++const cookies = raw => Object.fromEntries(String(raw || '').split(';').map(part => {
++  const at = part.indexOf('='); return at < 0 ? ['', ''] : [part.slice(0,at).trim(),part.slice(at+1).trim()];
++}));
++
++export async function createAccountAuth(db, credentials = {}) {
++  const salt = String(credentials.salt || 'tgzhushou-browser-login');
++  const accounts = (Array.isArray(credentials.accounts) ? credentials.accounts : [])
++    .map(account => {
++      if (account?.publisherIds !== undefined && (!Array.isArray(account.publisherIds) || account.publisherIds.some(id => !/^\d+$/.test(String(id)))))
++        throw new Error('管理员 publisherIds 应为机器人 ID 数组');
++      return {username:String(account?.username || '').trim(), password:String(account?.password || ''),
++        ...(account?.publisherIds !== undefined ? {publisherIds:[...new Set(account.publisherIds.map(String))]} : {})};
++    })
++    .filter(account => account.username && account.password)
++    .map(({password, ...account}) => ({...account, passwordKey:crypto.scryptSync(password, salt, 32)}));
++  const failures = new Map();
++  const storedAccounts = async () => JSON.parse((await getSetting(db, 'admin_accounts_v1')) || '[]');
++  const findAccount = async username => accounts.find(account => account.username === username) || (await storedAccounts()).find(account => account.username === username);
++  const sameOrigin = req => {
++    const origin = req.get('origin');
++    return Boolean(origin && new URL(origin).host === req.get('host'));
++  };
++  const createSession = async username => {
++    const now = Date.now();
++    const session = crypto.randomBytes(32).toString('base64url');
++    await db.prepare('INSERT INTO browser_sessions(session_hash,admin_id,expires_at,created_at,last_seen,login_username) VALUES(?,?,?,?,?,?)')
++      .run(digest(session),`account:${username}`,now+24*60*60_000,now,now,username);
++    return session;
++  };
++  const setSession = (res, session) => res.set('Set-Cookie',`tgzhushou_session=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
++  async function authenticate(req) {
++    const raw = cookies(req.get('cookie')).tgzhushou_session;
++    if (!raw || !/^[A-Za-z0-9_-]{40,100}$/.test(raw)) return null;
++    const row = await db.prepare('SELECT * FROM browser_sessions WHERE session_hash=? AND expires_at>?').get(digest(raw),Date.now());
++    if (!row?.login_username) return null;
++    if (!['GET','HEAD','OPTIONS'].includes(req.method)) {
++      const origin = req.get('origin');
++      if (!origin || new URL(origin).host !== req.get('host')) return null;
++    }
++    if (Date.now()-row.last_seen>60_000) await db.prepare('UPDATE browser_sessions SET last_seen=? WHERE session_hash=?').run(Date.now(),row.session_hash);
++    const account = await findAccount(row.login_username);
++    if (!account) return null;
++    return {id:row.admin_id, name:account.username, username:account.username,
++      canManageBots:account?.username === 'wz9946',
++      canManageAccounts:account?.username === 'wz9946',
++      ...(account?.username !== 'wz9946' && account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
++  }
++  function routes(app) {
++    app.get('/auth/admin-accounts', requireAccount({ authenticate }), async (req, res) => {
++      if (req.admin.canManageAccounts !== true) return res.sendStatus(403);
++      res.json({accounts:[...accounts,...(await storedAccounts())].map(({username,publisherIds}) => ({username,publisherIds})),
++        publishers:await db.prepare('SELECT id,username FROM publishers ORDER BY username').all()});
++    });
++    app.post('/auth/admin-accounts', requireAccount({ authenticate }), async (req, res) => {
++      if (!sameOrigin(req) || req.admin.canManageAccounts !== true) return res.sendStatus(403);
++      const username = String(req.body?.username || '').trim(), password = String(req.body?.password || '');
++      const publisherIds = req.body?.publisherIds;
++      const validPublisherIds = new Set((await db.prepare('SELECT id FROM publishers').all()).map(row => String(row.id)));
++      if (!/^[A-Za-z0-9]{4,64}$/.test(username) || password.length < 4 || password.length > 128 ||
++          !Array.isArray(publisherIds) || !publisherIds.length || publisherIds.length > 100 ||
++          publisherIds.some(id => typeof id !== 'string' || !/^\d+$/.test(id) || !validPublisherIds.has(id)))
++        return res.status(400).json({error:'账号须为 4–64 位字母数字，密码须为 4–128 位，并选择有效机器人'});
++      if (['wz9946','wz994604'].includes(username) || (await findAccount(username))) return res.status(409).json({error:'账号已存在或为保留账号'});
++      const passwordSalt = crypto.randomBytes(16).toString('base64url');
++      const account = {username,passwordSalt,passwordHash:crypto.scryptSync(password,passwordSalt,32).toString('base64'),publisherIds:[...new Set(publisherIds)]};
++      await db.transaction(async () => {
++        const saved = await storedAccounts();
++        if (saved.some(item => item.username === username)) throw new Error('账号已存在');
++        await setSetting(db,'admin_accounts_v1',JSON.stringify([...saved,account]));
++      })();
++      res.status(201).json({username,publisherIds:account.publisherIds});
++    });
++    app.post('/auth/login', async (req, res) => {
++      if (!sameOrigin(req)) return res.sendStatus(403);
++      if (!accounts.length && !(await storedAccounts()).length) return res.status(503).json({ error:'账号登录尚未配置，请联系管理员' });
++      const now = Date.now(), ip = req.ip || 'unknown', state = failures.get(ip) || { count:0, until:0 };
++      if (state.until > now) return res.status(429).json({ error:'登录失败次数过多，请稍后再试' });
++      const inputUser = String(req.body?.username || '').trim(), inputPassword = String(req.body?.password || '');
++      if (inputPassword.length > 128) return res.status(401).json({error:'账号或密码错误'});
++      const account = await findAccount(inputUser);
++      const inputKey = crypto.scryptSync(inputPassword, account?.passwordSalt || salt, 32);
++      const passwordKey = account?.passwordKey || Buffer.from(account?.passwordHash || '', 'base64');
++      const valid = Boolean(account && inputKey.length === passwordKey.length && crypto.timingSafeEqual(inputKey, passwordKey));
++      if (!valid) {
++        state.count += 1; if (state.count >= 5) { state.count = 0; state.until = now + 15*60_000; }
++        failures.set(ip, state); return res.status(401).json({ error:'账号或密码错误' });
++      }
++      failures.delete(ip); setSession(res, await createSession(account.username)); res.json({ ok:true });
++    });
++    app.post('/auth/logout', async (req, res) => {
++      if (!sameOrigin(req)) return res.sendStatus(403);
++      const raw = cookies(req.get('cookie')).tgzhushou_session;
++      if (raw) await db.prepare('DELETE FROM browser_sessions WHERE session_hash=?').run(digest(raw));
++      res.set('Set-Cookie','tgzhushou_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
++      res.json({ ok:true });
++    });
++  }
++  return { authenticate, routes };
++}
++
++// Telegram identity never grants API access; every surface uses the account cookie.
++export function requireAccount(auth) {
++  return async (req, res, next) => {
++    try {
++      req.admin = await auth.authenticate(req);
++      if (!req.admin) return res.status(401).json({ error: '请登录账号' });
++      next();
++    } catch (error) { next(error); }
++  };
++}
+diff --git a/tests/account-auth-fixture.js b/tests/account-auth-fixture.js
+new file mode 100644
+index 0000000..9ce92e7
+--- /dev/null
++++ b/tests/account-auth-fixture.js
+@@ -0,0 +1,50 @@
++import assert from 'node:assert/strict';
++import express from 'express';
++import crypto from 'node:crypto';
++import { createAccountAuth, requireAccount } from '../server/account-auth.js';
++import { canAccessBot } from '../server/request-context.js';
++
++// Minimal local storage fixture. All requests use the production auth routes/middleware.
++export async function accountFixture() {
++  const sessions = new Map(), settings = new Map();
++  const publishers = [{id:'1001',username:'first'},{id:'1002',username:'second'}];
++  const db = {
++    prepare(sql) { return {
++      async get(...args) {
++        if (sql.startsWith('SELECT value FROM settings')) return {value:settings.get(args[0])};
++        if (sql.startsWith('SELECT * FROM browser_sessions')) {
++          const row=sessions.get(args[0]);return row && row.expires_at > args[1] ? row : undefined;
++        }
++        throw new Error(`Unexpected fixture get: ${sql}`);
++      },
++      async all() { if(sql.startsWith('SELECT id')) return publishers; throw new Error(`Unexpected fixture all: ${sql}`); },
++      async run(...args) {
++        if(sql.startsWith('INSERT INTO browser_sessions')) {
++          const [session_hash,admin_id,expires_at,created_at,last_seen,login_username]=args;
++          sessions.set(session_hash,{session_hash,admin_id,expires_at,created_at,last_seen,login_username});
++        } else if(sql.startsWith('DELETE FROM browser_sessions')) sessions.delete(args[0]);
++        else if(sql.startsWith('UPDATE browser_sessions SET last_seen')) sessions.get(args[1]).last_seen=args[0];
++        else if(sql.startsWith('INSERT INTO settings')) settings.set(args[0],args[1]);
++        else throw new Error(`Unexpected fixture run: ${sql}`);
++        return {changes:1};
++      },
++    }; },
++    transaction(fn) { return async () => fn(); },
++  };
++  const auth=await createAccountAuth(db,{salt:'local-fixture',accounts:[
++    {username:'wz9946',password:'owner-fixture-password'},
++    {username:'operator',password:'operator-fixture-password',publisherIds:['1001']},
++  ]});
++  const app=express();app.use(express.json());auth.routes(app);
++  app.use('/api',requireAccount(auth));
++  app.get('/api/bootstrap',(req,res)=>res.json({admin:req.admin,publishers:[],targets:[],tasks:[]}));
++  app.get('/api/bots/:id',(req,res)=>canAccessBot(req.admin,req.params.id)?res.json({ok:true}):res.status(403).json({error:'没有此机器人的操作权限'}));
++  const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
++  const base=`http://127.0.0.1:${server.address().port}`;
++  const request=(path,options={})=>fetch(base+path,{...options,headers:{origin:base,'content-type':'application/json',...options.headers}});
++  const login=async(username='wz9946',password='owner-fixture-password')=>{
++    const response=await request('/auth/login',{method:'POST',body:JSON.stringify({username,password})});
++    assert.equal(response.status,200);return response.headers.get('set-cookie').split(';')[0];
++  };
++  return {app,base,request,login,auth,settings,sessions,hash:cookie=>crypto.createHash('sha256').update(cookie.split('=')[1]).digest('hex'),close:()=>new Promise(resolve=>server.close(resolve))};
++}
+diff --git a/docs/ACCOUNT_LOGIN.md b/docs/ACCOUNT_LOGIN.md
+new file mode 100644
+index 0000000..646b48c
+--- /dev/null
++++ b/docs/ACCOUNT_LOGIN.md
+@@ -0,0 +1,27 @@
++# 统一账号登录规则
++
++适用于 Telegram 小程序、网页、Windows 和 macOS 客户端。各端使用同一 Railway 后端和账号数据；布局可以不同，认证与授权规则相同。
++
++## 入口和认证
++- 任何 Telegram 用户都能通过 `/start`、`/login` 或菜单打开登录页，无 Telegram ID 白名单。
++- 所有端使用后台账号密码登录。Telegram SDK 仅用于窗口与布局适配，不作为后台身份或权限来源。
++- 不开放自行注册；不生成免密码登录链接；旧链接及仅凭 Telegram 身份建立的会话不再有效。
++- 登录成功保存当前端会话，沿用 24 小时有效期。过期后回到账号密码登录页。
++- “退出当前账号”仅撤销当前会话，其他端或设备的独立会话不受影响。
++
++## 权限
++- 只有 `wz9946` 可以创建账号、指定账号可操作的机器人、添加或配置机器人。
++- 普通账号仅操作已授权的机器人；前端隐藏操作不是授权依据，服务端继续执行原有权限校验。
++- 保留环境配置中的既有账号及数据库已有账号、密码哈希和机器人授权，不新增角色系统，不改历史账号的授权范围。
++- 添加账号：以 `wz9946` 登录 → 系统设置 → 管理账号 → 添加账号 → 填写账号密码并选择机器人 → 保存。
++
++## 会话与存储兼容
++- 继续使用 HttpOnly / Secure / SameSite=Lax Cookie、同源检查和现有登录失败限流。
++- 复用 `browser_sessions` 表及 `tgzhushou_session` Cookie 名称，是为了兼容已保存的账号会话，不代表仍有两套登录机制。
++- 旧 `browser_links` 表不会再创建或读写。现有数据库中的历史表不做破坏性删除。
++- `ADMIN_TG_IDS` 不再读取；`ADMIN_LOGIN_ACCOUNTS`、`ENTRY_BOT_TOKEN`、`CONFIG_KEY` 等有效配置继续使用。
++- 历史 Serverless 迁移资料不参与运行，也不是当前发布或授权规则。
++
++## 发布验证
++检查匿名访问、各端登录页、正确/错误密码、账号创建权限、跨机器人越权、会话过期、单会话退出、重开后的会话恢复。
++真实 Telegram 客户端、Windows/macOS 原生容器应分别验证；本地浏览器或 HTTP 模拟不代替原生验证。

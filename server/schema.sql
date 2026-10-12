@@ -94,9 +94,6 @@
       webhook_status TEXT NOT NULL DEFAULT 'NOT_CHECKED',
       secret TEXT, last_error TEXT, checked_at INTEGER
     );
-    CREATE TABLE IF NOT EXISTS browser_links(
-      token_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL, expires_at INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS browser_sessions(
       session_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL,
       expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,

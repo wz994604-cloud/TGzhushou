@@ -1,0 +1,4 @@
+
+> tgzhushou@0.1.0 check
+> node --check server/index.js && node --check server/db.js && node --check server/publishers.js && node --check server/telegram.js && node --check server/scheduler.js && node --check server/sent-actions.js && node --check server/format.js && node --check server/player-utils.js && node --check server/chat.js && node --check server/account-auth.js && node --check server/sender.js && node --check server/media-store.js && node --check server/routes-tasks.js
+

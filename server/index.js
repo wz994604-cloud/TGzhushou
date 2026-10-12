@@ -8,23 +8,21 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openDatabase, getSetting, setSetting, encryptToken, decryptToken } from './db.js';
 import { listPublishers, savePublisher } from './publishers.js';
-import { parseAdminIds, verifyInitData } from './auth.js';
 import { botCall, safeTelegramError } from './telegram.js';
 import { renderDelta, normalizeButtons } from './format.js';
 import { normalizeSchedule, nextSlot } from './schedule.js';
 import { createScheduler } from './scheduler.js';
 import { normalizeTelegramId, decodeCsv, parseCsv } from './player-utils.js';
 import { initializePlayerImports, playerSourceToken, savePlayerSourceToken, upsertPlayers } from './player-store.js';
-import { createBrowserAuth } from './browser-auth.js';
+import { createAccountAuth, requireAccount } from './account-auth.js';
 import { createMediaStore } from './media-store.js';
 import { route, canAccessBot, currentBot, selectedBotId, requirePlayerBot, assertSelected } from './request-context.js';
 import { registerTaskRoutes } from './routes-tasks.js';
 import { registerChatRoutes } from './chat.js';
-import { entryCommand, entryReply, loginReply } from './entry-feedback.js';
+import { entryCommand, entryReply } from './entry-feedback.js';
 
 const required = ['ENTRY_BOT_TOKEN', 'CONFIG_KEY'];
 for (const key of required) if (!process.env[key]) throw new Error(`${key} 未配置`);
-const adminIds = parseAdminIds(process.env.ADMIN_TG_IDS);
 if (Buffer.from(process.env.CONFIG_KEY, 'base64').length !== 32) throw new Error('CONFIG_KEY 必须是 32 字节 Base64 密钥');
 if (process.env.PUBLIC_URL && !/^https:\/\/[^\s/]+\/?$/.test(process.env.PUBLIC_URL)) throw new Error('PUBLIC_URL 应为 HTTPS 域名，不带子路径');
 const ffaBaseUrl = String(process.env.FFA_API_BASE_URL || 'https://fferwepba.ffyl88.com').replace(/\/$/, '');
@@ -38,7 +36,7 @@ async function kickScheduler() {
   await scheduler.tick();
 }
 const app = express();
-const browserAuth = await createBrowserAuth(db, adminIds, process.env.PUBLIC_URL, {
+const accountAuth = await createAccountAuth(db, {
   accounts: (() => {
     try {
       const parsed = JSON.parse(process.env.ADMIN_LOGIN_ACCOUNTS || '[]');
@@ -53,7 +51,7 @@ const browserAuth = await createBrowserAuth(db, adminIds, process.env.PUBLIC_URL
 app.disable('x-powered-by');
 app.use(express.json({ limit: '512kb' }));
 app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-browserAuth.routes(app);
+accountAuth.routes(app);
 
 app.get('/healthz', async (_req, res) => {
   try { await db.prepare('SELECT 1').get(); res.json({ ok: true, database: true }); }
@@ -69,27 +67,16 @@ app.post('/tg/entry', async (req, res) => {
     if (chat?.type !== 'private') return;
     const command = entryCommand(req.body?.message?.text);
     if (!command) return;
-    const isAdmin = adminIds.includes(String(req.body.message.from?.id));
-    const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
-    if (command === 'login') {
-      const link = isAdmin ? await browserAuth.issueLink(req.body.message.from?.id) : null;
-      const reply = loginReply(link);
-      await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
-      return;
-    }
-    const reply = entryReply({ command, isAdmin, publicUrl: base });
+    const reply = entryReply({ command, publicUrl: process.env.PUBLIC_URL });
     if (reply) await botCall(process.env.ENTRY_BOT_TOKEN, 'sendMessage', { chat_id: chat.id, ...reply });
   };
   try { await handleEntry(); } catch (error) { console.error('Entry bot:', safeTelegramError(error)); }
   res.sendStatus(200);
 });
 
+app.use('/api', requireAccount(accountAuth));
 app.use('/api', async (req, res, next) => {
   try {
-    req.admin = await browserAuth.authenticate(req) || (req.get('x-telegram-init-data')
-      ? verifyInitData(String(req.get('x-telegram-init-data')), process.env.ENTRY_BOT_TOKEN, adminIds)
-      : null);
-    if (!req.admin) throw new Error('未授权');
     if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)
       return res.status(403).json({error:'仅 wz9946 可管理或配置机器人'});
     const selected = String(req.get('x-publisher-id') || '');
@@ -104,7 +91,7 @@ app.use('/api', async (req, res, next) => {
     }
     next();
   }
-  catch (error) { res.status(401).json({ error: error.message }); }
+  catch (error) { next(error); }
 });
 
 registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL, publisherFor:currentBot });
