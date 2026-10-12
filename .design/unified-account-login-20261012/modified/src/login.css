@@ -1,0 +1,56 @@
+/* Authentication is deliberately independent of the workbench's glass/dark theme. */
+html[data-surface] body:has(#locked:not([hidden])),
+html[data-surface]:has(#locked:not([hidden])),
+html[data-surface] #app:has(#locked:not([hidden])) { background:#f2f2f7!important; color:#1c1c1e; }
+body:has(#locked:not([hidden]))::before,
+body:has(#locked:not([hidden])) .app-header { display:none; }
+html[data-surface] #locked.login-shell {
+  position:relative; display:grid; place-items:center; align-content:center; gap:32px;
+  width:100%; max-width:none; margin:0; min-height:100dvh;
+  padding:40px 24px 64px; padding-top:max(40px,env(safe-area-inset-top));
+  padding-bottom:max(64px,env(safe-area-inset-bottom));
+}
+html[data-surface] body.desktop-client #locked.login-shell { padding-top:72px; }
+html[data-surface] #locked .login-card {
+  width:min(420px,100%); padding:28px 24px; border:1px solid #e5e5ea; border-radius:24px;
+  background:#fff; box-shadow:0 2px 10px #00000003;
+}
+html[data-surface] #locked .login-brand { display:flex; align-items:center; gap:12px; margin-bottom:28px; color:#1c1c1e; }
+html[data-surface] #locked .login-brand > span:last-child { display:grid; gap:4px; }
+html[data-surface] #locked .login-brand strong { font-size:20px; line-height:1.2; }
+html[data-surface] #locked .login-brand small { color:#636366; font-size:13px; }
+html[data-surface] #locked .login-brand-mark { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; border:0; border-radius:12px; background:#007aff; }
+html[data-surface] #locked .login-brand-mark svg { width:24px; height:24px; }
+html[data-surface] #locked .login-card h2 { margin:0; color:#1c1c1e; font-size:28px; line-height:1.35; letter-spacing:-.02em; }
+html[data-surface] #locked .login-intro { margin:10px 0 24px; color:#636366; font-size:14px; line-height:1.65; }
+html[data-surface] #locked .login-form { display:grid; gap:18px; }
+html[data-surface] #locked .login-form label { display:grid; gap:8px; margin:0; color:#3a3a3c; font-size:14px; font-weight:400; }
+html[data-surface] #locked .login-field { display:flex; align-items:center; gap:10px; min-height:54px; padding:0 14px; border:1px solid transparent; border-radius:12px; background:#f2f2f7; }
+html[data-surface] #locked .login-field input,
+html[data-surface] #locked .login-field input:focus {
+  width:100%; min-width:0; height:52px; min-height:0; margin:0; padding:0; font:inherit; font-size:16px;
+  border:0!important; outline:0!important; background:transparent!important; box-shadow:none!important; color:#1c1c1e!important;
+}
+html[data-surface] #locked .login-field input::placeholder { color:#767680; }
+html[data-surface] #locked .login-field svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+html[data-surface] #locked .login-field > span { display:flex; color:#636366; }
+html[data-surface] #locked .login-field button { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; margin-right:-10px; padding:0; border:0; background:transparent; color:#636366; cursor:pointer; }
+#locked .eye-slash { display:none; }
+#locked [aria-pressed="true"] .eye-slash { display:block; }
+html[data-surface] #locked .login-field:focus-within { border-color:#007aff; box-shadow:0 0 0 3px #007aff24; }
+html[data-surface] #locked .login-field:has(input[aria-invalid="true"]) { border-color:#c9342b; }
+html[data-surface] #locked button:focus-visible { outline:3px solid #007aff80; outline-offset:3px; }
+html[data-surface] #locked .login-submit { width:100%; min-height:52px; margin-top:4px; border:0!important; border-radius:12px!important; background:#007aff!important; color:#fff; font-size:16px; box-shadow:none!important; }
+html[data-surface] #locked .login-submit:hover { background:#0066d6!important; }
+html[data-surface] #locked .login-submit:disabled { opacity:.66; cursor:wait; }
+#locked .login-form.is-loading .login-submit::after { content:" …"; }
+html[data-surface] #locked .login-error { min-height:0; margin:16px 0 0; color:#c9342b; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+#locked .login-error:empty { display:none; }
+html[data-surface] #locked .login-footer { position:static; margin:0; color:#636366; font-size:12px; text-align:center; line-height:1.6; }
+@media (max-width:360px) {
+  html[data-surface] #locked.login-shell { padding-left:16px; padding-right:16px; }
+  html[data-surface] #locked .login-card { padding:24px 20px; }
+}
+
+html[data-surface] #locked .login-hint { margin:20px 0 0; color:#636366; font-size:13px; line-height:1.7; }
+html[data-surface] #locked #authRetry { width:100%; margin-top:16px; min-height:44px; }

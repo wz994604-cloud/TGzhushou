@@ -5,7 +5,6 @@
 ## 必需环境变量
 
 - `ENTRY_BOT_TOKEN`：Telegram 入口机器人 Token。
-- `ADMIN_TG_IDS`：允许管理后台的 Telegram 数字用户 ID。
 - `CONFIG_KEY`：32 字节 Base64 密钥，用于加密机器人 Token。
 - `ADMIN_LOGIN_ACCOUNTS`：网页登录账号 JSON 数组。
 - `PUBLIC_URL`：Railway 对外 HTTPS 域名。
@@ -30,3 +29,8 @@ npm start
 ## 数据库
 
 首次启动会按 `server/schema.sql` 初始化 PostgreSQL。生产数据库访问使用异步连接池。
+
+## 登录与权限
+
+所有客户端统一使用后台账号密码。Telegram 只提供小程序入口，不参与后台授权。
+详细规则见 [统一登录规则](docs/ACCOUNT_LOGIN.md)。

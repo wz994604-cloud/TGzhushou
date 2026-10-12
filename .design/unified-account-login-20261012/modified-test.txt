@@ -1,0 +1,176 @@
+
+> tgzhushou@0.1.0 test
+> node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js tests/entry-feedback.test.js tests/auth-session.test.js
+
+TAP version 13
+# Subtest: all surfaces use Railway cookie sessions; SDK cannot select legacy Serverless
+ok 1 - all surfaces use Railway cookie sessions; SDK cannot select legacy Serverless
+  ---
+  duration_ms: 21.364709
+  type: 'test'
+  ...
+# Subtest: real HTTP login, cookie-authenticated bootstrap, and logout share one account path
+ok 2 - real HTTP login, cookie-authenticated bootstrap, and logout share one account path
+  ---
+  duration_ms: 158.825518
+  type: 'test'
+  ...
+# Subtest: logout ends current account only and calls login transition
+ok 3 - logout ends current account only and calls login transition
+  ---
+  duration_ms: 1.843007
+  type: 'test'
+  ...
+# Subtest: logout failure leaves current session intact
+ok 4 - logout failure leaves current session intact
+  ---
+  duration_ms: 0.531837
+  type: 'test'
+  ...
+# Subtest: all surfaces show password form on expiry and never demand Telegram reopening
+ok 5 - all surfaces show password form on expiry and never demand Telegram reopening
+  ---
+  duration_ms: 0.370564
+  type: 'test'
+  ...
+# Subtest: network errors allow retry without hiding account login
+ok 6 - network errors allow retry without hiding account login
+  ---
+  duration_ms: 1.027203
+  type: 'test'
+  ...
+# Subtest: all clients require account login; Telegram identity alone grants no access
+ok 7 - all clients require account login; Telegram identity alone grants no access
+  ---
+  duration_ms: 212.759274
+  type: 'test'
+  ...
+# Subtest: only wz9946 creates accounts; new accounts retain assigned robot permissions
+ok 8 - only wz9946 creates accounts; new accounts retain assigned robot permissions
+  ---
+  duration_ms: 214.769746
+  type: 'test'
+  ...
+# Subtest: logout ends only the current session; expired and legacy Telegram sessions are rejected
+ok 9 - logout ends only the current session; expired and legacy Telegram sessions are rejected
+  ---
+  duration_ms: 128.409416
+  type: 'test'
+  ...
+# Subtest: cross-origin login/logout rejected; cookie remains HttpOnly Secure and rate limiting remains
+ok 10 - cross-origin login/logout rejected; cookie remains HttpOnly Secure and rate limiting remains
+  ---
+  duration_ms: 283.356449
+  type: 'test'
+  ...
+# Subtest: backspace covers ordinary text, newline, graphemes, and custom embeds
+ok 11 - backspace covers ordinary text, newline, graphemes, and custom embeds
+  ---
+  duration_ms: 19.388281
+  type: 'test'
+  ...
+# Subtest: selections and split formatting runs keep whole characters and terminal newline
+ok 12 - selections and split formatting runs keep whole characters and terminal newline
+  ---
+  duration_ms: 0.40834
+  type: 'test'
+  ...
+# Subtest: entryCommand normalizes bot mentions and arguments
+ok 13 - entryCommand normalizes bot mentions and arguments
+  ---
+  duration_ms: 1.462043
+  type: 'test'
+  ...
+# Subtest: start opens account login for every Telegram user
+ok 14 - start opens account login for every Telegram user
+  ---
+  duration_ms: 0.428213
+  type: 'test'
+  ...
+# Subtest: login opens account login for every Telegram user
+ok 15 - login opens account login for every Telegram user
+  ---
+  duration_ms: 0.148021
+  type: 'test'
+  ...
+# Subtest: help and unknown commands explain public account login entry
+ok 16 - help and unknown commands explain public account login entry
+  ---
+  duration_ms: 0.145971
+  type: 'test'
+  ...
+# Subtest: normalizes WPS numeric and scientific Telegram IDs without losing text IDs
+ok 17 - normalizes WPS numeric and scientific Telegram IDs without losing text IDs
+  ---
+  duration_ms: 1.865606
+  type: 'test'
+  ...
+# Subtest: parses WPS CSV BOM, quoted commas and CRLF rows
+ok 18 - parses WPS CSV BOM, quoted commas and CRLF rows
+  ---
+  duration_ms: 1.019234
+  type: 'test'
+  ...
+# Subtest: Mini App exposes exactly five primary tabs and maps secondary pages back to their owner
+ok 19 - Mini App exposes exactly five primary tabs and maps secondary pages back to their owner
+  ---
+  duration_ms: 1.588916
+  type: 'test'
+  ...
+# Subtest: Mini App editor step stays within the five-step flow
+ok 20 - Mini App editor step stays within the five-step flow
+  ---
+  duration_ms: 0.32705
+  type: 'test'
+  ...
+# Subtest: new automatic buttons use paired rows and delete reflows by actual index
+ok 21 - new automatic buttons use paired rows and delete reflows by actual index
+  ---
+  duration_ms: 1.115238
+  type: 'test'
+  ...
+# Subtest: manual rows survive deletion, including a manually chosen default row
+ok 22 - manual rows survive deletion, including a manually chosen default row
+  ---
+  duration_ms: 0.33771
+  type: 'test'
+  ...
+# Subtest: stored server rows lacking metadata are preserved, not guessed automatic
+ok 23 - stored server rows lacking metadata are preserved, not guessed automatic
+  ---
+  duration_ms: 0.209604
+  type: 'test'
+  ...
+# Subtest: missing and invalid row values get two-column defaults
+ok 24 - missing and invalid row values get two-column defaults
+  ---
+  duration_ms: 0.17514
+  type: 'test'
+  ...
+# Subtest: emoji popup chooses upwards and clamps inside the viewport
+ok 25 - emoji popup chooses upwards and clamps inside the viewport
+  ---
+  duration_ms: 0.344983
+  type: 'test'
+  ...
+# Subtest: emoji popup falls below top anchors and remains inside short viewports
+ok 26 - emoji popup falls below top anchors and remains inside short viewports
+  ---
+  duration_ms: 0.14242
+  type: 'test'
+  ...
+# Subtest: emoji search covers true custom emoji IDs and alternatives only
+ok 27 - emoji search covers true custom emoji IDs and alternatives only
+  ---
+  duration_ms: 0.424293
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1078.86008
