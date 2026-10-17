@@ -503,9 +503,12 @@ const server = app.listen(port, '0.0.0.0', async () => {
   const base = String(process.env.PUBLIC_URL || '').replace(/\/$/, '');
   if (!base) return;
   try {
-    await botCall(process.env.ENTRY_BOT_TOKEN, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '打开活动后台', web_app: { url: base } } });
+    await botCall(process.env.ENTRY_BOT_TOKEN, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '工作台', web_app: { url: base } } });
     await botCall(process.env.ENTRY_BOT_TOKEN, 'setWebhook', { url: `${base}/tg/entry`, secret_token: crypto.createHash('sha256').update(`entry:${process.env.ENTRY_BOT_TOKEN}`).digest('hex'), allowed_updates: ['message'] });
     console.log('Entry bot menu and webhook ready');
+    await botCall(process.env.ENTRY_BOT_TOKEN, 'setMyName', { name: '活动助手' });
+    await botCall(process.env.ENTRY_BOT_TOKEN, 'setMyDescription', { description: '机器人管理、会话处理与活动发布。打开工作台，使用管理账号密码登录。忘记密码或需要开通账号，请联系管理员。' });
+    await botCall(process.env.ENTRY_BOT_TOKEN, 'setMyShortDescription', { short_description: '机器人管理、会话处理与活动发布' });
   } catch (error) { console.error('Entry bot setup:', safeTelegramError(error)); }
 });
 function shutdown() { scheduler.stop(); server.close(async () => { await db.close(); process.exit(0); }); setTimeout(() => process.exit(0), 25000).unref(); }
