@@ -198,8 +198,9 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
   }));
   app.get('/api/chat/conversations/:chatId/messages', wrapper(async (req,res) => {
     const id = await currentId(req), chat = String(req.params.chatId), before = Number(req.query.before || 0), limit = clamp(req.query.limit,50,100);
-    const rows = await db.prepare(`SELECT * FROM chat_messages WHERE bot_id=? AND chat_id=? AND (?=0 OR id<?) ORDER BY id DESC LIMIT ?`)
-      .all(id,chat,before,before,limit);
+    const q=String(req.query.q || '').trim().slice(0,100);
+    const rows = await db.prepare(`SELECT * FROM chat_messages WHERE bot_id=? AND chat_id=? AND (?=0 OR id<?)${q ? ' AND text LIKE ?' : ''} ORDER BY id DESC LIMIT ?`)
+      .all(id,chat,before,before,...(q ? [`%${q}%`] : []),limit);
     res.json({ rows:rows.reverse(), next:rows.length === limit ? rows[0].id : null });
   }));
   app.post('/api/chat/conversations/:chatId/read', wrapper(async (req,res) => {

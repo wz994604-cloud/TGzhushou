@@ -56,3 +56,24 @@ test('cross-origin login/logout rejected; cookie remains HttpOnly Secure and rat
     assert.equal((await f.request('/auth/login',{method:'POST',body:'{}'})).status,429);
   }finally{await f.close();}
 });
+test('logout all revokes this account across devices and preserves other accounts',async()=>{
+ const f=await accountFixture();try{
+  const first=await f.login(),second=await f.login(),other=await f.login('operator','operator-fixture-password');
+  assert.equal((await f.request('/auth/logout-all',{method:'POST',headers:{cookie:first,origin:'https://other.example'}})).status,401);
+  const response=await f.request('/auth/logout-all',{method:'POST',headers:{cookie:first}});
+  assert.equal(response.status,200);assert.match(response.headers.get('set-cookie'),/Max-Age=0/);
+  for(const cookie of [first,second])assert.equal((await f.request('/api/bootstrap',{headers:{cookie}})).status,401);
+  assert.equal((await f.request('/api/bootstrap',{headers:{cookie:other}})).status,200);
+  assert.equal((await f.request('/api/bootstrap',{headers:{cookie:await f.login()}})).status,200);
+  assert.equal(JSON.parse(f.settings.get('admin_account_audit_v1')).at(-1).action,'account.sessions_revoked');
+ }finally{await f.close();}
+});
+test('operation history is restricted to owner and contains no credentials',async()=>{
+ const f=await accountFixture();try{
+  const owner=await f.login(),operator=await f.login('operator','operator-fixture-password');
+  assert.equal((await f.request('/auth/audit',{headers:{cookie:operator}})).status,403);
+  await f.auth.audit({actor:'wz9946',action:'publisher.verify',target:'1001'});
+  const response=await f.request('/auth/audit',{headers:{cookie:owner}});assert.equal(response.status,200);
+  const result=await response.json();assert.equal(result.rows[0].action,'publisher.verify');assert.doesNotMatch(JSON.stringify(result),/password|sessionVersion/);
+ }finally{await f.close();}
+});

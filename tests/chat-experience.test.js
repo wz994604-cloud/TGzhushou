@@ -27,3 +27,13 @@ test('image cache separates scope and clear invalidates pending results',async()
  let calls=0;const load=createImageLoader(async()=>new Blob([String(++calls)]));
  assert.equal(await (await load('a')).text(),'1');load.clear();assert.equal(await (await load('a')).text(),'2');
 });
+test('successful send stays successful when refreshing messages fails',async()=>{
+ const {sendChatMessage}=await import('../src/chat-experience.js');let sent=false;
+ const result=await sendChatMessage({send:async()=>({id:10}),onSent:()=>{sent=true;},refresh:async()=>{throw new Error('offline');}});
+ assert.equal(sent,true);assert.equal(result.refreshError.message,'offline');
+});
+test('failed send keeps draft and never refreshes',async()=>{
+ const {sendChatMessage}=await import('../src/chat-experience.js');let cleared=false,refreshed=false;
+ await assert.rejects(sendChatMessage({send:async()=>{throw new Error('timeout');},onSent:()=>{cleared=true;},refresh:async()=>{refreshed=true;}}),/timeout/);
+ assert.equal(cleared,false);assert.equal(refreshed,false);
+});
