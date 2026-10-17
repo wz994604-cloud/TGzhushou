@@ -98,6 +98,11 @@ export async function createAccountAuth(db, credentials = {}) {
       ...(account?.username !== 'wz9946' && account?.publisherIds !== undefined ? {publisherIds:account.publisherIds} : {})};
   }
   function routes(app) {
+    app.get('/auth/audit', requireAccount({authenticate}), async (req,res) => {
+      if (req.admin.canManageAccounts !== true) return res.sendStatus(403);
+      const rows=JSON.parse((await getSetting(db,'admin_account_audit_v1')) || '[]');
+      res.json({rows:rows.slice(-100).reverse()});
+    });
     app.get('/auth/admin-accounts', requireAccount({ authenticate }), async (req, res) => {
       if (req.admin.canManageAccounts !== true) return res.sendStatus(403);
       res.json({accounts:(await mergedAccounts()).map(publicAccount),
@@ -183,6 +188,17 @@ export async function createAccountAuth(db, credentials = {}) {
         failures.set(ip, state); return res.status(401).json({ error:'账号或密码错误' });
       }
       failures.delete(ip); setSession(res, await createSession(account)); res.json({ ok:true });
+    });
+    app.post('/auth/logout-all', requireAccount({authenticate}), async (req,res) => {
+      await locked(async () => {
+        const account = await findAccount(req.admin.username);
+        if (!account || account.enabled === false) return;
+        await revokeSessions(account);
+        await saveAccount(account);
+        await writeAudit({actor:account.username,action:'account.sessions_revoked',target:account.username});
+      });
+      clearSession(res);
+      res.json({ok:true});
     });
     app.post('/auth/logout', async (req, res) => {
       if (!sameOrigin(req)) return res.sendStatus(403);

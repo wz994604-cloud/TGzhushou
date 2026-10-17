@@ -24,3 +24,11 @@ export function safeMessageHtml(text,entities=[]) {
   }return s;
  }).join('');
 }
+
+// A refresh failure after Telegram accepted a message must never invite a resend.
+export async function sendChatMessage({send,onSent,refresh}) {
+ const message=await send();
+ await onSent(message);
+ try { await refresh(); return {message}; }
+ catch(refreshError) { return {message,refreshError}; }
+}
