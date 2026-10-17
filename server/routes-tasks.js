@@ -25,6 +25,7 @@ export function registerTaskRoutes(app, deps) {
     const item = await taskPayload(req.body, bot), now = Date.now();
     const result = await db.prepare(`INSERT INTO tasks(name,delta_json,buttons_json,target_ids_json,schedule_json,media_id,bot_id,status,next_at,created_at,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(item.name,item.delta,item.buttons,item.ids,item.schedule,item.mediaId,bot.id,'DRAFT',null,now,now);
+    await scheduler.recordOwner('tasks',Number(result.lastInsertRowid),req.admin);
     res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(result.lastInsertRowid));
   }));
 
@@ -64,6 +65,14 @@ export function registerTaskRoutes(app, deps) {
     const action = String(req.body?.action || '');
     if (!['activate','pause','stop'].includes(action)) throw new Error('操作无效');
     const schedule = JSON.parse(task.schedule_json);
+    if (action === 'activate') {
+      if (!await scheduler.publisher(task.bot_id)) throw new Error('机器人已停用或移除');
+      const ids = JSON.parse(task.target_ids_json);
+      for (const id of ids) {
+        const target = await db.prepare('SELECT can_publish FROM targets WHERE id=? AND bot_id=?').get(id,task.bot_id);
+        if (!target?.can_publish) throw new Error('发布目标已删除或无发布权限，请编辑任务');
+      }
+    }
     if (action === 'activate' && task.status === 'ACTIVE') return res.json(task);
     if (action === 'pause' && task.status === 'STOPPED') throw new Error('任务已停止，请先重新开始');
     if (action === 'activate' && task.status === 'COMPLETED') throw new Error('单次任务已经完成');
@@ -72,17 +81,23 @@ export function registerTaskRoutes(app, deps) {
     if (action === 'activate' && timed && !next) throw new Error('没有未来发布时间，请编辑任务设置新的发布时间');
     const status = action === 'activate' ? (timed ? 'ACTIVE' : 'DRAFT') : action === 'pause' ? 'PAUSED' : 'STOPPED';
     await db.transaction(async () => {
+      if (action === 'activate') await scheduler.recordOwner('tasks',task.id,req.admin);
       await db.prepare('UPDATE tasks SET status=?,next_at=?,updated_at=? WHERE id=?').run(status,next,Date.now(),task.id);
       if (action !== 'activate') await db.prepare(`UPDATE deliveries SET status='CANCELLED',error_text='任务已暂停或停止',completed_at=? WHERE status='PENDING' AND run_id IN
-        (SELECT id FROM runs WHERE task_id=? AND (?='stop' OR source='SCHEDULED'))`).run(Date.now(), task.id, action);
+        (SELECT id FROM runs WHERE task_id=?)`).run(Date.now(), task.id);
     })();
     res.json(await db.prepare('SELECT * FROM tasks WHERE id=?').get(task.id));
   }));
 
   app.post('/api/tasks/:id/send', route(async (req, res) => {
-    const runId = await scheduler.queueNow(Number(req.params.id), req.body?.requestKey, selectedBotId(req));
+    const runId = await scheduler.queueNow(Number(req.params.id), req.body?.requestKey, selectedBotId(req), req.admin);
     await kickScheduler('Immediate tick:');
     res.json({ runId });
+  }));
+
+  for (const kind of ['runs','broadcasts']) app.post(`/api/${kind}/:id/retry-failed`, route(async(req,res) => {
+    const result = await scheduler.retryFailed(kind,Number(req.params.id),selectedBotId(req));
+    await kickScheduler();res.json(result);
   }));
 
   app.get('/api/runs', route(async (req, res) => {

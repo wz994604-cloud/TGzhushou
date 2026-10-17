@@ -51,7 +51,7 @@ test('cross-origin login/logout rejected; cookie remains HttpOnly Secure and rat
     assert.equal((await f.request('/auth/login',{method:'POST',headers:{origin:'https://other.example'},body:'{}'})).status,403);
     assert.equal((await f.request('/api/bootstrap',{headers:{cookie}})).status,200);
     const logged=await f.request('/auth/login',{method:'POST',body:JSON.stringify({username:'wz9946',password:'owner-fixture-password'})});
-    assert.match(logged.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Lax/);
+    assert.match(logged.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=None; Partitioned/);
     for(let i=0;i<5;i++)assert.equal((await f.request('/auth/login',{method:'POST',body:JSON.stringify({username:'nobody',password:'wrong'})})).status,401);
     assert.equal((await f.request('/auth/login',{method:'POST',body:'{}'})).status,429);
   }finally{await f.close();}

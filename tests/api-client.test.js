@@ -5,12 +5,12 @@ import {accountFixture} from './account-auth-fixture.js';
 
 test('all surfaces use Railway cookie sessions; SDK cannot select legacy Serverless',async()=>{
  const oldFetch=globalThis.fetch,oldTelegram=globalThis.Telegram,oldConfig=globalThis.__TGZ_API_CONFIG__;
- const requests=[];let unauthorized=0;
+ const requests=[];let unauthorized=0,forbidden=0;
  globalThis.Telegram={WebApp:{initData:'unrelated-telegram',Serverless:{call(){throw new Error('obsolete backend');}}}};
  globalThis.__TGZ_API_CONFIG__={serverlessBase:'https://obsolete.example',fallbackBaseUrl:'https://obsolete.example'};
  globalThis.fetch=async(url,options)=>{requests.push({url,options});return new Response(JSON.stringify({ok:true}),{headers:{'content-type':'application/json'}})};
  try {
-   const client=createWorkbenchApiClient({getPublisherId:()=> '1001',onUnauthorized:()=>unauthorized++});
+   const client=createWorkbenchApiClient({getPublisherId:()=> '1001',onUnauthorized:()=>unauthorized++,onForbidden:()=>forbidden++});
    await client.api('/bootstrap');
    assert.equal(requests[0].url,'/api/bootstrap');assert.equal(requests[0].options.credentials,'same-origin');
    assert.deepEqual(requests[0].options.headers,{'x-publisher-id':'1001'});
@@ -19,7 +19,9 @@ test('all surfaces use Railway cookie sessions; SDK cannot select legacy Serverl
    assert.equal(requests[1].options.headers['content-type'],undefined);
    await client.api('/tasks','POST',{title:'fixture'});assert.equal(requests[2].options.body,'{"title":"fixture"}');
    globalThis.fetch=async()=>new Response(JSON.stringify({error:'没有权限'}),{status:403});
-   await assert.rejects(client.api('/bootstrap'),{status:403});assert.equal(unauthorized,0);
+   await assert.rejects(client.api('/bootstrap'),{status:403});assert.equal(unauthorized,0);assert.equal(forbidden,0);
+   globalThis.fetch=async()=>new Response(JSON.stringify({error:'没有此机器人的操作权限'}),{status:403});
+   await assert.rejects(client.api('/chat/conversations'),{status:403});assert.equal(forbidden,1);
    globalThis.fetch=async()=>new Response(JSON.stringify({error:'请登录账号'}),{status:401});
    await assert.rejects(client.api('/bootstrap'),{status:401});assert.equal(unauthorized,1);
    await assert.rejects(client.image('/media/1'),{status:401});assert.equal(unauthorized,2);

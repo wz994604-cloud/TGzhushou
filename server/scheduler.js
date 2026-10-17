@@ -9,11 +9,32 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
   let running = false, timer = null;
   const publisher = async id => await getPublisher(db, config.configKey, id);
 
-  const createRun = db.transaction(async (task, source, slotAt, key) => {
+  async function recordOwner(kind, id, actor) {
+    if (!actor) return;
+    const accountId = String(actor.account_id || actor.id || ''), username = String(actor.username || '');
+    if (!accountId || !username) throw new Error('缺少任务发起账号');
+    await db.prepare(`INSERT INTO work_owners(kind,item_id,account_id,username) VALUES(?,?,?,?)
+      ON CONFLICT(kind,item_id) DO UPDATE SET account_id=excluded.account_id,username=excluded.username`).run(kind,id,accountId,username);
+  }
+  const ownerOf = (kind,id) => db.prepare('SELECT * FROM work_owners WHERE kind=? AND item_id=?').get(kind,id);
+  async function ownerAllowed(kind,id,botId) {
+    const owner = await ownerOf(kind,id);
+    // Rows created before owner tracking retain legacy behavior.
+    return !owner || Boolean(config.canExecuteOwner && await config.canExecuteOwner(owner,botId));
+  }
+  async function cancelUnauthorized(kind,id,botId) {
+    if (await ownerAllowed(kind,id,botId)) return false;
+    const table=kind==='runs'?'deliveries':'broadcast_deliveries', field=kind==='runs'?'run_id':'broadcast_id';
+    await db.prepare(`UPDATE ${table} SET status='CANCELLED',error_text='发起账号已停用或失去机器人授权',completed_at=? WHERE ${field}=? AND status='PENDING'`).run(Date.now(),id);
+    return true;
+  }
+
+  const createRun = db.transaction(async (task, source, slotAt, key, actor) => {
     const existing = await db.prepare('SELECT id FROM runs WHERE run_key=?').get(key);
     if (existing) return existing.id;
     const result = await db.prepare(`INSERT INTO runs(task_id,run_key,source,slot_at,status,bot_id,delta_json,buttons_json,media_id,created_at)
       VALUES(?,?,?,?,?,?,?,?,?,?)`).run(task.id, key, source, slotAt, 'PENDING', task.bot_id, task.delta_json, task.buttons_json, task.media_id, Date.now());
+    await recordOwner('runs',Number(result.lastInsertRowid),actor || await ownerOf('tasks',task.id));
     const targetIds = JSON.parse(task.target_ids_json);
     const add = db.prepare(`INSERT INTO deliveries(run_id,target_id,chat_id,title,status) VALUES(?,?,?,?,'PENDING')`);
     for (const id of targetIds) {
@@ -25,17 +46,17 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     return Number(result.lastInsertRowid);
   });
 
-  async function queueNow(taskId, requestKey, botId) {
+  async function queueNow(taskId, requestKey, botId, actor) {
     const key = String(requestKey || '');
     if (!/^[0-9a-f-]{36}$/i.test(key)) throw new Error('立即发布请求标识无效');
     const task = await db.prepare('SELECT * FROM tasks WHERE id=?').get(taskId);
-    if (!task || task.status === 'STOPPED') throw new Error('任务不存在或已停止');
+    if (!task || ['STOPPED','PAUSED'].includes(task.status)) throw new Error('任务不存在或已停止');
     const bot = await publisher(botId);
     if (!bot || task.bot_id !== bot.id) throw new Error('任务所属发布机器人已变化');
-    return await createRun(task, 'IMMEDIATE', Date.now(), `now:${task.id}:${key}`);
+    return await createRun(task, 'IMMEDIATE', Date.now(), `now:${task.id}:${key}`, actor);
   }
 
-  async function queueBroadcast(item, botId) {
+  async function queueBroadcast(item, botId, actor) {
     const bot = await publisher(botId);
     if (!bot) throw new Error('请先配置发布机器人');
     const players = Array.isArray(item.players) ? item.players : [];
@@ -44,6 +65,7 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     return await db.transaction(async () => {
       const result = await db.prepare(`INSERT INTO broadcasts(name,delta_json,buttons_json,media_id,bot_id,status,total_count,created_at)
         VALUES(?,?,?,?,?,'PENDING',?,?)`).run(item.name, item.deltaJson, item.buttonsJson, item.mediaId || null, bot.id, players.length, now);
+      await recordOwner('broadcasts',Number(result.lastInsertRowid),actor);
       for (let offset = 0; offset < players.length; offset += 100) {
         const chunk = players.slice(offset, offset + 100);
         const values = chunk.flatMap(player => [result.lastInsertRowid, String(player.telegramId), String(player.displayName || '')]);
@@ -53,9 +75,31 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     })();
   }
 
+  async function retryFailed(kind, id, botId) {
+    if (!['runs','broadcasts'].includes(kind)) throw new Error('记录类型无效');
+    const table = kind === 'runs' ? 'deliveries' : 'broadcast_deliveries';
+    const parent = kind === 'runs' ? 'run_id' : 'broadcast_id';
+    return db.transaction(async () => {
+      const item = await db.prepare(`SELECT * FROM ${kind} WHERE id=?`).get(id);
+      if (!item || item.bot_id !== botId || !await publisher(botId)) throw new Error('机器人不可用或记录不存在');
+      if (kind === 'runs') {
+        const task = await db.prepare('SELECT status FROM tasks WHERE id=?').get(item.task_id);
+        if (!task || ['PAUSED','STOPPED'].includes(task.status)) throw new Error('请先恢复任务');
+      }
+      const result = await db.prepare(`UPDATE ${table} SET status='PENDING',error_text=NULL,started_at=NULL,completed_at=NULL,claim_token=NULL,claimed_at=NULL WHERE ${parent}=? AND status='FAILED'`).run(id);
+      if (result.changes) await db.prepare(`UPDATE ${kind} SET status='PENDING' WHERE id=?`).run(id);
+      return { count:Number(result.changes) };
+    })();
+  }
+
   async function queueDue(now) {
     const tasks = await db.prepare("SELECT * FROM tasks WHERE status='ACTIVE' AND next_at<=? ORDER BY next_at LIMIT 30").all(now);
     for (const task of tasks) {
+      if (!await publisher(task.bot_id)) continue;
+      if (!await ownerAllowed('tasks',task.id,task.bot_id)) {
+        await db.prepare("UPDATE tasks SET status='PAUSED',next_at=NULL,updated_at=? WHERE id=?").run(now,task.id);
+        continue;
+      }
       const schedule = JSON.parse(task.schedule_json);
       const next = schedule.kind === 'ONCE' ? null : nextSlot(schedule, Math.max(task.next_at + 1, now + 1));
       await db.transaction(async () => {
@@ -74,6 +118,7 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
   }
 
   async function sendOne(row, now) {
+    if (await cancelUnauthorized('runs',row.run_id,row.bot_id)) return;
     const claim = crypto.randomUUID();
     const claimed = await db.prepare("UPDATE deliveries SET status='SENDING',started_at=?,claim_token=?,claimed_at=? WHERE id=? AND status='PENDING'").run(now, claim, now, row.id);
     if (!claimed.changes) return;
@@ -90,6 +135,10 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       const media = row.media_id ? await db.prepare('SELECT * FROM media WHERE id=?').get(row.media_id) : null;
       if (row.media_id && !media) throw new Error('图片不存在');
       if (media && formatted.text.length > 1024) throw new Error('图片说明文字超过 1024 字符');
+      if (!await ownerAllowed('runs',row.run_id,row.bot_id)) throw Object.assign(new Error('发起账号已失去机器人授权，未发送'),{cancelled:true});
+      const taskState = await db.prepare('SELECT t.status FROM tasks t JOIN runs r ON r.task_id=t.id WHERE r.id=?').get(row.run_id);
+      if (!taskState || ['PAUSED','STOPPED'].includes(taskState.status)) throw new Error('任务已暂停或停止，未发送');
+      if (!await publisher(row.bot_id)) throw new Error('机器人已停用或移除，未发送');
       attempted = true;
       const { sent } = await sendFormatted({ token:bot.token, chatId:row.chat_id,
         delta:JSON.parse(row.delta_json), buttons:JSON.parse(row.buttons_json), media, api });
@@ -103,12 +152,13 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       await db.prepare("UPDATE deliveries SET status='SUCCESS',telegram_message_id=?,error_text=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?")
         .run(String(sent.message_id), notes.join('；') || null, Date.now(), row.id, claim);
     } catch (error) {
-      const status = !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
+      const status = error.cancelled && !attempted ? 'CANCELLED' : !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
       await db.prepare('UPDATE deliveries SET status=?,error_text=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?').run(status, safeTelegramError(error), Date.now(), row.id, claim);
     }
   }
 
   async function sendBroadcastOne(row, now) {
+    if (await cancelUnauthorized('broadcasts',row.broadcast_id,row.bot_id)) return;
     const claim = crypto.randomUUID();
     const claimed = await db.prepare("UPDATE broadcast_deliveries SET status='SENDING',started_at=?,claim_token=?,claimed_at=? WHERE id=? AND status='PENDING'").run(now, claim, now, row.id);
     if (!claimed.changes) return;
@@ -121,12 +171,16 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
       const media = row.media_id ? await db.prepare('SELECT * FROM media WHERE id=?').get(row.media_id) : null;
       if (row.media_id && !media) throw new Error('图片不存在');
       if (media && formatted.text.length > 1024) throw new Error('图片说明文字超过 1024 字符');
+      if (!await ownerAllowed('broadcasts',row.broadcast_id,row.bot_id)) throw Object.assign(new Error('发起账号已失去机器人授权，未发送'),{cancelled:true});
+      const broadcastState = await db.prepare('SELECT status FROM broadcasts WHERE id=?').get(row.broadcast_id);
+      if (broadcastState?.status === 'STOPPED') throw new Error('群发已停止，未发送');
+      if (!await publisher(row.bot_id)) throw new Error('机器人已停用或移除，未发送');
       attempted = true;
       const { sent } = await sendFormatted({ token:bot.token, chatId:row.telegram_id,
         delta:JSON.parse(row.delta_json), buttons:JSON.parse(row.buttons_json), media, api });
       await db.prepare("UPDATE broadcast_deliveries SET status='SUCCESS',telegram_message_id=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?").run(String(sent.message_id), Date.now(), row.id, claim);
     } catch (error) {
-      const status = !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
+      const status = error.cancelled && !attempted ? 'CANCELLED' : !attempted || error.telegramCode ? 'FAILED' : 'UNKNOWN';
       await db.prepare('UPDATE broadcast_deliveries SET status=?,error_text=?,completed_at=?,claim_token=NULL,claimed_at=NULL WHERE id=? AND claim_token=?').run(status, safeTelegramError(error), Date.now(), row.id, claim);
     }
   }
@@ -172,5 +226,5 @@ export function createScheduler(db, config, api = { botCall, sendPhoto }) {
     timer.unref?.();
   }
   function stop() { if (timer) clearInterval(timer); timer = null; }
-  return { start, stop, tick, queueNow, queueDue, queueBroadcast, publisher };
+  return { start, stop, tick, queueNow, queueDue, queueBroadcast, retryFailed, publisher, recordOwner };
 }

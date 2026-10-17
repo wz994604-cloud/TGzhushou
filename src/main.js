@@ -1,4 +1,5 @@
 import Quill from 'quill';
+import {scopeKey,selectConversations,scrollPosition,safeMessageHtml} from './chat-experience.js';
 import { deletionRange } from './editor-delete.js';
 import { createImageLoader } from './image-loader.js';
 import { installLinkEditor } from './link-editor.js';
@@ -14,12 +15,14 @@ import { mountWorkbench } from './workbench-shell.js';
 import { defaultButtonRow, normalizeButtonRows, reflowAutomaticButtonRows, emojiPopoverPosition, emojiMatches } from './workbench-utils.js';
 import { installSentEditor } from './sent-editor.js';
 import { createWorkbenchApiClient } from './api-client.js';
+import './workbench-complete.css';
 import { logoutCurrentAccount, showAuthScreen } from './auth-session.js';
+import { accountManagementHtml, publisherManagementHtml } from './management-view.js';
 
 await initDesktopShell();
 const tg = window.Telegram?.WebApp;
 tg?.ready(); tg?.expand();
-const isMiniApp = Boolean(tg?.initData); // Layout only; account authentication is identical on every surface.
+const isMiniApp = Boolean(tg?.initData) || matchMedia('(max-width: 760px)').matches; // Layout only; account authentication is identical on every surface.
 document.documentElement.classList.toggle("tg-mini-app", isMiniApp);
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -37,23 +40,25 @@ let draftDirty = false, draftTimer, previewTimer, previewDirty = true, serverSna
 const playerCache = new Map();
 let playerPage = 1;
 let selectedPlayerIds = new Set(), savedPacks = [], recentEmojis = [];
-const recentEmojiKey = 'tgzhushou:recent-emojis:v1';
+const recentEmojiKey = () => scopeKey(data?.admin?.username||'anonymous',selectedPublisherId,'recent-emoji');
 const client = createWorkbenchApiClient({
   onUnauthorized: displayAuthScreen,
+  onForbidden: handlePublisherForbidden,
   getPublisherId: () => selectedPublisherId,
 });
 const { api } = client;
-const loadImage = createImageLoader(client.image);
-const draftKey = () => `tgzhushou:draft:${selectedPublisherId || 'none'}:v2`;
+const loadImage = createImageLoader(path=>client.image(path.split('|').slice(1).join('|')));
+const scopedImage = path => loadImage(scopeKey(data?.admin?.username||'anonymous',selectedPublisherId)+'|'+path);
+const draftKey = () => scopeKey(data?.admin?.username || 'anonymous',selectedPublisherId,'editor');
 function readRecentEmojis() {
   try {
-    const stored = JSON.parse(localStorage.getItem(recentEmojiKey) || '[]');
+    const stored = JSON.parse(localStorage.getItem(recentEmojiKey()) || '[]');
     recentEmojis = Array.isArray(stored) ? stored.filter(item => item && typeof item.id === 'string' && typeof item.alt === 'string').slice(0, 30) : [];
   } catch { recentEmojis = []; }
 }
 function rememberRecentEmoji(sticker) {
   recentEmojis = [sticker, ...recentEmojis.filter(item => item.id !== sticker.id)].slice(0, 30);
-  try { localStorage.setItem(recentEmojiKey, JSON.stringify(recentEmojis)); } catch { /* Keep session history when storage is unavailable. */ }
+  try { localStorage.setItem(recentEmojiKey(), JSON.stringify(recentEmojis)); } catch { /* Keep session history when storage is unavailable. */ }
 }
 function renderSavedPackTabs() {
   $('savedPackTabs').innerHTML = '<button class="quiet pack-tab" data-recent="1">最近使用</button>' + savedPacks.map((p,i)=>`<button class="quiet pack-tab" data-pack-index="${i}">${esc(p.title)}</button>`).join('');
@@ -66,12 +71,12 @@ async function loadSavedPacks() {
 }
 function toast(message, error = false) { $('toast').textContent = message; $('toast').className = error ? 'toast error' : 'toast'; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').hidden = true, 6000); }
 async function action(fn, button) { if (button?.disabled) return; if (button) button.disabled = true; try { await fn(); } catch (error) { toast(error.message, true); } finally { if (button) button.disabled = false; } }
-async function authenticatedImage(url) { return URL.createObjectURL(await loadImage(url)); }
+async function authenticatedImage(url) { return URL.createObjectURL(await scopedImage(url)); }
 async function loadConversationAvatars() {
   for (const img of document.querySelectorAll('#chatConversations [data-avatar-path]')) {
     if (!img.dataset.avatarPath) { img.remove(); continue; }
     try {
-      const url = URL.createObjectURL(await loadImage(img.dataset.avatarPath));
+      const url = URL.createObjectURL(await scopedImage(img.dataset.avatarPath));
       if (!img.isConnected) { URL.revokeObjectURL(url); continue; }
       img.onload = img.onerror = () => { if (!img.naturalWidth) img.remove(); URL.revokeObjectURL(url); };
       img.src = url; img.hidden = false;
@@ -110,7 +115,7 @@ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hi
 <aside class="app-rail" aria-label="机器人和功能"><div class="rail-brand" aria-label="活动中枢"><span class="rail-brand-mark" aria-hidden="true">✦</span><span class="rail-brand-copy"><strong>活动中枢</strong><small>运营工作台</small></span></div><button class="rail-menu" aria-label="菜单" type="button">☰</button><div id="railBots" class="rail-bots"></div><div class="rail-nav"><button data-rail-tab="chat" aria-label="聊天" title="聊天"><span class="nav-glyph">◌</span><span class="nav-label">聊天</span></button><button data-rail-tab="editor" aria-label="编写活动" title="编写活动"><span class="nav-glyph">✎</span><span class="nav-label">编写活动</span></button><button data-rail-tab="assets" aria-label="素材管理" title="素材管理"><span class="nav-glyph">▧</span><span class="nav-label">素材管理</span></button><button data-rail-tab="players" aria-label="联系人 / 用户" title="联系人 / 用户"><span class="nav-glyph">♙</span><span class="nav-label">联系人 / 用户</span></button><button data-rail-tab="tasks" aria-label="自动化任务" title="自动化任务"><span class="nav-glyph">☷</span><span class="nav-label">自动化任务</span></button><button data-rail-tab="logs" aria-label="发布记录" title="发布记录"><span class="nav-glyph">◷</span><span class="nav-label">发布记录</span></button><button data-rail-tab="settings" aria-label="系统设置" title="系统设置"><span class="nav-glyph">⚙</span><span class="nav-label">系统设置</span></button></div><div class="rail-account"><strong>管理员</strong><small id="railAccountId">工作区账号</small></div></aside>
 <div class="publisher-switch"><label for="publisherSelect">当前发布机器人</label><select id="publisherSelect" aria-label="当前发布机器人"></select></div>
 <nav aria-label="功能导航"><button data-tab="chat" class="active">聊天</button><button data-tab="editor">编写活动</button><button data-tab="assets">素材管理</button><button data-tab="players">用户</button><button data-tab="tasks">自动化任务</button><button data-tab="logs">发布记录</button><button data-tab="settings">系统设置</button></nav>
-<section id="chat" class="page"><div class="chat-shell"><aside class="chat-list"><div class="section-title"><h2>会话</h2><span id="chatUnread" class="status">0 未读</span></div><input id="chatSearch" aria-label="搜索会话" placeholder="搜索会话"><div id="inboxStatus" class="hint"></div><button id="enableInbox" class="quiet" hidden>启用收消息</button><div id="chatConversations"></div><button id="chatMore" class="quiet" hidden>加载更多会话</button></aside><div class="chat-main"><div id="chatHeader" class="chat-head"><button id="chatBack" class="chat-back" type="button" aria-label="返回会话列表" title="返回会话列表">‹</button><span id="chatTitle">请选择会话</span><button id="mobileBotSwitch" class="mobile-bot-switch" type="button" aria-label="切换机器人" title="切换机器人"></button></div><button id="chatOlder" class="quiet" hidden>加载更早消息</button><div id="chatMessages" class="chat-messages"></div><div id="chatComposer" hidden><div id="chatReply" class="hint" hidden><span id="chatReplyText"></span><button id="cancelChatReply" type="button" class="quiet" aria-label="取消回复">取消回复</button></div><div id="chatToolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="chatInput"></div><div class="chat-tools"><button id="chatEmoji" class="quiet" title="打开表情键盘" aria-label="打开表情键盘">✦ 表情</button><button id="chatLink" class="quiet" title="添加链接" aria-label="添加链接">链接</button><button id="chatAddButton" class="quiet" title="添加按钮" aria-label="添加按钮">＋ 按钮</button><label class="file-button quiet" title="添加附件">附件<input id="chatFile" type="file" accept="image/*,video/mp4,video/webm,.pdf,.txt,.zip,.docx,.xlsx" hidden></label><button id="chatSend" class="primary" title="发送消息">发送</button></div><div id="chatButtons"></div><p id="chatMedia" class="hint"></p><p id="chatSendStatus" class="hint" role="status"></p></div></div></div></section>
+<section id="chat" class="page"><div class="chat-shell"><aside class="chat-list"><div class="section-title"><h2>会话</h2><span id="chatUnread" class="status">0 未读</span></div><div class="conversation-filters"><button type="button" data-chat-filter="all" class="active">全部</button><button type="button" data-chat-filter="unread">未读</button><button type="button" data-chat-filter="archived">归档</button></div><input id="chatSearch" aria-label="搜索会话" placeholder="搜索会话"><div id="inboxStatus" class="hint"></div><button id="enableInbox" class="quiet" hidden>启用收消息</button><div id="chatConversations"></div><button id="chatMore" class="quiet" hidden>加载更多会话</button></aside><div class="chat-main"><div id="chatHeader" class="chat-head"><button id="chatBack" class="chat-back" type="button" aria-label="返回会话列表" title="返回会话列表">‹</button><span id="chatTitle">请选择会话</span><button id="contactActions" type="button" class="quiet" aria-label="会话资料与操作">⋯</button><button id="mobileBotSwitch" class="mobile-bot-switch" type="button" aria-label="切换机器人" title="切换机器人"></button></div><button id="chatOlder" class="quiet" hidden>加载更早消息</button><div id="chatMessages" class="chat-messages"></div><button id="chatLatest" type="button" class="quiet" hidden>有新消息 ↓</button><div id="chatComposer" hidden><div id="chatReply" class="hint" hidden><span id="chatReplyText"></span><button id="cancelChatReply" type="button" class="quiet" aria-label="取消回复">取消回复</button></div><div id="chatToolbar"><button class="ql-bold" title="加粗"></button><button class="ql-italic" title="斜体"></button><button class="ql-underline" title="下划线"></button><button class="ql-clean" title="清除格式"></button></div><div id="chatInput"></div><div class="chat-tools"><button id="chatExtra" class="quiet" type="button" aria-label="展开输入工具" aria-expanded="false">＋</button><button id="chatEmoji" class="quiet" title="打开表情键盘" aria-label="打开表情键盘">✦ 表情</button><button id="chatLink" class="quiet" title="添加链接" aria-label="添加链接">链接</button><button id="chatAddButton" class="quiet" title="添加按钮" aria-label="添加按钮">＋ 按钮</button><label class="file-button quiet" title="添加附件">附件<input id="chatFile" type="file" accept="image/*,video/mp4,video/webm,.pdf,.txt,.zip,.docx,.xlsx" hidden></label><button id="quickReply" type="button" class="quiet" title="快捷回复">快捷回复</button><button id="chatSend" class="primary" title="发送消息">发送</button></div><div id="chatButtons"></div><p id="chatMedia" class="hint"></p><p id="chatSendStatus" class="hint" role="status"></p></div></div></div></section>
 <section id="assets" class="page" hidden>
 <div class="section-title"><div><h2>素材管理</h2><p>复用本次上传的图片、视频、文件和已保存的 Telegram 专属表情。</p></div><button id="openAssetEditor" class="primary" type="button">去编写活动</button></div>
 <div class="card asset-upload-card"><div><h3>上传素材</h3><p class="hint">支持图片、视频和常用文件，单个不超过 20 MB。上传后可在聊天或活动编辑中复用。</p></div><label class="file-button primary asset-upload-button">选择文件<input id="assetUpload" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,application/pdf,text/plain,application/zip,.docx,.xlsx" multiple hidden></label></div>
@@ -133,7 +138,7 @@ $('app').innerHTML = `<header class="app-header"><div class="brand-icon" aria-hi
 <section id="logs" class="page" hidden><div class="section-title"><div><h2>发布记录</h2><p>单个目标失败不影响其他目标。</p></div><button id="refreshLogs" class="quiet">刷新</button></div><div id="runList"></div></section>
 <section id="settings" class="page" hidden><h2>机器人与目标</h2><div class="card"><h3>绑定机器人</h3><p id="publisher" class="muted"></p><label>添加机器人或更新当前机器人 Token<input id="token" type="password" autocomplete="off" placeholder="填写发布机器人 Token"></label><button id="savePublisher" class="primary">验证并保存</button><p id="publisherManagementHint" class="hint">仅 wz9946 可添加或配置机器人；普通管理员可操作已授权机器人的业务。</p><div id="boundPublisherList"></div><p class="hint">入口机器人只提供工作台入口；所有客户端使用同一套账号密码和机器人授权。</p></div><div id="ffaCard" class="card"><h3>用户导入</h3><p id="importSourceHint" class="hint"></p><button id="settingsImportUsers" class="secondary" type="button">去用户页导入名单</button><div id="legacyImportSettings"><label>后台 JWT Token<input id="ffaToken" type="password" autocomplete="off" placeholder="从用户数据后台登录态复制"></label><button id="saveFfaToken" class="primary">保存并测试连接</button><p id="ffaStatus" class="hint">尚未配置</p></div></div><div class="card"><h3>目标群 / 频道</h3><p class="hint">先把当前发布机器人设为管理员，再添加 @公开用户名或负数数字 ID。</p><div class="inline"><input id="targetRef" aria-label="目标群或频道" placeholder="@channel 或 -100…"><button id="addTarget" class="primary">添加</button></div><div id="targets"></div></div><div class="card"><h3>管理账号</h3><p id="adminInfo"></p><p id="accountSessionHint" class="hint">退出仅结束当前登录会话，其他设备不受影响。</p><p class="hint">只有 wz9946 可以添加管理账号；新账号仅可操作所选机器人。</p><div id="accountManagement" hidden><button id="addAccount" class="primary" type="button">添加账号</button><form id="accountForm" hidden><label>账号<input id="newAccountUsername" minlength="4" maxlength="64" pattern="[A-Za-z0-9]{4,64}" autocomplete="off" required></label><label>密码<input id="newAccountPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" required></label><fieldset><legend>可操作的机器人</legend><div id="accountPublishers"></div></fieldset><button class="primary" type="submit">保存账号</button><button id="cancelAccount" class="quiet" type="button">取消</button></form><div id="accountList"></div></div><button id="accountLogout" class="quiet" type="button">退出当前账号</button></div></section>
 </main><div id="toast" class="toast" role="status" hidden></div>
-<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>选择 Telegram 专属表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button><button id="savePack" class="quiet" disabled title="请先加载真实表情包">保存</button></div><div id="savedPackTabs" class="pack-tabs"></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><p id="packError" class="inline-error" role="alert" hidden></p><input id="emojiSearch" type="search" aria-label="搜索专属表情" placeholder="搜索当前表情包的表情或 ID"><div id="emojiGrid"></div></dialog>`;
+<dialog id="emojiDialog" aria-label="表情键盘"><div class="section-title"><h3>表情</h3><div class="emoji-key-actions"><button id="emojiBackspace" class="quiet" type="button" aria-label="删除光标前内容" title="退格，长按连续删除" hidden>⌫</button><button id="closeEmoji" class="quiet" aria-label="完成">完成</button></div></div><div class="emoji-categories"><button type="button" id="ordinaryEmoji">普通表情</button><button type="button" id="customEmoji">专属表情</button></div><details id="packSettings"><summary>表情包<span id="packTitle" class="hint">添加或切换</span></summary><div class="pack-controls"><div class="inline"><input id="pack" placeholder="https://t.me/addemoji/表情包名"><button id="loadPack" class="primary">加载</button><button id="savePack" class="quiet" disabled title="请先加载真实表情包">保存</button></div><div id="savedPackTabs" class="pack-tabs"></div><select id="packHistory" aria-label="切换已加载表情包" hidden></select></div></details><p id="packError" class="inline-error" role="alert" hidden></p><input id="emojiSearch" type="search" aria-label="搜索专属表情" placeholder="搜索表情名称或符号"><div id="emojiGrid"></div></dialog>`;
 
 const ui = mountWorkbench({ mini:isMiniApp, navigate:changeTab, backChat:()=> $('chatBack').click() });
 const assetIntentBar=document.createElement('div');assetIntentBar.className='asset-intent-bar';assetIntentBar.hidden=true;
@@ -216,28 +221,29 @@ $('chatConversations').addEventListener('click',event=>{
   if(command==='retry')action(loadConversations);
 });
 $('enableInbox').onclick=event=>action(async()=>{const disable=$('enableInbox').dataset.disable==='true',takeover=$('enableInbox').dataset.takeover==='true';if(disable&&!confirm('关闭当前机器人的收消息？已有聊天记录保留，发送功能不受影响。'))return;await api(disable?'/inbox/disable':'/inbox/enable','POST',takeover?{takeover:true}:{});await loadInboxStatus();toast(disable?'收消息已关闭':takeover?'已接管到当前服务器，可正常接收新消息':'收消息已启用');},event.currentTarget);
-$('chatFile').onchange=event=>action(async()=>{const file=event.target.files[0];if(!file)return;const form=new FormData();form.set('file',file);chatMedia=await api('/chat/media','POST',form);$('chatMedia').textContent=`已附加：${file.name} · ${(file.size/1024/1024).toFixed(1)} MB`;},event.currentTarget);
-function renderChatRows(rows) {
+$('chatFile').onchange=event=>action(async()=>{const file=event.target.files[0];if(!file)return;if(file.size>20*1024*1024)throw new Error('附件超过20 MB');const context=chatDraftKey();const form=new FormData();form.set('file',file);const uploaded=await api('/chat/media','POST',form);if(context!==chatDraftKey())return;chatMedia=uploaded;renderChatMedia(file.name);saveChatDraft();},event.currentTarget);
+function renderChatRows(rows,mode='update') {
+  const el=$('chatMessages'),before={top:el.scrollTop,height:el.scrollHeight,client:el.clientHeight};
   const byTelegramId=new Map(rows.map(m=>[m.telegram_message_id,m]));
   let previousDay='';
   $('chatMessages').innerHTML=rows.map(m=>{
     const day=m.sent_at ? new Date(m.sent_at).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'long',day:'numeric'}) : '';
     const divider=day&&day!==previousDay?`<div class="chat-date-divider" role="separator" aria-label="${esc(day)}"><span>${esc(day)}</span></div>`:'';
     if(day)previousDay=day;
-    return `${divider}<article class="chat-bubble ${m.direction==='OUT'?'out':''}" data-message="${m.id}">${m.reply_to_message_id?`<small class="chat-quoted">↩ ${esc((byTelegramId.get(m.reply_to_message_id)?.text||`消息 #${m.reply_to_message_id}`).slice(0,80))}</small>`:''}${m.media_kind?`<button class="chat-attachment quiet" data-file="${m.id}">${m.media_kind==='photo'?'🖼 图片':m.media_kind==='video'?'▶ 视频':'📎 文件'}</button>`:''}${m.media_kind==='photo'?`<div class="chat-photo" data-photo-id="${m.id}"></div>`:''}<div>${m.status==='DELETED'?'[已删除]':esc(m.text).replace(/\n/g,'<br>')}</div><small>${new Date(m.sent_at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false})}${m.edited_at?' · 已编辑':''}</small><button class="chat-reply-btn" data-reply="${esc(m.telegram_message_id)}" title="回复">↩</button>${m.direction==='OUT'&&m.status==='SUCCESS'?`<button class="chat-delete-btn" data-manage-chat="${m.id}" title="编辑或删除">⋯</button>`:''}</article>`;
+    return `${divider}<article class="chat-bubble ${m.direction==='OUT'?'out':''}" data-message="${m.id}">${m.reply_to_message_id?`<small class="chat-quoted">↩ ${esc((byTelegramId.get(m.reply_to_message_id)?.text||`消息 #${m.reply_to_message_id}`).slice(0,80))}</small>`:''}${m.media_kind?`<button class="chat-attachment quiet" data-file="${m.id}">${m.media_kind==='photo'?'🖼 图片':m.media_kind==='video'?'▶ 视频':'📎 文件'}</button>`:''}${m.media_kind==='photo'?`<div class="chat-photo" data-photo-id="${m.id}"></div>`:''}<div class="message-body">${m.status==='DELETED'?'[已删除]':safeMessageHtml(m.text,JSON.parse(m.entities_json||'[]'))}</div><small class="message-time">${new Date(m.sent_at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false})}${m.edited_at?' · 已编辑':''}${m.direction==='OUT'?' · '+(labels[m.status]||'已发送'):''}</small><button class="chat-reply-btn" data-reply="${esc(m.telegram_message_id)}" title="回复">↩</button>${m.direction==='OUT'&&m.status==='SUCCESS'?`<button class="chat-delete-btn" data-manage-chat="${m.id}" title="编辑或删除">⋯</button>`:''}</article>`;
   }).join('')||'<p class="chat-empty muted center">还没有消息</p>';
   for(const node of $('chatMessages').querySelectorAll('[data-photo-id]'))authenticatedImage(`/chat/files/${node.dataset.photoId}`).then(url=>displayImage(node,url,'聊天图片')).catch(()=>{node.textContent='图片暂不可预览';});
-  $('chatMessages').scrollTop=$('chatMessages').scrollHeight;
+  el.scrollTop=scrollPosition(before,el.scrollHeight,mode);$('chatLatest').hidden=mode==='older'||el.scrollHeight-el.scrollTop-el.clientHeight<70;
 }
-async function loadChat() {
+async function loadChat(mode='update') {
   const chat=activeChat, bot=selectedPublisherId;ui.chat(chat);if(!chat)return;
   const result=await api(`/chat/conversations/${encodeURIComponent(chat.chat_id)}/messages`);
   if(bot!==selectedPublisherId||chat.chat_id!==activeChat?.chat_id)return;
-  chatRows=result.rows;chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows);
+  chatRows=result.rows;chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows,mode);
   await api(`/chat/conversations/${encodeURIComponent(chat.chat_id)}/read`,'POST',{});
   if(bot===selectedPublisherId)await loadConversations();
 }
-$('chatOlder').onclick=event=>action(async()=>{if(!activeChat||!chatOlderCursor)return;const chat=activeChat,bot=selectedPublisherId;const result=await api(`/chat/conversations/${encodeURIComponent(chat.chat_id)}/messages?before=${chatOlderCursor}`);if(bot!==selectedPublisherId||chat.chat_id!==activeChat?.chat_id)return;chatRows=[...result.rows,...chatRows];chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows);$('chatMessages').scrollTop=0;},event.currentTarget);
+$('chatOlder').onclick=event=>action(async()=>{if(!activeChat||!chatOlderCursor)return;const chat=activeChat,bot=selectedPublisherId;const result=await api(`/chat/conversations/${encodeURIComponent(chat.chat_id)}/messages?before=${chatOlderCursor}`);if(bot!==selectedPublisherId||chat.chat_id!==activeChat?.chat_id)return;chatRows=[...result.rows,...chatRows];chatOlderCursor=result.next;$('chatOlder').hidden=!chatOlderCursor;renderChatRows(chatRows,'older');},event.currentTarget);
 async function loadConversations(more=false) {
   const bot=selectedPublisherId,query=$('chatSearch').value.trim(),sequence=++conversationLoadSequence;
   if(!more&&!conversationRows.length)$('chatConversations').innerHTML='<p class="empty-state" role="status">正在加载会话…</p>';
@@ -254,21 +260,33 @@ async function loadConversations(more=false) {
   if(chatCursor===0)chatCursor=result.cursor;
   conversationRows=more?[...conversationRows,...result.rows]:result.rows;
   conversationNext=result.next;$('chatMore').hidden=!conversationNext;
-  const rows=conversationRows; $('chatUnread').textContent=`${result.totalUnread} 未读`;
+  const rows=selectConversations(conversationRows,conversationPreferences(),chatFilter); $('chatUnread').textContent=`${result.totalUnread} 未读`;
   const avatarBotId = selectedPublisherId || data?.publisher?.id || '';
-  $('chatConversations').innerHTML=rows.map(c=>`<button class="chat-conversation ${activeChat?.chat_id===c.chat_id?'selected':''}" data-chat-id="${esc(c.chat_id)}"><span class="chat-avatar"><img hidden data-avatar-path="${c.avatar_file_id ? '/chat/avatars/' + encodeURIComponent(avatarBotId) + '/' + encodeURIComponent(c.chat_id) : ''}" alt=""><span>${esc((c.title||'?').slice(0,1))}</span></span><span class="chat-summary"><strong>${esc(c.title||c.chat_id)}</strong><small>${esc(c.last_message_text||'新会话')}</small></span><span class="chat-meta"><small>${c.last_message_at?new Date(c.last_message_at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}):''}</small>${c.unread_count?`<b>${c.unread_count}</b>`:''}</span></button>`).join('')||(query?`<div class="empty-state" role="status">未找到匹配会话：${esc(query)} <button type="button" class="quiet" data-search-action="clear">清空搜索</button></div>`:'<p class="empty-state" role="status">暂无会话。</p>');
+  $('chatConversations').innerHTML=rows.map(c=>`<button class="chat-conversation ${activeChat?.chat_id===c.chat_id?'selected':''}" data-chat-id="${esc(c.chat_id)}"><span class="chat-avatar"><img hidden data-avatar-path="${c.avatar_file_id ? '/chat/avatars/' + encodeURIComponent(avatarBotId) + '/' + encodeURIComponent(c.chat_id) : ''}" alt=""><span>${esc((c.title||'?').slice(0,1))}</span></span><span class="chat-summary"><strong>${conversationPreferences()[c.chat_id]?.pinned?'⌖ ':''}${esc(conversationPreferences()[c.chat_id]?.note||c.title||c.chat_id)}</strong><small>${esc(c.last_message_text||'新会话')}</small></span><span class="chat-meta"><small>${c.last_message_at?new Date(c.last_message_at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}):''}</small>${(c.unread_count||conversationPreferences()[c.chat_id]?.unread)?`<b>${c.unread_count||'•'}</b>`:''}</span></button>`).join('')||(query?`<div class="empty-state" role="status">未找到匹配会话：${esc(query)} <button type="button" class="quiet" data-search-action="clear">清空搜索</button></div>`:'<p class="empty-state" role="status">暂无会话。</p>');
   loadConversationAvatars();
   if(activeChat){activeChat=rows.find(c=>c.chat_id===activeChat.chat_id)||activeChat;$('chatTitle').textContent=activeChat.title;}
   ui.chat(activeChat);
 }
 $('chatMore').onclick=event=>action(()=>loadConversations(true),event.currentTarget);
-$('chatConversations').onclick=event=>action(async()=>{const id=event.target.closest('[data-chat-id]')?.dataset.chatId;if(!id)return;if($('chatSend').disabled)throw new Error('消息正在发送，请稍后切换会话');chatRows=[];$('chatMessages').innerHTML='<p class="chat-empty">正在加载消息…</p>';activeChat=conversationRows.find(c=>c.chat_id===id);if(!activeChat)return;$('chatTitle').textContent=activeChat.title;$('chatComposer').hidden=false;await ui.load('chat',loadChat);});
-$('chatBack').onclick=()=>{activeChat=null;ui.chat(null);$('chatConversations').querySelector('.chat-conversation.selected')?.classList.remove('selected');$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';action(loadConversations);};
-$('chatMessages').onclick=event=>action(async()=>{const reply=event.target.dataset.reply, file=event.target.dataset.file, manage=event.target.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReplyText').textContent=`回复 #${reply}`;chatQuill.root.focus();}if(manage){await openSent('chat',manage,'manage');$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file){const blob=await client.image(`/chat/files/${file}`),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000);}},event.target);
+$('chatConversations').onclick=event=>action(async()=>{const id=event.target.closest('[data-chat-id]')?.dataset.chatId;if(!id)return;if($('chatSend').disabled)throw new Error('消息正在发送，请稍后切换会话');saveChatDraft();chatRows=[];$('chatMessages').innerHTML='<p class="chat-empty">正在加载消息…</p>';activeChat=conversationRows.find(c=>c.chat_id===id);if(!activeChat)return;$('chatTitle').textContent=activeChat.title;$('chatComposer').hidden=false;restoreChatDraft();await ui.load('chat',()=>loadChat('latest'));});
+$('chatBack').onclick=()=>{saveChatDraft();closePicker();activeChat=null;ui.chat(null);$('chatConversations').querySelector('.chat-conversation.selected')?.classList.remove('selected');$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';action(loadConversations);};
+async function previewChatFile(id){
+  const message=chatRows.find(row=>String(row.id)===String(id));if(!message)return;
+  const dialog=document.createElement('dialog');dialog.className='management-dialog attachment-preview';dialog.innerHTML='<header><h2>附件预览</h2><button type="button" class="quiet" aria-label="关闭">×</button></header><p role="status">正在读取附件…</p>';
+  const close=()=>dialog.close();dialog.querySelector('button').onclick=close;dialog.onclose=()=>{if(dialog.dataset.objectUrl)URL.revokeObjectURL(dialog.dataset.objectUrl);dialog.remove();};document.body.append(dialog);dialog.showModal();
+  try{
+    const blob=await client.image(`/chat/files/${id}`);if(!dialog.isConnected)return;
+    const url=URL.createObjectURL(blob);dialog.dataset.objectUrl=url;dialog.querySelector('[role=status]').remove();
+    if(blob.type.startsWith('image/')){const image=document.createElement('img');image.src=url;image.alt='聊天附件';dialog.append(image);}
+    else if(blob.type.startsWith('video/')){const video=document.createElement('video');video.src=url;video.controls=true;video.playsInline=true;dialog.append(video);}
+    else{const link=document.createElement('a');link.href=url;link.download=`telegram-file-${id}`;link.textContent='下载附件';link.className='primary';dialog.append(link);}
+  }catch(error){const status=dialog.querySelector('[role=status]');if(status)status.textContent=`附件暂不可用：${error.message}`;}
+}
+$('chatMessages').onclick=event=>action(async()=>{const reply=event.target.closest('[data-reply]')?.dataset.reply, file=event.target.closest('[data-file]')?.dataset.file, manage=event.target.closest('[data-manage-chat]')?.dataset.manageChat;if(reply){chatReply=reply;$('chatReply').hidden=false;$('chatReplyText').textContent=`回复 #${reply}`;chatQuill.root.focus();}if(manage){await openSent('chat',manage,'manage');$('sentDialog').addEventListener('close',()=>action(loadChat),{once:true});}if(file)await previewChatFile(file);},event.target);
 $('cancelChatReply').onclick=()=>{chatReply=null;$('chatReply').hidden=true;chatQuill.root.focus();};
-$('chatSend').onclick=event=>action(async()=>{if(!activeChat)throw new Error('请选择会话');$('chatSendStatus').textContent='发送中…';try{await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/send`,'POST',{delta:chatQuill.getContents(),buttons:chatButtons,mediaId:chatMedia?.id,replyTo:chatReply});chatQuill.setText('');chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatFile').value='';$('chatSendStatus').textContent='已发送';await loadChat();await loadConversations();}catch(error){$('chatSendStatus').textContent=`发送失败或结果待核实：${error.message}`;throw error;}},event.currentTarget);
+$('chatSend').onclick=event=>action(async()=>{if(!activeChat)throw new Error('请选择会话');if(!chatQuill.getText().trim()&&!chatMedia)throw new Error('请输入消息或选择附件');if($('chatSend').dataset.uncertain==='true'&&!confirm('上次发送结果待核实。请先检查最新消息，确认没有发送成功后再重试，继续吗？'))return;const context=chatDraftKey();$('chatSendStatus').textContent='发送中…';try{await api(`/chat/conversations/${encodeURIComponent(activeChat.chat_id)}/send`,'POST',{delta:chatQuill.getContents(),buttons:chatButtons,mediaId:chatMedia?.id,replyTo:chatReply});chatQuill.setText('');chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;sessionStorage.removeItem(context);$('chatSend').dataset.uncertain='false';$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatFile').value='';$('chatSendStatus').textContent='已发送';await loadChat();await loadConversations();}catch(error){$('chatSend').dataset.uncertain=String(!error.status||error.status>=500);$('chatSendStatus').textContent=`${$('chatSend').dataset.uncertain==='true'?'发送结果待核实，请刷新消息后再决定重试':'发送失败，可修改后重试'}：${error.message}`;saveChatDraft();throw error;}},event.currentTarget);
 async function loadInboxStatus(){if(!data?.publisher)return;try{const s=await api('/inbox/status');const external=s.status==='EXTERNAL';$('inboxStatus').textContent=external?'已有外部 webhook；不会覆盖，当前无法接收新消息':s.status==='READY'?'可正常接收新消息':s.status==='AVAILABLE'?'尚未启用收消息':s.status==='NO_PUBLIC_URL'?'需要配置 PUBLIC_URL':'收消息状态：'+s.status;$('inboxStatus').hidden=false;$('inboxStatus').className='hint inbox-status '+(s.status==='READY'?'is-ready':s.status==='AVAILABLE'?'is-available':external?'is-warning':'is-error');$('enableInbox').hidden=data?.admin?.canManageBots!==true||(!external&&s.status!=='AVAILABLE'&&s.status!=='READY');$('enableInbox').dataset.takeover=external?'true':'false';$('enableInbox').dataset.disable=s.status==='READY'?'true':'false';$('enableInbox').textContent=s.status==='READY'?'关闭收消息':external?'接管到当前服务器':'启用收消息';}catch(error){$('inboxStatus').hidden=false;$('inboxStatus').textContent=`状态检查失败：${error.message}`;$('inboxStatus').className='hint inbox-status is-error';$('enableInbox').hidden=true;}}
-async function pollChats(){if(!data?.publisher)return;try{const result=await api('/chat/updates?after='+chatCursor);if(result.rows.length){chatCursor=result.cursor;await loadConversations();if(activeChat&&result.rows.some(m=>m.chat_id===activeChat.chat_id))await loadChat();}}catch{/* Keep the UI usable and retry on the next interval. */}}
+async function pollChats(){if(!data?.publisher||pageRefreshPaused)return;try{const result=await api('/chat/updates?after='+chatCursor);if(result.rows.length){chatCursor=result.cursor;await loadConversations();if(activeChat&&result.rows.some(m=>m.chat_id===activeChat.chat_id))await loadChat();}}catch{/* Keep the UI usable and retry on the next interval. */}}
 function changeTab(id) { if (!['chat','editor','assets','players','tasks','logs','settings'].includes(id)) id='chat'; if(id==='editor')lastEditorTarget='body';else if(id==='chat'&&activeChat)lastEditorTarget='chat';ui.activate(id); closePicker(); sessionStorage.setItem('tgzhushou:tab',id); document.querySelectorAll('.page').forEach(page => page.hidden = page.id !== id); if (id === 'logs') action(()=>ui.load('logs',async()=>{await loadRuns();await loadBroadcasts();})); if (id === 'players') action(()=>ui.load('players',loadPlayers)); if(id==='assets')action(()=>ui.load('assets',loadSavedPacks)); if(id==='chat')action(()=>ui.load('chat',loadConversations)); }
 
 
@@ -394,7 +412,7 @@ function hydrateEmojiImages(container) {
 }
 function closePicker() {
   stopDeleting();
-  $('emojiDialog').close();
+  $('emojiDialog').close();$('chatComposer').after($('emojiDialog'));document.body.classList.remove('chat-emoji-open');
   document.body.classList.remove('emoji-open', 'emoji-body-open');
   $('emojiDialog').classList.remove('desktop-emoji-popover');$('emojiDialog').removeAttribute('style');pickerAnchor=null;clearTimeout(emojiHoverTimer);
   quill.root.removeAttribute('inputmode');
@@ -406,14 +424,15 @@ function openPicker(target, anchor, hover=false) {
   const caret = target === 'chat' ? chatRange && { ...chatRange } : savedRange && { ...savedRange };
   stopDeleting();
   pickerTarget=target;pickerOpenedByHover=hover;pickerAnchor=anchor||(target==='body'?$('bodyEmoji'):target==='chat'?$('chatEmoji'):document.activeElement);
-  const desktop=!ui.mini&&innerWidth>=900;
+  const docked=target==='chat';document.body.classList.toggle('chat-emoji-open',docked);if(docked)$('chatComposer').append($('emojiDialog'));
+  const desktop=!docked&&!ui.mini&&innerWidth>=900;
   $('emojiDialog').classList.toggle('desktop-emoji-popover',desktop);
   $('emojiBackspace').hidden = target !== 'body';
   document.body.classList.add('emoji-open');
   document.body.classList.toggle('emoji-body-open', target === 'body'&&!desktop);
   if(!desktop)(target === 'chat' ? chatQuill : quill).root.setAttribute('inputmode', 'none');
   if (!$('emojiDialog').open) $('emojiDialog').show();
-  positionEmojiPicker();
+  positionEmojiPicker();if(!stickers.size)showOrdinaryEmoji();
   $('bodyEmoji').setAttribute('aria-expanded', String(target === 'body'));$('chatEmoji').setAttribute('aria-expanded',String(target==='chat')); loadSavedPacks().catch(error=>packError(error.message));
   if (target === 'body' || target === 'chat') {
     // Opening the non-modal dialog may focus its controls; restore the caret.
@@ -498,7 +517,7 @@ function queueMoreEmoji() {
   cancelAnimationFrame(emojiScrollFrame);
   emojiScrollFrame = requestAnimationFrame(() => {
     const grid = $('emojiGrid');
-    if ($('emojiDialog').open && grid.clientHeight > 0 && visibleStickers < [...stickers.values()].filter(s=>emojiMatches(s,$('emojiSearch').value)).length
+    if (emojiMode==='custom' && $('emojiDialog').open && grid.clientHeight > 0 && visibleStickers < [...stickers.values()].filter(s=>emojiMatches(s,$('emojiSearch').value)).length
         && grid.scrollHeight - grid.scrollTop - grid.clientHeight < 80) appendEmojiBatch();
   });
 }
@@ -506,7 +525,7 @@ $('emojiGrid').addEventListener('scroll', queueMoreEmoji, { passive:true });
 new ResizeObserver(queueMoreEmoji).observe($('emojiGrid'));
 const loadedPacks = new Map();
 function displayPack(pack) {
-  activePack=pack;$('savePack').disabled=!pack.name;$('savePack').title=pack.name?'保存当前已加载表情包':'请先加载真实表情包';
+  activePack=pack;emojiMode='custom';$('savePack').disabled=!pack.name;$('savePack').title=pack.name?'保存当前已加载表情包':'请先加载真实表情包';
   cancelAnimationFrame(emojiScrollFrame);
   $('emojiSearch').value='';stickers.clear(); visibleStickers = 0; $('emojiGrid').replaceChildren(); $('emojiGrid').scrollTop = 0;
   for (const sticker of pack.stickers) stickers.set(sticker.id, sticker);
@@ -514,7 +533,7 @@ function displayPack(pack) {
   $('packSettings').open = false;
   appendEmojiBatch();if(!stickers.size)$('emojiGrid').innerHTML='<p class="empty-state">此表情包没有专属表情。</p>';
 }
-$('emojiSearch').oninput=()=>{visibleStickers=0;$('emojiGrid').replaceChildren();appendEmojiBatch();if(!$('emojiGrid').children.length)$('emojiGrid').innerHTML='<p class="empty-state">没有匹配的专属表情。</p>';};
+$('emojiSearch').oninput=()=>{if(emojiMode==='ordinary'){showOrdinaryEmoji();return;}visibleStickers=0;$('emojiGrid').replaceChildren();appendEmojiBatch();if(!$('emojiGrid').children.length)$('emojiGrid').innerHTML='<p class="empty-state">没有匹配的专属表情。</p>';};
 $('packHistory').onchange = () => displayPack(loadedPacks.get($('packHistory').value));
 $('savedPackTabs').addEventListener('click', e => {
   if (e.target.dataset.recent) return displayPack({ title:'最近使用', stickers:recentEmojis });
@@ -567,7 +586,7 @@ $('assetPacks').onclick=event=>{const i=event.target.dataset.assetPack;if(i===un
 function openAssetPicker(target){if(target==='chat'&&!activeChat)target='body';const context=assetIntent;changeTab(target==='chat'?'chat':'editor');openPicker(target,$(target==='chat'?'chatEmoji':'bodyEmoji'));if(context)finishAssetIntent(false);}
 $('openAssetEditor').onclick=()=>changeTab('editor');$('openAssetEmoji').onclick=()=>{if(assetIntent)openAssetPicker(assetIntent.source==='chat'?'chat':'body');else openPicker('asset-manage');$('packSettings').open=true;};
 function populateTargets(selected = []) { $('targetChecks').innerHTML=data.targets.map(t=>`<label class="check"><input type="checkbox" name="target" value="${t.id}" ${selected.includes(t.id)?'checked':''} ${t.can_publish?'':'disabled'}><span>${esc(t.title)}<small>${esc(t.last_error || t.chat_id)}</small></span></label>`).join('')||'<p class="muted">请先在「设置」中添加群或频道。</p>'; }
-async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=Object.assign({publishers:[],targets:[],admin:{}},result||{});selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=data.admin?`${data.admin.name||'管理账号'} · ID ${data.admin.id||'—'}`:'未登录';ui.account(data);action(loadAdminAccounts); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length||publisherChanging; renderRailPublisher(); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=data.publishers.map(p=>`<div class="list-row"><span>@${esc(p.username||p.id)} · ${esc(p.id)}</span><button class="quiet" type="button" data-bound-bot="${esc(p.id)}" ${p.id===data.publisher?.id?'disabled':''}>${p.id===data.publisher?.id?'当前机器人':'切换'}</button></div>`).join(''); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
+async function refresh() { let requestedBot=selectedPublisherId,requestRevision=publisherRevision;const selected=[...document.querySelectorAll('[name=target]:checked')].map(x=>Number(x.value)); let result;try{result=await api('/bootstrap');}catch(error){if(error.status!==403||!requestedBot)throw error;if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;publisherRevision++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');clearPlayerContext();requestedBot='';requestRevision=publisherRevision;result=await api('/bootstrap');}if(requestedBot!==selectedPublisherId||requestRevision!==publisherRevision)return;data=Object.assign({publishers:[],targets:[],admin:{}},result||{});selectedPublisherId=data.publisher?.id||'';if(selectedPublisherId)localStorage.setItem('tgzhushou:selected-publisher',selectedPublisherId);else localStorage.removeItem('tgzhushou:selected-publisher'); $('identity').textContent=data.publisher?`@${data.publisher.username} · 发布工作台`:'先在设置中配置发布机器人'; $('publisher').textContent=data.publisher?`当前：@${data.publisher.username}（${data.publisher.id}）`:'尚未配置'; $('adminInfo').textContent=data.admin?`${data.admin.name||'管理账号'} · ID ${data.admin.id||'—'}`:'未登录';ui.account(data);action(loadAdminAccounts); $('publisherSelect').innerHTML=data.publishers.length?data.publishers.map(p=>`<option value="${esc(p.id)}">@${esc(p.username||p.id)}${p.status==='DISABLED'?'（已停用）':''}</option>`).join(''):'<option value="">尚未配置发布机器人</option>'; $('publisherSelect').value=data.publisher?.id||''; $('publisherSelect').disabled=!data.publishers.length||publisherChanging; renderRailPublisher(); loadRailBotAvatars(); updateMobileBotSwitch(); $('legacyImportSettings').hidden=!data.publisher;$('importSourceHint').textContent=data.publisher?`CSV 导入和用户源同步仅写入当前机器人 @${data.publisher.username} 的独立名单，不影响其他机器人。`:'请先选择已绑定的发布机器人。';$('settingsImportUsers').textContent='去用户页导入名单';$('ffaStatus').textContent='正在读取当前机器人的用户源配置…';$('ffaToken').value='';$('token').disabled=data.admin.canManageBots!==true;$('savePublisher').hidden=data.admin.canManageBots!==true;$('boundPublisherList').innerHTML=publisherManagementHtml(data.publishers,data.publisher?.id); $('syncPlayers').hidden=!data.publisher; $('importPlayers').hidden=!data.publisher; populateTargets(selected); $('targets').innerHTML=data.targets.map(t=>`<div class="list-row"><div><strong>${esc(t.title)}</strong><small>${esc(t.chat_id)} · ${t.can_publish?'已具备权限':esc(t.last_error)}</small></div><button class="quiet danger-text" data-delete-target="${t.id}">删除</button></div>`).join(''); showTasks(); }
 function renderRailPublisher() {
   const rail=$('railBots');if(!rail)return;
   rail.querySelector('.rail-bot')?.remove();
@@ -587,7 +606,7 @@ async function switchPublisher(id) {
   try{
   if (savePromise||$('chatSend').disabled||$('sendBroadcast').disabled) throw new Error('正在保存或发送，请稍后切换机器人');
   flushDraft();
-  publisherRevision++;selectedPublisherId=id;clearPlayerContext();
+  saveChatDraft();publisherRevision++;selectedPublisherId=id;loadImage.clear();clearPlayerContext();
   localStorage.setItem('tgzhushou:selected-publisher',id);
   activeChat=null;ui.chat(null);chatCursor=0;$('chatComposer').hidden=true;$('chatTitle').textContent='请选择会话';
   savedPacks=[];activePack=null;$('savePack').disabled=true;loadedPacks.clear();stickers.clear();$('emojiGrid').replaceChildren();$('pack').value='';$('packTitle').textContent='添加或切换';packError();pendingSend=null;conversationRows=[];chatRows=[];chatOlderCursor=null;chatButtons=[];chatButtonEditor();chatMedia=null;chatReply=null;chatQuill.setText('');$('chatReply').hidden=true;$('chatMedia').textContent='';$('chatSendStatus').textContent='';
@@ -624,7 +643,7 @@ function showTasks() {
   }).join('')}</div><p id="taskFilterEmpty" class="empty-state" hidden>该状态下暂无任务，请切换筛选。</p>` : '<div class="empty-state">还没有发布任务，请从编写活动开始。</div>';
   ui.applyFilter();
 }
-async function fill(item) { ui.resetEditor(); closePicker();quill.enable(false);$('toggleWriting').textContent='编辑文案'; clearTimeout(draftTimer); draftDirty=false; serverSnapshot=null; ready=false; taskId=item.taskId || null; $('name').value=item.name||''; quill.setContents(item.delta || {ops:[{insert:'\n'}]}); hydrateEmojiImages(quill.root); buttons=item.buttons||[];mediaId=item.mediaId||null;mediaInfo=item.mediaInfo||null;replacePhoto();if(mediaId){try{const blob=await loadImage(`/media/${mediaId}`);mediaInfo={...mediaInfo,id:mediaId,mime:blob.type,size:blob.size};if(blob.type.startsWith('image/'))replacePhoto(URL.createObjectURL(blob));}catch{toast('附件预览加载失败；保留原媒体 ID',true);}} const s=item.schedule||{kind:'MANUAL'}; $('kind').value=s.kind;$('start').value=s.start||'01:00';$('end').value=s.end||'05:00';$('interval').value=s.interval||30;$('unit').value='1';$('at').value=s.at?new Date(s.at+8*3600000).toISOString().slice(0,16):'';populateTargets(item.targetIds||[]);$('editorTitle').textContent=taskId?`编辑活动 #${taskId}`:'新建活动';showButtons();showPhoto();scheduleFields();ready=true; $('saveStatus').textContent=item.taskId || item.name ? '已恢复本机草稿 · 请保存到服务器' : '内容尚未保存到服务器'; }
+async function fill(item) { ui.resetEditor(); closePicker();quill.enable(false);$('toggleWriting').textContent='编辑文案'; clearTimeout(draftTimer); draftDirty=false; serverSnapshot=null; ready=false; taskId=item.taskId || null; $('name').value=item.name||''; quill.setContents(item.delta || {ops:[{insert:'\n'}]}); hydrateEmojiImages(quill.root); buttons=item.buttons||[];mediaId=item.mediaId||null;mediaInfo=item.mediaInfo||null;replacePhoto();if(mediaId){try{const blob=await scopedImage(`/media/${mediaId}`);mediaInfo={...mediaInfo,id:mediaId,mime:blob.type,size:blob.size};if(blob.type.startsWith('image/'))replacePhoto(URL.createObjectURL(blob));}catch{toast('附件预览加载失败；保留原媒体 ID',true);}} const s=item.schedule||{kind:'MANUAL'}; $('kind').value=s.kind;$('start').value=s.start||'01:00';$('end').value=s.end||'05:00';$('interval').value=s.interval||30;$('unit').value='1';$('at').value=s.at?new Date(s.at+8*3600000).toISOString().slice(0,16):'';populateTargets(item.targetIds||[]);$('editorTitle').textContent=taskId?`编辑活动 #${taskId}`:'新建活动';showButtons();showPhoto();scheduleFields();ready=true; $('saveStatus').textContent=item.taskId || item.name ? '已恢复本机草稿 · 请保存到服务器' : '内容尚未保存到服务器'; }
 let savePromise;
 function save() {
   if (savePromise) return savePromise;
@@ -677,7 +696,7 @@ $('accountSessionHint').textContent='当前账号会话已保存。退出仅结�
 $('accountLogout').onclick=()=>action(async()=>{await logoutCurrentAccount({onLoggedOut:()=>location.reload()});},$('accountLogout'));
 $('toggleLoginPassword').onclick=()=>{const input=$('loginPassword');const visible=input.type==='text';input.type=visible?'password':'text';$('toggleLoginPassword').setAttribute('aria-pressed',String(!visible));$('toggleLoginPassword').setAttribute('aria-label',visible?'显示密码':'隐藏密码');};
 $('authRetry').onclick=()=>location.reload();
-$('loginForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget, submit=$('loginSubmit'), username=$('loginUsername'), password=$('loginPassword'), error=$('authError');if(!form.reportValidity()){form.classList.add('was-validated');return;}submit.disabled=true;submit.setAttribute('aria-busy','true');form.classList.add('is-loading');error.textContent='';username.removeAttribute('aria-invalid');password.removeAttribute('aria-invalid');try{const response=await fetch('/auth/login',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({username:username.value,password:password.value})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||`登录失败 (${response.status})`);location.reload();}catch(loginError){error.textContent=loginError.message;username.setAttribute('aria-invalid','true');password.setAttribute('aria-invalid','true');}finally{submit.disabled=false;submit.removeAttribute('aria-busy');form.classList.remove('is-loading');}};
+$('loginForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget, submit=$('loginSubmit'), username=$('loginUsername'), password=$('loginPassword'), error=$('authError');if(!form.reportValidity()){form.classList.add('was-validated');return;}submit.disabled=true;submit.setAttribute('aria-busy','true');form.classList.add('is-loading');error.textContent='';username.removeAttribute('aria-invalid');password.removeAttribute('aria-invalid');try{const response=await fetch('/auth/login',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({username:username.value,password:password.value})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||`登录失败 (${response.status})`);const session=await fetch('/api/bootstrap',{credentials:'same-origin',cache:'no-store'});if(session.status===401)throw new Error('密码已验证，但当前页面未能保存登录会话。请在独立窗口打开工作台后重试。');if(!session.ok)throw new Error('账号已验证，工作台暂时不可用，请稍后重试');password.value='';await boot();}catch(loginError){error.textContent=loginError.message;username.setAttribute('aria-invalid','true');password.setAttribute('aria-invalid','true');}finally{submit.disabled=false;submit.removeAttribute('aria-busy');form.classList.remove('is-loading');}};
 $('addTarget').onclick = event => action(async()=>{const t=await api('/targets','POST',{reference:$('targetRef').value});$('targetRef').value='';await refresh();toast(t.can_publish?'目标已添加':t.last_error,!t.can_publish);},event.currentTarget);
 $('targets').onclick = event => action(async()=>{const id=event.target.dataset.deleteTarget;if(id&&confirm('删除该目标？引用它的任务将跳过此目标。')){await api(`/targets/${id}`,'DELETE');await refresh();}},event.target);
 async function loadRuns() {
@@ -696,10 +715,17 @@ $('editor').addEventListener('input', event => { if (!event.target.closest('#mes
 $('ffaCard').hidden = true;
 function displayAuthScreen(error) {
   clearInterval(chatPolling);
+  publisherRevision++;conversationLoadSequence++;loadImage.clear();activeChat=null;conversationRows=[];chatRows=[];chatButtons=[];chatMedia=null;chatReply=null;assetItems=[];selectedPublisherId='';data=null;
+  chatQuill.setText('');quill.setText('');$('chatMessages').replaceChildren();$('chatConversations').replaceChildren();$('chatSearch').value='';$('accountList').replaceChildren();$('assetList').replaceChildren();$('chatFile').value='';replacePhoto();
   showAuthScreen(Object.fromEntries(['workspace','locked','loginForm','authRetry','loginTitle','loginIntro','authError'].map(id=>[id,$(id)])),error);
   document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
 }
-async function boot() { try{await refresh();$('locked').hidden=true;$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await loadConversations();await loadInboxStatus();clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){displayAuthScreen(error);} }
+function handlePublisherForbidden(){
+  if(!selectedPublisherId)return;
+  saveChatDraft();publisherRevision++;conversationLoadSequence++;selectedPublisherId='';localStorage.removeItem('tgzhushou:selected-publisher');loadImage.clear();clearPlayerContext();activeChat=null;conversationRows=[];chatRows=[];$('chatMessages').replaceChildren();$('chatConversations').replaceChildren();$('chatComposer').hidden=true;ui.chat(null);toast('当前机器人授权已变更，正在切换到仍可使用的机器人。',true);
+  queueMicrotask(()=>action(async()=>{await refresh();await loadConversations();}));
+}
+async function boot() { try{await refresh();$('locked').hidden=true;$('workspace').hidden=false;let draft;try{draft=JSON.parse(localStorage.getItem(draftKey())||'null');}catch{}await fill(draft||{});if(!data.publisher)changeTab('settings');else changeTab(sessionStorage.getItem('tgzhushou:tab')||'chat');await Promise.allSettled([loadConversations(),loadInboxStatus()]);clearInterval(chatPolling);chatPolling=setInterval(()=>{if(!document.hidden||++hiddenPollTicks%8===0)pollChats();},2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){hiddenPollTicks=0;pollChats();}});navigator.serviceWorker?.register('/sw.js').catch(()=>{});}catch(error){displayAuthScreen(error);} }
 boot();
 
 let viewportFrame;
@@ -728,8 +754,9 @@ async function loadAdminAccounts() {
   const allowed=data?.admin?.canManageAccounts===true;
   $('accountManagement').hidden=!allowed;if(!allowed){$('accountForm').hidden=true;$('newAccountPassword').value='';return;}
   const result=await accountRequest();
-  $('accountPublishers').innerHTML=result.publishers.map(bot=>`<label><input type="checkbox" name="accountPublisher" value="${esc(bot.id)}"> @${esc(bot.username||bot.id)}</label>`).join('')||'<p>请先绑定发布机器人。</p>';
-  $('accountList').innerHTML=result.accounts.map(account=>`<div class="list-row"><span>${esc(account.username)}</span><small>${account.publisherIds===undefined?'全部机器人':account.publisherIds.map(esc).join('、')||'无机器人权限'}</small></div>`).join('');
+  window.accountManagementData=result;
+  $('accountPublishers').innerHTML=result.publishers.map(bot=>`<label><input type="checkbox" name="accountPublisher" value="${esc(bot.id)}"> @${esc(bot.username||bot.id)}${bot.status==='DISABLED'?'（已停用）':''}</label>`).join('')||'<p>请先绑定发布机器人。</p>';
+  $('accountList').innerHTML=accountManagementHtml(result.accounts,result.publishers);
 }
 $('addAccount').onclick=()=>{$('accountForm').hidden=false;$('newAccountUsername').focus();};
 $('cancelAccount').onclick=()=>{$('accountForm').reset();$('accountForm').hidden=true;};
@@ -738,3 +765,88 @@ $('accountForm').onsubmit=event=>{event.preventDefault();action(async()=>{
   await accountRequest('POST',{username:$('newAccountUsername').value,password:$('newAccountPassword').value,publisherIds});
   $('accountForm').reset();$('accountForm').hidden=true;await loadAdminAccounts();toast('管理账号已添加');
 },event.submitter);};
+
+function openManagementDialog(title, content, submitLabel, onSubmit) {
+  let dialog=$('managementDialog');
+  if(!dialog){dialog=document.createElement('dialog');dialog.id='managementDialog';dialog.className='management-dialog';document.body.append(dialog);}
+  dialog.innerHTML=`<form method="dialog" class="management-form"><header><h2>${esc(title)}</h2><button type="button" class="quiet" data-dialog-close aria-label="关闭">×</button></header><div class="management-fields">${content}</div><footer><button type="button" class="quiet" data-dialog-close>取消</button><button type="submit" class="primary">${esc(submitLabel)}</button></footer></form>`;
+  dialog.querySelectorAll('[data-dialog-close]').forEach(button=>button.onclick=()=>dialog.close());
+  dialog.querySelector('form').onsubmit=event=>{event.preventDefault();action(async()=>{await onSubmit(new FormData(event.currentTarget));dialog.close();},event.submitter);};
+  dialog.showModal();
+}
+
+$('accountList').onclick=event=>action(async()=>{
+  const button=event.target.closest('[data-account-action]');if(!button)return;
+  const username=button.dataset.username, account=window.accountManagementData.accounts.find(row=>row.username===username);if(!account)return;
+  if(button.dataset.accountAction==='edit'){
+    const checks=window.accountManagementData.publishers.map(bot=>`<label class="management-check"><input type="checkbox" name="publisherIds" value="${esc(bot.id)}" ${(account.publisherIds===undefined||account.publisherIds.includes(String(bot.id)))?'checked':''}> @${esc(bot.username||bot.id)}</label>`).join('')||'<p>请先绑定机器人。</p>';
+    openManagementDialog(`编辑 ${username} 权限`,`<fieldset><legend>允许操作的机器人</legend>${checks}</fieldset>`,`保存权限`,async form=>{await fetchAccountMutation(username,{publisherIds:form.getAll('publisherIds')});await loadAdminAccounts();toast('账号权限已更新');});
+  }else if(button.dataset.accountAction==='password'){
+    openManagementDialog(`重置 ${username} 密码`,`<label>新密码<input name="password" type="password" minlength="4" maxlength="128" autocomplete="new-password" required></label><p class="hint">该账号的其他登录会话会立即失效。</p>`,`重置密码`,async form=>{await fetchAccountMutation(username,{password:form.get('password')});await loadAdminAccounts();toast('密码已重置');});
+  }else if(button.dataset.accountAction==='toggle'){
+    const enabled=button.dataset.enabled==='true';if(!confirm(`${enabled?'启用':'停用'}账号 ${username}？${enabled?'':'该账号的所有登录会话将立即失效。'}`))return;
+    await fetchAccountMutation(username,{enabled});await loadAdminAccounts();toast(`账号已${enabled?'启用':'停用'}`);
+  }else if(button.dataset.accountAction==='remove'){
+    if(!confirm(`删除账号 ${username}？其登录会话和机器人授权会立即撤销，已有聊天、任务和发布记录保留。`))return;
+    const response=await fetch(`/auth/admin-accounts/${encodeURIComponent(username)}`,{method:'DELETE',credentials:'same-origin'});if(!response.ok)throw new Error(`删除失败 (${response.status})`);
+    await loadAdminAccounts();toast('账号已删除');
+  }
+},event.target);
+
+async function fetchAccountMutation(username,body){
+  const response=await fetch(`/auth/admin-accounts/${encodeURIComponent(username)}`,{method:'PATCH',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||`账号操作失败 (${response.status})`);return result;
+}
+
+$('boundPublisherList').onclick=event=>action(async()=>{
+  const botButton=event.target.closest('[data-robot-action]');
+  if(botButton){
+    const id=botButton.dataset.id,bot=data.publishers.find(item=>String(item.id)===String(id));if(!bot)throw new Error('机器人列表已变化，请刷新后重试');
+    if(botButton.dataset.robotAction==='verify'){
+      const result=await api(`/publishers/${encodeURIComponent(id)}/verify`);toast(`机器人验证成功：@${result.username||result.id}`);
+    }else if(botButton.dataset.robotAction==='token'){
+      openManagementDialog(`更换 @${bot.username||id} Token`,`<label>机器人 Token<input name="token" type="password" autocomplete="off" required></label><p class="hint">新 Token 必须属于同一个机器人身份。原 Token 不会显示。</p>`,`验证并保存`,async form=>{await api(`/publishers/${encodeURIComponent(id)}/token`,'PUT',{token:form.get('token')});await refresh();toast('机器人 Token 已更新');});
+    }else if(botButton.dataset.robotAction==='toggle'){
+      const enabled=botButton.dataset.enabled==='true';if(!confirm(`${enabled?'启用':'停用'}机器人 @${bot.username||id}？${enabled?'重新启用不会自动恢复历史任务。':'所有账号将停止使用该机器人；待发送任务取消、计划任务暂停，历史记录保留。'}`))return;
+      await api(`/publishers/${encodeURIComponent(id)}/status`,'POST',{action:enabled?'enable':'disable'});await refresh();toast(`机器人已${enabled?'启用':'停用'}`);
+    }else if(botButton.dataset.robotAction==='remove'){
+      if(!confirm(`移除机器人 @${bot.username||id}？所有账号的授权会撤销，待发送任务取消、计划任务暂停；聊天和发布历史保留。`))return;
+      await api(`/publishers/${encodeURIComponent(id)}`,'DELETE');await refresh();toast('机器人已移除');
+    }
+    return;
+  }
+  const id=event.target.closest('[data-bound-bot]')?.dataset.boundBot;if(id)await switchPublisher(id);
+},event.target);
+
+$('accountLogout').insertAdjacentHTML('beforebegin','<button id="changeOwnPassword" class="quiet" type="button">修改当前账号密码</button>');
+$('changeOwnPassword').onclick=()=>openManagementDialog('修改当前账号密码','<label>当前密码<input name="currentPassword" type="password" autocomplete="current-password" required></label><label>新密码<input name="newPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" required></label>','修改密码',async form=>{const response=await fetch('/auth/change-password',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({currentPassword:form.get('currentPassword'),newPassword:form.get('newPassword')})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||`修改失败 (${response.status})`);toast('密码已修改，请使用新密码重新登录');displayAuthScreen(new Error('密码已修改，请重新登录'));});
+
+let chatFilter='all', pageRefreshPaused=false, emojiMode='ordinary';
+const chatDraftKey=()=>scopeKey(data?.admin?.username||'anonymous',selectedPublisherId,activeChat?.chat_id||'none');
+function conversationPreferences(){try{return JSON.parse(localStorage.getItem(scopeKey(data?.admin?.username||'anonymous',selectedPublisherId,'preferences'))||'{}');}catch{return {};}}
+function setConversationPreference(values){if(!activeChat)return;const prefs=conversationPreferences();prefs[activeChat.chat_id]={...prefs[activeChat.chat_id],...values};localStorage.setItem(scopeKey(data.admin.username,selectedPublisherId,'preferences'),JSON.stringify(prefs));action(loadConversations);}
+function saveChatDraft(){if(!activeChat||!data?.admin)return;try{sessionStorage.setItem(chatDraftKey(),JSON.stringify({delta:chatQuill.getContents(),buttons:chatButtons,media:chatMedia,reply:chatReply}));}catch{}}
+function restoreChatDraft(){let draft={};try{draft=JSON.parse(sessionStorage.getItem(chatDraftKey())||'{}');}catch{}chatQuill.setContents(draft.delta||{ops:[{insert:'\n'}]});chatButtons=draft.buttons||[];chatMedia=draft.media||null;chatReply=draft.reply||null;chatButtonEditor();renderChatMedia();$('chatReply').hidden=!chatReply;$('chatReplyText').textContent=chatReply?'回复 #'+chatReply:'';$('chatSendStatus').textContent='';$('chatSend').dataset.uncertain='false';}
+function renderChatMedia(name){$('chatMedia').replaceChildren();if(!chatMedia)return;const label=document.createElement('span');label.textContent='附件：'+(name||chatMedia.name||chatMedia.mime||'文件');const remove=document.createElement('button');remove.type='button';remove.textContent='移除';remove.onclick=()=>{chatMedia=null;$('chatFile').value='';renderChatMedia();saveChatDraft();};$('chatMedia').append(label,remove);}
+chatQuill.on('text-change',saveChatDraft);
+$('chatLatest').onclick=()=>{$('chatMessages').scrollTop=$('chatMessages').scrollHeight;$('chatLatest').hidden=true;};
+$('chatMessages').addEventListener('scroll',()=>{if($('chatMessages').scrollHeight-$('chatMessages').scrollTop-$('chatMessages').clientHeight<70)$('chatLatest').hidden=true;});
+$('chatExtra').onclick=()=>{const expanded=$('chatComposer').classList.toggle('composer-expanded');$('chatExtra').setAttribute('aria-expanded',String(expanded));};
+document.querySelectorAll('[data-chat-filter]').forEach(button=>button.onclick=()=>{chatFilter=button.dataset.chatFilter;document.querySelectorAll('[data-chat-filter]').forEach(b=>b.classList.toggle('active',b===button));action(loadConversations);});
+const pauseRefresh=document.createElement('button');pauseRefresh.className='quiet';pauseRefresh.type='button';pauseRefresh.textContent='暂停本页刷新';pauseRefresh.onclick=()=>{pageRefreshPaused=!pageRefreshPaused;pauseRefresh.textContent=pageRefreshPaused?'恢复本页刷新':'暂停本页刷新';if(!pageRefreshPaused)action(loadConversations);};$('inboxStatus').after(pauseRefresh);
+function openContactActions(){if(!activeChat)return;const prefs=conversationPreferences()[activeChat.chat_id]||{};const dialog=document.createElement('dialog');dialog.className='management-dialog';dialog.innerHTML=`<h2>${esc(activeChat.title||'会话资料')}</h2><p>ID ${esc(activeChat.chat_id)}</p><p>${esc(activeChat.username?'@'+activeChat.username:'')}</p><label>备注<input id="contactNote" maxlength="100" value="${esc(prefs.note||'')}"></label><button data-do="note">保存备注</button><button data-do="copy">复制 ID</button><button data-do="pin">${prefs.pinned?'取消置顶':'置顶'}</button><button data-do="unread">标为未读</button><button data-do="archive">${prefs.archivedAt?'取消归档':'归档会话'}</button><p class="hint">归档仅隐藏本机列表，不删除聊天记录；新消息到达后重新显示。</p><button data-do="close">关闭</button>`;document.body.append(dialog);dialog.onclick=async e=>{const command=e.target.dataset.do;if(!command)return;if(command==='copy'){await navigator.clipboard.writeText(activeChat.chat_id);toast('ID 已复制');return;}if(command==='note')setConversationPreference({note:dialog.querySelector('input').value});if(command==='pin')setConversationPreference({pinned:!prefs.pinned});if(command==='unread')setConversationPreference({unread:true});if(command==='archive')setConversationPreference({archivedAt:prefs.archivedAt?null:Math.max(Date.now(),activeChat.last_message_at||0)});dialog.close();};dialog.onclose=()=>dialog.remove();dialog.showModal();}
+$('contactActions').onclick=openContactActions;
+$('quickReply').onclick=()=>{const key=scopeKey(data?.admin?.username||'',selectedPublisherId,'quickReplies');let items;try{items=JSON.parse(localStorage.getItem(key)||'[]');}catch{items=[];}const dialog=document.createElement('dialog');dialog.className='management-dialog';dialog.innerHTML='<h2>快捷回复</h2><div class="quick-items"></div><label>新增文本<textarea maxlength="1000"></textarea></label><button data-add>保存</button><button data-close>关闭</button>';const render=()=>{const list=dialog.querySelector('.quick-items');list.replaceChildren();items.forEach((text,index)=>{const row=document.createElement('div');row.className='quick-reply-row';const use=document.createElement('button');use.textContent=text;use.onclick=()=>{chatQuill.insertText(Math.min(chatRange?.index??chatQuill.getLength()-1,chatQuill.getLength()-1),text,'user');dialog.close();};const remove=document.createElement('button');remove.type='button';remove.className='danger-text';remove.textContent='删除';remove.onclick=()=>{items.splice(index,1);localStorage.setItem(key,JSON.stringify(items));render();};row.append(use,remove);list.append(row);});};render();dialog.querySelector('[data-add]').onclick=()=>{const value=dialog.querySelector('textarea').value.trim();if(!value)return;items=[...items,value].slice(-30);localStorage.setItem(key,JSON.stringify(items));render();dialog.querySelector('textarea').value='';toast('快捷回复已保存');};dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();};
+chatQuill.root.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&matchMedia('(pointer:fine)').matches){event.preventDefault();event.stopImmediatePropagation();$('chatSend').click();}},true);
+function showOrdinaryEmoji(){emojiMode='ordinary';const q=$('emojiSearch').value.trim();const groups=[['😀 😃 😄 😁 😊 😍 🥰 😘 😎 🤔 😢 😭 😡','笑 开心 表情 心情'],['👍 👎 👏 🙏 🤝 💪 👋 👌 ✌️','手势 赞 谢谢'],['❤️ 💙 💚 💛 💜 🔥 ✨ 🎉 🎁 ✅ ❌ ⏰ 📎','爱 心 庆祝 成功 时间']];$('emojiGrid').replaceChildren();for(const [chars,name] of groups){for(const emoji of chars.split(' ')){if(q&&!name.includes(q)&&!emoji.includes(q))continue;const b=document.createElement('button');b.type='button';b.className='ordinary-emoji';b.textContent=emoji;b.setAttribute('aria-label',emoji+' '+name);b.onclick=()=>{const editor=pickerTarget==='chat'?chatQuill:quill,range=pickerTarget==='chat'?chatRange:savedRange,at=Math.min(range?.index??editor.getLength()-1,editor.getLength()-1);editor.enable(true);editor.insertText(at,emoji,'user');editor.setSelection(at+emoji.length,0,'silent');if(pickerTarget==='chat')chatRange={index:at+emoji.length,length:0};else savedRange={index:at+emoji.length,length:0};};$('emojiGrid').append(b);}}if(!$('emojiGrid').children.length)$('emojiGrid').innerHTML='<p class="empty-state">没有匹配的表情</p>';}
+$('ordinaryEmoji').onclick=()=>{$('emojiSearch').value='';showOrdinaryEmoji();};$('customEmoji').onclick=()=>{emojiMode='custom';if(activePack)displayPack(activePack);else if(savedPacks.length)displayPack(savedPacks[0]);else{$('emojiGrid').innerHTML='<p class="empty-state">尚未添加专属表情包，请展开表情包添加链接。</p>';$('packSettings').open=true;}};
+function openMessageActions(message){
+  const dialog=document.createElement('dialog');dialog.className='management-dialog';dialog.innerHTML='<h2>消息操作</h2><button data-copy>复制文字</button><button data-reply>回复</button><button data-close>关闭</button>';
+  dialog.querySelector('[data-copy]').onclick=()=>{navigator.clipboard.writeText(message.text||'').then(()=>toast('消息已复制')).catch(()=>toast('无法访问剪贴板',true));dialog.close();};
+  dialog.querySelector('[data-reply]').onclick=()=>{chatReply=message.telegram_message_id;$('chatReply').hidden=false;$('chatReplyText').textContent=(message.text||'附件').slice(0,80);saveChatDraft();dialog.close();chatQuill.focus();};
+  dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();
+}
+$('chatMessages').addEventListener('contextmenu',event=>{const bubble=event.target.closest('[data-message]');if(!bubble)return;event.preventDefault();const message=chatRows.find(row=>String(row.id)===bubble.dataset.message);if(message)openMessageActions(message);});
+let messagePressTimer=null,messagePressStart=null;
+$('chatMessages').addEventListener('pointerdown',event=>{if(event.pointerType!=='touch')return;const bubble=event.target.closest('[data-message]');if(!bubble)return;messagePressStart={x:event.clientX,y:event.clientY};messagePressTimer=setTimeout(()=>{const message=chatRows.find(row=>String(row.id)===bubble.dataset.message);if(message){openMessageActions(message);messagePressStart=null;}},550);});
+$('chatMessages').addEventListener('pointermove',event=>{if(!messagePressTimer||!messagePressStart)return;if(Math.hypot(event.clientX-messagePressStart.x,event.clientY-messagePressStart.y)>10){clearTimeout(messagePressTimer);messagePressTimer=null;messagePressStart=null;}});
+for(const eventName of ['pointerup','pointercancel'])$('chatMessages').addEventListener(eventName,()=>{clearTimeout(messagePressTimer);messagePressTimer=null;messagePressStart=null;});

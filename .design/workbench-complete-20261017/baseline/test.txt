@@ -1,0 +1,181 @@
+
+> tgzhushou@0.1.0 test
+> node --test tests/auth.test.js tests/editor-delete.test.js tests/workbench-utils.test.js tests/player-utils.test.js tests/api-client.test.js tests/entry-feedback.test.js tests/auth-session.test.js
+
+TAP version 13
+# Subtest: all surfaces use Railway cookie sessions; SDK cannot select legacy Serverless
+ok 1 - all surfaces use Railway cookie sessions; SDK cannot select legacy Serverless
+  ---
+  duration_ms: 28.370279
+  type: 'test'
+  ...
+# Subtest: real HTTP login, cookie-authenticated bootstrap, and logout share one account path
+ok 2 - real HTTP login, cookie-authenticated bootstrap, and logout share one account path
+  ---
+  duration_ms: 188.100752
+  type: 'test'
+  ...
+# Subtest: logout ends current account only and calls login transition
+ok 3 - logout ends current account only and calls login transition
+  ---
+  duration_ms: 3.320111
+  type: 'test'
+  ...
+# Subtest: logout failure leaves current session intact
+ok 4 - logout failure leaves current session intact
+  ---
+  duration_ms: 1.280925
+  type: 'test'
+  ...
+# Subtest: all surfaces show password form on expiry and never demand Telegram reopening
+ok 5 - all surfaces show password form on expiry and never demand Telegram reopening
+  ---
+  duration_ms: 0.63085
+  type: 'test'
+  ...
+# Subtest: network errors allow retry without hiding account login
+ok 6 - network errors allow retry without hiding account login
+  ---
+  duration_ms: 1.532975
+  type: 'test'
+  ...
+# Subtest: all clients require account login; Telegram identity alone grants no access
+ok 7 - all clients require account login; Telegram identity alone grants no access
+  ---
+  duration_ms: 245.640011
+  type: 'test'
+  ...
+# Subtest: only wz9946 creates accounts; new accounts retain assigned robot permissions
+ok 8 - only wz9946 creates accounts; new accounts retain assigned robot permissions
+  ---
+  duration_ms: 272.45099
+  type: 'test'
+  ...
+# Subtest: logout ends only the current session; expired and legacy Telegram sessions are rejected
+ok 9 - logout ends only the current session; expired and legacy Telegram sessions are rejected
+  ---
+  duration_ms: 148.669124
+  type: 'test'
+  ...
+# Subtest: cross-origin login/logout rejected; cookie remains HttpOnly Secure and rate limiting remains
+ok 10 - cross-origin login/logout rejected; cookie remains HttpOnly Secure and rate limiting remains
+  ---
+  duration_ms: 311.798637
+  type: 'test'
+  ...
+# Subtest: backspace covers ordinary text, newline, graphemes, and custom embeds
+ok 11 - backspace covers ordinary text, newline, graphemes, and custom embeds
+  ---
+  duration_ms: 28.307284
+  type: 'test'
+  ...
+# Subtest: selections and split formatting runs keep whole characters and terminal newline
+ok 12 - selections and split formatting runs keep whole characters and terminal newline
+  ---
+  duration_ms: 0.502591
+  type: 'test'
+  ...
+# Subtest: entryCommand normalizes bot mentions and arguments
+ok 13 - entryCommand normalizes bot mentions and arguments
+  ---
+  duration_ms: 2.045174
+  type: 'test'
+  ...
+# Subtest: start opens account login for every Telegram user
+ok 14 - start opens account login for every Telegram user
+  ---
+  duration_ms: 0.865458
+  type: 'test'
+  ...
+# Subtest: login opens account login for every Telegram user
+ok 15 - login opens account login for every Telegram user
+  ---
+  duration_ms: 0.232436
+  type: 'test'
+  ...
+# Subtest: help and unknown commands explain public account login entry
+ok 16 - help and unknown commands explain public account login entry
+  ---
+  duration_ms: 0.209356
+  type: 'test'
+  ...
+# Subtest: normalizes WPS numeric and scientific Telegram IDs without losing text IDs
+ok 17 - normalizes WPS numeric and scientific Telegram IDs without losing text IDs
+  ---
+  duration_ms: 2.057068
+  type: 'test'
+  ...
+# Subtest: parses WPS CSV BOM, quoted commas and CRLF rows
+ok 18 - parses WPS CSV BOM, quoted commas and CRLF rows
+  ---
+  duration_ms: 1.358617
+  type: 'test'
+  ...
+# Subtest: Mini App exposes exactly five primary tabs and maps secondary pages back to their owner
+ok 19 - Mini App exposes exactly five primary tabs and maps secondary pages back to their owner
+  ---
+  duration_ms: 3.601047
+  type: 'test'
+  ...
+# Subtest: Mini App editor step stays within the five-step flow
+ok 20 - Mini App editor step stays within the five-step flow
+  ---
+  duration_ms: 0.383401
+  type: 'test'
+  ...
+# Subtest: new automatic buttons use paired rows and delete reflows by actual index
+ok 21 - new automatic buttons use paired rows and delete reflows by actual index
+  ---
+  duration_ms: 1.713947
+  type: 'test'
+  ...
+# Subtest: manual rows survive deletion, including a manually chosen default row
+ok 22 - manual rows survive deletion, including a manually chosen default row
+  ---
+  duration_ms: 0.603473
+  type: 'test'
+  ...
+# Subtest: stored server rows lacking metadata are preserved, not guessed automatic
+ok 23 - stored server rows lacking metadata are preserved, not guessed automatic
+  ---
+  duration_ms: 0.429733
+  type: 'test'
+  ...
+# Subtest: missing and invalid row values get two-column defaults
+ok 24 - missing and invalid row values get two-column defaults
+  ---
+  duration_ms: 0.241013
+  type: 'test'
+  ...
+# Subtest: emoji popup chooses upwards and clamps inside the viewport
+ok 25 - emoji popup chooses upwards and clamps inside the viewport
+  ---
+  duration_ms: 0.758199
+  type: 'test'
+  ...
+# Subtest: emoji popup falls below top anchors and remains inside short viewports
+ok 26 - emoji popup falls below top anchors and remains inside short viewports
+  ---
+  duration_ms: 0.311453
+  type: 'test'
+  ...
+# Subtest: emoji search covers true custom emoji IDs and alternatives only
+ok 27 - emoji search covers true custom emoji IDs and alternatives only
+  ---
+  duration_ms: 0.812473
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1397.995784
+npm notice
+npm notice New major version of npm available! 10.9.9 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
