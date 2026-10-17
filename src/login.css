@@ -10,7 +10,6 @@ html[data-surface] #locked.login-shell {
   padding:40px 24px 64px; padding-top:max(40px,env(safe-area-inset-top));
   padding-bottom:max(64px,env(safe-area-inset-bottom));
 }
-html[data-surface] body.desktop-client #locked.login-shell { padding-top:72px; }
 html[data-surface] #locked .login-card {
   width:min(420px,100%); padding:28px 24px; border:1px solid #e5e5ea; border-radius:24px;
   background:#fff; box-shadow:0 2px 10px #00000003;

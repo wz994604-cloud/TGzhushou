@@ -1,4 +1,4 @@
-# TGzhushou Railway 部署
+# TGzhushou Telegram 小程序 Railway 部署
 
 本项目生产环境运行在 Railway，应用服务连接同项目 PostgreSQL，媒体文件保存到 Railway 持久化卷中的 `MEDIA_DIR`。
 
@@ -6,7 +6,7 @@
 
 - `ENTRY_BOT_TOKEN`：Telegram 入口机器人 Token。
 - `CONFIG_KEY`：32 字节 Base64 密钥，用于加密机器人 Token。
-- `ADMIN_LOGIN_ACCOUNTS`：网页登录账号 JSON 数组。
+- `ADMIN_LOGIN_ACCOUNTS`：小程序登录账号 JSON 数组。
 - `PUBLIC_URL`：Railway 对外 HTTPS 域名。
 - `DATABASE_URL`：Railway PostgreSQL 连接地址。
 - `MEDIA_DIR`：媒体文件目录，生产环境应挂载持久化卷。
@@ -15,9 +15,9 @@
 ## 运行方式
 
 ```bash
-npm install
-npm run build
-npm start
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm start
 ```
 
 应用启动后 Scheduler 会持续检查定时任务。
@@ -32,5 +32,5 @@ npm start
 
 ## 登录与权限
 
-所有客户端统一使用后台账号密码。Telegram 只提供小程序入口，不参与后台授权。
+Telegram 小程序使用后台账号密码登录。Telegram SDK 只提供小程序入口与布局适配，不参与后台授权。
 详细规则见 [统一登录规则](docs/ACCOUNT_LOGIN.md)。

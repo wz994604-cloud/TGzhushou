@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {defaultButtonRow,normalizeButtonRows,reflowAutomaticButtonRows,emojiPopoverPosition,emojiMatches,miniTabForPage,miniTabPages,clampMiniStep} from '../src/workbench-utils.js';
+import {defaultButtonRow,normalizeButtonRows,reflowAutomaticButtonRows,emojiMatches,miniTabForPage,miniTabPages,clampMiniStep} from '../src/workbench-utils.js';
 
 test('Mini App exposes exactly five primary tabs and maps secondary pages back to their owner',()=>{
  assert.deepEqual(miniTabPages,['chat','editor','assets','tasks','settings']);
@@ -30,15 +30,6 @@ test('stored server rows lacking metadata are preserved, not guessed automatic',
 });
 test('missing and invalid row values get two-column defaults',()=>{
  const buttons=[{}, {row:-1}, {row:'2'},{}];normalizeButtonRows(buttons);assert.deepEqual(buttons.map(b=>b.row),[0,0,1,1]);
-});
-test('emoji popup chooses upwards and clamps inside the viewport',()=>{
- const p=emojiPopoverPosition({left:1320,top:780,bottom:824},{width:1440,height:900});
- assert.equal(p.upward,true);assert.equal(p.left,1028);assert.equal(p.top,412);
- assert.ok(p.left+p.width<=1428);assert.ok(p.top+p.height<=888);
-});
-test('emoji popup falls below top anchors and remains inside short viewports',()=>{
- const p=emojiPopoverPosition({left:4,top:40,bottom:84},{width:320,height:300});
- assert.equal(p.upward,false);assert.equal(p.left,12);assert.ok(p.top+p.height<=288);
 });
 test('emoji search covers true custom emoji IDs and alternatives only',()=>{
  assert.equal(emojiMatches({id:'12345678',alt:'🔥'},'1234'),true);

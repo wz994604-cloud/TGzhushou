@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {createWorkbenchApiClient} from '../src/api-client.js';
 import {accountFixture} from './account-auth-fixture.js';
 
-test('all surfaces use Railway cookie sessions; SDK cannot select legacy Serverless',async()=>{
+test('Mini App uses Railway cookie sessions and ignores Telegram identity data',async()=>{
  const oldFetch=globalThis.fetch,oldTelegram=globalThis.Telegram,oldConfig=globalThis.__TGZ_API_CONFIG__;
  const requests=[];let unauthorized=0,forbidden=0;
- globalThis.Telegram={WebApp:{initData:'unrelated-telegram',Serverless:{call(){throw new Error('obsolete backend');}}}};
- globalThis.__TGZ_API_CONFIG__={serverlessBase:'https://obsolete.example',fallbackBaseUrl:'https://obsolete.example'};
+ globalThis.Telegram={WebApp:{initData:'unrelated-telegram'}};
+ globalThis.__TGZ_API_CONFIG__={};
  globalThis.fetch=async(url,options)=>{requests.push({url,options});return new Response(JSON.stringify({ok:true}),{headers:{'content-type':'application/json'}})};
  try {
    const client=createWorkbenchApiClient({getPublisherId:()=> '1001',onUnauthorized:()=>unauthorized++,onForbidden:()=>forbidden++});

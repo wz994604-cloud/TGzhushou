@@ -29,7 +29,7 @@
 
 ## 开发验收
 
-1. Mini App 只使用 Apple iOS 风格，不恢复桌面端玻璃渐变。
+1. Mini App 使用 Apple iOS 风格。
 2. 顶部安全区、底部 Tab Bar 安全区和键盘弹出不遮挡内容。
 3. 所有触控目标不小于 44×44 px。
 4. 页面组件使用统一 System Blue、Grouped Background、Label 层级。

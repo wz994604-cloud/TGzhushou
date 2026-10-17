@@ -11,7 +11,4 @@ test-results/
 playwright-report/
 .planning/
 artifacts/
-desktop/src-tauri/target/
-desktop/src-tauri/gen/
-
 .tgcloud/
