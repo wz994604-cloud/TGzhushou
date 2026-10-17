@@ -99,3 +99,12 @@
       expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
       login_username TEXT NOT NULL DEFAULT ''
     );
+
+    CREATE TABLE IF NOT EXISTS publisher_lifecycle(
+      bot_id TEXT PRIMARY KEY REFERENCES publishers(id),
+      status TEXT NOT NULL DEFAULT 'ACTIVE', updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS work_owners(
+      kind TEXT NOT NULL, item_id INTEGER NOT NULL, account_id TEXT NOT NULL,
+      username TEXT NOT NULL, PRIMARY KEY(kind,item_id)
+    );

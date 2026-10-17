@@ -47,7 +47,7 @@ export async function saveIncoming(db, botId, update) {
   })();
 }
 
-export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, botApi = botCall, publisherFor }) {
+export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, botApi = botCall, publisherFor, mediaStore }) {
   const ownUrl = id => `${String(publicUrl || '').replace(/\/$/, '')}/tg/publisher/${id}`;
   const botFor = async req => publisherFor ? publisherFor(req) : await scheduler.publisher(req.get('x-publisher-id') || undefined);
   const currentId = async req => (await botFor(req))?.id || '';
@@ -240,7 +240,9 @@ export function registerChatRoutes(app, { db, scheduler, configKey, publicUrl, b
     if (!row) return res.sendStatus(404);
     if (row.media_id) {
       const media = await db.prepare('SELECT * FROM media WHERE id=?').get(row.media_id);
-      if (!media) return res.sendStatus(404); const source=await fetch(media.file_path, { signal:AbortSignal.timeout(20000) }); if(!source.ok)return res.sendStatus(404); return res.type(media.mime).send(Buffer.from(await source.arrayBuffer()));
+      if (!media || !mediaStore) return res.sendStatus(404);
+      try { return res.type(media.mime).send(await mediaStore.read(media.file_path)); }
+      catch { return res.sendStatus(404); }
     }
     if (!row.file_id) return res.sendStatus(404);
     const file = await botApi(bot.token,'getFile',{ file_id:row.file_id });

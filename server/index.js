@@ -7,7 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openDatabase, getSetting, setSetting, encryptToken, decryptToken } from './db.js';
-import { listPublishers, savePublisher } from './publishers.js';
+import { listPublishers, getPublisher } from './publishers.js';
 import { botCall, safeTelegramError } from './telegram.js';
 import { renderDelta, normalizeButtons } from './format.js';
 import { normalizeSchedule, nextSlot } from './schedule.js';
@@ -15,8 +15,10 @@ import { createScheduler } from './scheduler.js';
 import { normalizeTelegramId, decodeCsv, parseCsv } from './player-utils.js';
 import { initializePlayerImports, playerSourceToken, savePlayerSourceToken, upsertPlayers } from './player-store.js';
 import { createAccountAuth, requireAccount } from './account-auth.js';
+import { deleteUnusedMedia } from './media-protection.js';
 import { createMediaStore } from './media-store.js';
 import { route, canAccessBot, currentBot, selectedBotId, requirePlayerBot, assertSelected } from './request-context.js';
+import { registerPublisherRoutes } from './routes-publishers.js';
 import { registerTaskRoutes } from './routes-tasks.js';
 import { registerChatRoutes } from './chat.js';
 import { entryCommand, entryReply } from './entry-feedback.js';
@@ -31,7 +33,7 @@ const mediaStore = createMediaStore(mediaDir);
 await mediaStore.init();
 const db = await openDatabase();
 await initializePlayerImports(db);
-const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY });
+const scheduler = createScheduler(db, { configKey: process.env.CONFIG_KEY, canExecuteOwner:(owner,botId) => accountAuth.canExecuteOwner(owner,botId) });
 async function kickScheduler() {
   await scheduler.tick();
 }
@@ -77,15 +79,18 @@ app.post('/tg/entry', async (req, res) => {
 app.use('/api', requireAccount(accountAuth));
 app.use('/api', async (req, res, next) => {
   try {
-    if (req.method === 'POST' && ['/publisher','/inbox/enable','/inbox/disable'].includes(req.path) && req.admin.canManageBots !== true)
+    const managingPublisher = req.path === '/publisher' || req.path.startsWith('/publishers/');
+    if ((managingPublisher || req.method === 'POST' && ['/inbox/enable','/inbox/disable'].includes(req.path)) && req.admin.canManageBots !== true)
       return res.status(403).json({error:'仅 wz9946 可管理或配置机器人'});
     const selected = String(req.get('x-publisher-id') || '');
     if (selected && !canAccessBot(req.admin, selected)) return res.status(403).json({error:'没有此机器人的操作权限'});
     const defaultBot = (await listPublishers(db)).find(bot => canAccessBot(req.admin, bot.id));
     const id = selected || (defaultBot && canAccessBot(req.admin, defaultBot.id) ? defaultBot.id :
       (await listPublishers(db)).find(bot => canAccessBot(req.admin, bot.id))?.id);
-    req.publisher = id ? await scheduler.publisher(id) : null;
-    if (selected && !req.publisher) {
+    req.publisher = id ? await getPublisher(db, process.env.CONFIG_KEY, id, { includeInactive:true }) : null;
+    if (req.publisher?.status !== 'ACTIVE' && req.publisher && req.method !== 'GET' && !managingPublisher)
+      return res.status(409).json({error:'机器人已停用，请先启用；启用后任务需手动恢复'});
+    if (selected && !req.publisher && !managingPublisher) {
       if (req.method === 'GET' && req.path === '/bootstrap') delete req.headers['x-publisher-id'];
       else throw new Error('所选发布机器人不存在');
     }
@@ -94,7 +99,7 @@ app.use('/api', async (req, res, next) => {
   catch (error) { next(error); }
 });
 
-registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL, publisherFor:currentBot });
+registerChatRoutes(app, { db, scheduler, configKey:process.env.CONFIG_KEY, publicUrl:process.env.PUBLIC_URL, publisherFor:currentBot, mediaStore });
 const sent = await sentActions(db, async id => await scheduler.publisher(id));
 async function selectedSent(req) {
   const row = await sent.read(req.params.kind, Number(req.params.id));
@@ -172,18 +177,12 @@ async function fetchFfaPlayers(token) {
 
 app.get('/api/bootstrap', route(async (req, res) => {
   const bot = currentBot(req);
-  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: (await listPublishers(db)).filter(p => canAccessBot(req.admin, p.id)), publisher: bot ? { id: bot.id, username: bot.username } : null,
+  res.json({ admin: req.admin, timezone: 'Asia/Shanghai', publishers: (await listPublishers(db)).filter(p => canAccessBot(req.admin, p.id)), publisher: bot ? { id: bot.id, username: bot.username, status: bot.status } : null,
     targets: await db.prepare('SELECT * FROM targets WHERE bot_id=? ORDER BY id DESC').all(bot?.id || ''),
     tasks: await db.prepare('SELECT id,name,status,schedule_json,next_at,updated_at,bot_id FROM tasks WHERE bot_id=? ORDER BY id DESC LIMIT 100').all(bot?.id || '') });
 }));
 
-app.post('/api/publisher', route(async (req, res) => {
-  const token = String(req.body?.token || '').trim();
-  if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(token)) throw new Error('机器人 Token 格式不正确');
-  const identity = await botCall(token, 'getMe');
-  if (!identity.is_bot || token === process.env.ENTRY_BOT_TOKEN) throw new Error('发布机器人必须使用独立身份');
-  res.json(await savePublisher(db, process.env.CONFIG_KEY, identity, token));
-}));
+registerPublisherRoutes(app, { db, configKey:process.env.CONFIG_KEY, entryToken:process.env.ENTRY_BOT_TOKEN, botCall, accountAuth, route });
 
 app.get('/api/ffa', route(async (req, res) => {
   const botId = requirePlayerBot(req);
@@ -247,7 +246,7 @@ app.post('/api/broadcasts', route(async (req, res) => {
   const placeholders = ids.map(() => '?').join(',');
   const players = await db.prepare(`SELECT telegram_id AS telegramId,display_name AS displayName FROM bot_players WHERE bot_id=? AND active=1 AND telegram_id IN (${placeholders})`).all(bot.id,...ids);
   if (players.length !== ids.length) throw new Error('部分用户不存在或已停用，请刷新名单后重试');
-  const broadcastId = await scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players }, bot.id);
+  const broadcastId = await scheduler.queueBroadcast({ name, deltaJson: JSON.stringify(req.body.delta.ops), buttonsJson: JSON.stringify(buttons), mediaId, players }, bot.id, req.admin);
   await kickScheduler('Broadcast tick:');
   res.json({ id: broadcastId, total: players.length });
 }));
@@ -448,6 +447,15 @@ app.post('/api/chat/media', chatUpload.single('file'), route(async (req,res) => 
   await db.prepare('INSERT OR IGNORE INTO media(sha256,mime,size,file_path,created_at) VALUES(?,?,?,?,?)')
     .run(sha,mime,file.buffer.length,filename,Date.now());
   res.json(await db.prepare('SELECT id,mime,size FROM media WHERE sha256=?').get(sha));
+}));
+
+app.delete('/api/media/:id', route(async(req,res) => {
+  // Shared media has no bot ownership field; only the manager can remove entries.
+  if (req.admin.canManageBots !== true) return res.sendStatus(403);
+  const result = await deleteUnusedMedia(db,Number(req.params.id));
+  if (!result.deleted) return res.sendStatus(404);
+  // Keep bytes for backup/recovery; this operation only removes the unused catalog entry.
+  res.json({ok:true});
 }));
 
 app.get('/api/media/:id', route(async (req, res) => {

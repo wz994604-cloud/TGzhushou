@@ -1,5 +1,5 @@
 // Every client uses the same Railway REST endpoints and account session cookie.
-export function createWorkbenchApiClient({ getPublisherId = () => '', onUnauthorized = () => {} } = {}) {
+export function createWorkbenchApiClient({ getPublisherId = () => '', onUnauthorized = () => {}, onForbidden = () => {} } = {}) {
   const config = globalThis.__TGZ_API_CONFIG__ || {};
   const origin = String(config.railwayBase || '').replace(/\/$/, '');
   const base = origin.endsWith('/api') ? origin : `${origin}/api`;
@@ -22,6 +22,7 @@ export function createWorkbenchApiClient({ getPublisherId = () => '', onUnauthor
       body: body instanceof FormData || body == null || typeof body === 'string' ? body : JSON.stringify(body),
     });
     const result = await response.json().catch(() => ({}));
+    if (response.status === 403 && result.error === '没有此机器人的操作权限') onForbidden(Object.assign(new Error(result.error), { status:403 }));
     if (!response.ok) throw Object.assign(new Error(result.error || `请求失败 (${response.status})`), { status: response.status });
     return result;
   }
