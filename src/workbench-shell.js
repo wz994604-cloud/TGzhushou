@@ -42,7 +42,11 @@ export function mountWorkbench({ navigate, backChat }) {
     stepPanels.forEach((panel,i)=>{panel.hidden=i!==step;panel.setAttribute('aria-hidden',String(i!==step));});
     stepButtons.forEach((b,i)=>{b.classList.toggle('active',i===step);b.setAttribute('aria-current',i===step?'step':'false');b.setAttribute('aria-label',`${i+1}. ${editorStepLabels[i]}`);});
     if($('miniPrevious')) { $('miniPrevious').disabled=step===0; $('miniNext').hidden=step===4; }
-    if(step===4) $('previewPanel').open=true;
+    if(step===4) {
+      $('previewPanel').open=true;
+      const targets=[...$('targetChecks').querySelectorAll('input:checked')].length;
+      $('publishSummary').textContent=`机器人：${$('publisherSelect').selectedOptions[0]?.textContent||'未选择'} · 群 / 频道：${targets} 个 · ${$('selectedPlayersHint').textContent} · ${$('kind').selectedOptions[0].textContent}`;
+    }
     viewport.scrollTop=0;
   };
 
@@ -91,7 +95,10 @@ export function mountWorkbench({ navigate, backChat }) {
   }
 
   $('save').textContent='保存草稿';
-  const previewAction=node('button','secondary','预览');previewAction.type='button';previewAction.onclick=()=>setStep(4);actions.prepend(previewAction);
+  const publishSummary=node('p','hint');publishSummary.id='publishSummary';actions.before(publishSummary);
+  const broadcastActions=node('details','broadcast-actions','<summary>私信群发</summary>');
+  broadcastActions.append(node('p','hint','仅发送给已选用户，与群 / 频道发布分开执行。'),$('sendBroadcast'));
+  actions.append(broadcastActions);
   const assetAction=node('button','quiet','从素材选择');assetAction.type='button';assetAction.onclick=()=>{workspace.dispatchEvent(new CustomEvent('asset-intent',{detail:{source:'editor'}}));navigate('assets');};media.append(assetAction);
   const settings=$('settings'), settingCards=[...settings.querySelectorAll(':scope > .card')];
   const settingNav=node('div','mini-settings-menu');settingNav.setAttribute('aria-label','设置分类');
@@ -104,11 +111,14 @@ export function mountWorkbench({ navigate, backChat }) {
     });
     settingButtons.forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-pressed',String(i===index));});
     settingNav.hidden=settingsOpen;
+    settingBody.hidden=!settingsOpen;
     viewport.scrollTop=0;
   }
   settingCards.forEach((card,i)=>{
     const b=node('button','',`${icon(i===3?'players':'settings')}<span>${card.querySelector('h3').textContent}</span>`);b.type='button';b.onclick=()=>showSettings(i);settingNav.append(b);settingButtons.push(b);settingBody.append(card);
   });
+  const importIndex=settingCards.findIndex(card=>card.id==='ffaCard');
+  if(importIndex>=0) settingButtons[importIndex].hidden=true;
   const settingsLayout=node('div','mini-settings');settingsLayout.append(settingNav,settingBody);settings.append(settingsLayout);showSettings(null);
 
   for(const [inputId,buttonId] of [['token','savePublisher'],['ffaToken','saveFfaToken']]){const label=$(inputId).parentElement,row=node('div','settings-input-row');label.before(row);row.append(label,$(buttonId));}
