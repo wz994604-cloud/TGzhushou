@@ -71,3 +71,29 @@ html #chat .chat-details,html #chat .chat-details-backdrop,html #chat .chat-head
  html #chat .chat-messages{padding:12px!important;}html #chat article.chat-bubble{max-width:85%!important;}
 }
 @media(prefers-reduced-motion:reduce){html #chat *{animation:none!important;transition:none!important;}}
+
+/* Keep category visibility independent of the shared card display rules. */
+html[data-surface="mini"] .mini-settings-forms[hidden],
+html[data-surface="mini"] .mini-settings-forms > .category-inactive,
+html[data-surface="mini"] .mini-settings-menu button[hidden]{display:none!important;}
+html[data-surface="mini"] .mini-steps{flex-wrap:nowrap;overflow-x:auto;}
+html[data-surface="mini"] .mini-steps button{white-space:nowrap;flex:0 0 auto;min-height:44px;}
+html[data-surface="mini"] .mini-shell .task-filters{display:flex;flex-wrap:nowrap;overflow-x:auto;}
+html[data-surface="mini"] .mini-shell .task-filters button{flex:0 0 auto;min-height:44px;}
+html[data-surface="mini"] .broadcast-actions{width:100%;margin-top:12px;}
+html[data-surface="mini"] .broadcast-actions summary{padding:12px 0;cursor:pointer;}
+html[data-surface="mini"] #publishSummary{line-height:1.7;}
+@media(max-width:760px){
+ html[data-surface="mini"] #assets > .section-title,
+ html[data-surface="mini"] #tasks > .section-title{display:flex;flex-wrap:wrap;gap:12px;}
+ html[data-surface="mini"] #assets > .section-title > div,
+ html[data-surface="mini"] #tasks > .section-title > div{flex:1 0 100%;}
+ html[data-surface="mini"] #assets > .section-title button,
+ html[data-surface="mini"] #tasks > .section-title button{flex:0 0 auto;white-space:nowrap;}
+ html[data-surface="mini"] .management-row{flex-direction:column;align-items:stretch;}
+ html[data-surface="mini"] .management-identity{grid-template-columns:minmax(0,1fr) auto;}
+ html[data-surface="mini"] .management-identity strong{white-space:normal;overflow-wrap:anywhere;}
+ html[data-surface="mini"] .management-actions{justify-content:flex-start;gap:8px;}
+ html[data-surface="mini"] .management-actions button{min-height:44px;white-space:nowrap;}
+ html[data-surface="mini"] .management-actions .danger-text{margin-left:auto;}
+}
