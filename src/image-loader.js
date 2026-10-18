@@ -9,7 +9,7 @@ export function createImageLoader(fetchBlob, limit = 96, concurrency = 4) {
         if (job.generation === generation) cache.set(job.key, blob);
         while (cache.size > limit) cache.delete(cache.keys().next().value);
         job.resolve(blob);
-      }, job.reject).finally(() => { active--; pending.delete(job.key); pump(); });
+      }, job.reject).finally(() => { active--; if (job.generation === generation) pending.delete(job.key); pump(); });
     }
   }
   const load = key => {

@@ -36,7 +36,7 @@ export function installSentEditor({Quill,api,esc,toast,action,image,hydrateEmoji
     currentPack=pack;$('sentEmojiTitle').textContent=`${pack.title} · ${pack.stickers.length} 个`;$('sentEmojiPicker').open=false;$('sentEmojiGrid').replaceChildren();
     for(const sticker of pack.stickers){
       const button=document.createElement('button');button.type='button';button.className='emoji-choice';button.dataset.sentSticker=sticker.id;button.textContent=sticker.alt;button.title=sticker.id;$('sentEmojiGrid').append(button);
-      if(image&&(sticker.thumbnailId||sticker.id)) image('/sticker-image?'+(sticker.thumbnailId?'id='+encodeURIComponent(sticker.thumbnailId)+'&':'')+'emoji='+encodeURIComponent(sticker.id)).then(url=>{if(button.isConnected){const img=document.createElement('img');img.alt=sticker.alt;img.src=url;button.replaceChildren(img);}}).catch(()=>{});
+      if(image&&(sticker.thumbnailId||sticker.id)) image('/sticker-image?'+(sticker.thumbnailId?'id='+encodeURIComponent(sticker.thumbnailId)+'&':'')+'emoji='+encodeURIComponent(sticker.id)).then(url=>{if(!button.isConnected){URL.revokeObjectURL(url);return;}const img=document.createElement('img');img.alt=sticker.alt;img.onload=img.onerror=()=>URL.revokeObjectURL(url);img.src=url;button.replaceChildren(img);}).catch(()=>{});
     }
   }
   async function loadPacks(){const result=await api('/sticker-packs/saved');savedPacks=result.packs||[];renderSavedPacks();if(!currentPack&&recent().length)renderPack({title:'最近使用',stickers:recent()});}

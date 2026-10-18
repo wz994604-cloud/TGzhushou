@@ -114,7 +114,7 @@ export function mountWorkbench({ navigate, backChat }) {
   for(const [inputId,buttonId] of [['token','savePublisher'],['ffaToken','saveFfaToken']]){const label=$(inputId).parentElement,row=node('div','settings-input-row');label.before(row);row.append(label,$(buttonId));}
   const records=node('div','task-filters');records.setAttribute('aria-label','记录分类');for(const [id,label] of [['runList','群组 / 频道'],['broadcastPanel','用户']]){const b=node('button',id==='runList'?'active':'',label);b.type='button';b.onclick=()=>{records.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));$('runList').hidden=id!=='runList';$('broadcastPanel').hidden=id!=='broadcastPanel';};records.append(b);}$('runList').before(records);$('logs').append($('broadcastPanel'));$('broadcastPanel').open=true;$('broadcastPanel').hidden=true;
   const noTimed=node('p','hint','无定时任务');noTimed.id='noTimedTasks';$('taskList').before(noTimed);
-  const players=$('players');$('usersPanel').open=true;$('selectedPanel').open=true;
+  $('usersPanel').open=true;$('selectedPanel').open=true;
   const continueWriting=node('button','primary','返回编写活动');continueWriting.type='button';continueWriting.onclick=()=>navigate('editor');$('selectedPanel').append(continueWriting);
   const tools=$('chatComposer').querySelector('.chat-tools');
   for(const [id,glyph] of [['chatEmoji','emoji'],['chatLink','link'],['chatAddButton','plus']]) {const b=$(id);b.innerHTML=icon(glyph);b.className='icon-button';}
@@ -138,20 +138,13 @@ export function mountWorkbench({ navigate, backChat }) {
   }
   function sectionLoading(id,busy){$(id)?.setAttribute('aria-busy',String(busy));}
   return {
-    mini:true,
     activate(id) {
       workspace.dataset.page=id;
       if(title)title.textContent=pages[id]||'活动中枢';
       if(back)back.disabled=id==='chat'&&workspace.dataset.chatOpen!=='true';
       const activePage = miniTabForPage(id);
-      workspace.querySelectorAll('[data-tab],[data-rail-tab]').forEach(b=>{const active=(b.dataset.tab||b.dataset.railTab)===activePage;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+      workspace.querySelectorAll('[data-tab]').forEach(b=>{const active=b.dataset.tab===activePage;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
       viewport.scrollTop=0;
-    },
-    account(data) {
-      const admin=data?.admin||{};
-      const info=$('railAccountId');if(info)info.textContent=admin.name&&admin.id?`${admin.name} · ID ${admin.id}`:'未登录';
-      const top=workspace.querySelector('.topbar-account');if(top)top.textContent=admin.name||'管理账号';
-
     },
     chat(chat) {
       workspace.dataset.chatOpen=String(Boolean(chat));
